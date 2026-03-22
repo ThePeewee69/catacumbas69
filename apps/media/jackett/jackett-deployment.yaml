@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jackett
+  namespace: media
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jackett
+  template:
+    metadata:
+      labels:
+        app: jackett
+    spec:
+      securityContext:
+        fsGroup: 1000
+
+      initContainers:
+        - name: set-basepath
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /config/Jackett
+              CONFIG_FILE="/config/Jackett/ServerConfig.json"
+              if [ ! -f "$CONFIG_FILE" ]; then
+                echo '{"BasePathOverride": "/jackett"}' > "$CONFIG_FILE"
+              else
+                # Use sed to update the existing value if the file already exists
+                sed -i 's/"BasePathOverride": ".*"/"BasePathOverride": "\/jackett"/' "$CONFIG_FILE"
+              fi
+          volumeMounts:
+            - name: jackett-config
+              mountPath: /config
+
+      containers:
+        - name: jackett
+          image: lscr.io/linuxserver/jackett:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9117
+              name: http
+          env:
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+            - name: TZ
+              value: "Europe/Lisbon"
+            - name: RUN_OPTS
+              value: "--Logging"
+
+          volumeMounts:
+            - name: jackett-config
+              mountPath: /config
+
+          readinessProbe:
+            tcpSocket:
+              port: 9117
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 6
+
+          livenessProbe:
+            tcpSocket:
+              port: 9117
+            initialDelaySeconds: 90
+            periodSeconds: 30
+
+      volumes:
+        - name: jackett-config
+          persistentVolumeClaim:
+            claimName: jackett-config

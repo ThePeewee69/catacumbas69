@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sonarr-media-data
+  namespace: media
+spec:
+  volumeName: "sonarr-media-data-pv"
+  storageClassName: ""
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 40Ti

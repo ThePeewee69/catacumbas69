@@ -1,0 +1,17 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: jackett
+  namespace: media
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: PathPrefix(`/jackett`)
+      kind: Rule
+      middlewares:
+        - name: jackett-headers
+      services:
+        - name: jackett
+          port: 9117
+

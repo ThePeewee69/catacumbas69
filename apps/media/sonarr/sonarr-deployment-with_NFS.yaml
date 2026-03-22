@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sonarr
+  namespace: media
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sonarr
+  template:
+    metadata:
+      labels:
+        app: sonarr
+    spec:
+      securityContext:
+        fsGroup: 1000
+
+      initContainers:
+        - name: set-basepath
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /config
+              CONFIG_FILE="/config/config.xml"
+              if [ ! -f "$CONFIG_FILE" ]; then
+                echo '<Config><UrlBase>/sonarr</UrlBase></Config>' > "$CONFIG_FILE"
+              else
+                if grep -q "<UrlBase>" "$CONFIG_FILE"; then
+                  sed -i 's|<UrlBase>.*</UrlBase>|<UrlBase>/sonarr</UrlBase>|' "$CONFIG_FILE"
+                else
+                  sed -i 's|</Config>|  <UrlBase>/sonarr</UrlBase>\n</Config>|' "$CONFIG_FILE"
+                fi
+              fi
+          volumeMounts:
+            - name: sonarr-config
+              mountPath: /config
+
+      containers:
+        - name: sonarr
+          #image: lscr.io/linuxserver/sonarr:latest
+          image: lscr.io/linuxserver/sonarr:4.0.0 # {"$imagepolicy": "flux-system:sonarr"}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8989
+              name: http
+          env:
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+            - name: TZ
+              value: "Europe/Lisbon"
+
+          volumeMounts:
+            - name: sonarr-config
+              mountPath: /config
+            - name: sonarr-media-data
+              mountPath: /data
+
+          readinessProbe:
+            tcpSocket:
+              port: 8989
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 6
+
+          livenessProbe:
+            tcpSocket:
+              port: 8989
+            initialDelaySeconds: 90
+            periodSeconds: 30
+
+      volumes:
+        - name: sonarr-config
+          persistentVolumeClaim:
+            claimName: sonarr-config
+        - name: sonarr-media-data
+          persistentVolumeClaim:
+            claimName: sonarr-media-data

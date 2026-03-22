@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jackett-monitoring-config
+  namespace: monitoring
+spec:
+  volumeName: "jackett-monitoring-pv"
+  storageClassName: ""
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
