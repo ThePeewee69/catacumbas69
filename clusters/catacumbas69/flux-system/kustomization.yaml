@@ -4,4 +4,6 @@ resources:
   - gotk-components.yaml
   - gotk-sync.yaml
   - apps-flux-sync.yaml
+  - nginx-image.yaml
+  - sonarr-image.yaml
   - jackett-image.yaml
