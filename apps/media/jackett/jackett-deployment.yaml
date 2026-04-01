@@ -38,7 +38,7 @@ spec:
       containers:
         - name: jackett
           #image: lscr.io/linuxserver/jackett:latest
-          image: lscr.io/linuxserver/jackett:0.21.2874
+          image: lscr.io/linuxserver/jackett:0.21.2874 # {"$imagepolicy": "flux-system:jackett"}
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 9117
