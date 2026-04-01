@@ -1,0 +1,31 @@
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"image.toolkit.fluxcd.io/v1","kind":"ImageRepository","metadata":{"annotations":{},"name":"nginx","namespace":"flux-system"},"spec":{"image":"nginx","interval":"1m"}}
+  name: nginx
+  namespace: flux-system
+spec:
+  exclusionList:
+  - ^.*\.sig$
+  image: nginx
+  interval: 1m0s
+  provider: generic
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"image.toolkit.fluxcd.io/v1","kind":"ImagePolicy","metadata":{"annotations":{},"name":"nginx","namespace":"flux-system"},"spec":{"imageRepositoryRef":{"name":"nginx"},"policy":{"semver":{"range":"\u003e=1.0.0"}}}}
+  name: nginx
+  namespace: flux-system
+spec:
+  digestReflectionPolicy: Never
+  imageRepositoryRef:
+    name: nginx
+  policy:
+    semver:
+      range: '>=1.0.0'
