@@ -3,6 +3,8 @@ kind: PersistentVolumeClaim
 metadata:
   name: sonarr-media-data
   namespace: media
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
 spec:
   volumeName: "sonarr-media-data-pv"
   storageClassName: ""

@@ -1,10 +1,12 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: jackett-monitoring-config
-  namespace: monitoring
+  name: jackett-config
+  namespace: media
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
 spec:
-  volumeName: "jackett-monitoring-pv"
+  volumeName: "jackett-pv"
   storageClassName: ""
   accessModes:
     - ReadWriteMany
