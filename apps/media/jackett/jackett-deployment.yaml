@@ -37,7 +37,8 @@ spec:
 
       containers:
         - name: jackett
-          image: lscr.io/linuxserver/jackett:latest
+          #image: lscr.io/linuxserver/jackett:latest
+          image: lscr.io/linuxserver/jackett:0.21.2874
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 9117
