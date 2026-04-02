@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prowlarr
+  namespace: media
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prowlarr
+  template:
+    metadata:
+      labels:
+        app: prowlarr
+    spec:
+      securityContext:
+        fsGroup: 1000
+
+      initContainers:
+        - name: set-basepath
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /config
+              CONFIG_FILE="/config/config.xml"
+              if [ ! -f "$CONFIG_FILE" ]; then
+                echo '<Config><UrlBase>/prowlarr</UrlBase></Config>' > "$CONFIG_FILE"
+              else
+                # Se o arquivo já existe, garante que o UrlBase está lá
+                if grep -q "<UrlBase>" "$CONFIG_FILE"; then
+                  sed -i 's|<UrlBase>.*</UrlBase>|<UrlBase>/prowlarr</UrlBase>|' "$CONFIG_FILE"
+                else
+                  sed -i 's|</Config>|  <UrlBase>/prowlarr</UrlBase>\n</Config>|' "$CONFIG_FILE"
+                fi
+              fi
+          volumeMounts:
+            - name: prowlarr-config
+              mountPath: /config
+
+      containers:
+        - name: prowlarr
+          image: lscr.io/linuxserver/prowlarr:latest
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - containerPort: 9696
+              name: http
+
+          env:
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+            - name: TZ
+              value: "Europe/Lisbon"
+            - name: Prowlarr__UrlBase
+              value: "/prowlarr"
+            - name: Prowlarr__BindAddress
+              value: "*"
+
+          volumeMounts:
+            - name: prowlarr-config
+              mountPath: /config
+
+          readinessProbe:
+            tcpSocket:
+              port: 9696
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 6
+
+          livenessProbe:
+            tcpSocket:
+              port: 9696
+            initialDelaySeconds: 90
+            periodSeconds: 30
+
+      volumes:
+        - name: prowlarr-config
+          persistentVolumeClaim:
+            claimName: prowlarr-config

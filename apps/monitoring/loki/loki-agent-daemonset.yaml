@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: loki-agent
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: loki-agent
+  template:
+    metadata:
+      labels:
+        app: loki-agent
+    spec:
+      serviceAccountName: loki-agent
+
+      containers:
+        - name: loki-agent
+          image: grafana/loki:2.9.8
+          args:
+            - -target=agent
+            - -config.file=/etc/loki/loki-agent-config.yaml
+
+          volumeMounts:
+            - name: config
+              mountPath: /etc/loki
+
+            - name: positions
+              mountPath: /run
+
+            - name: varlogcontainers
+              mountPath: /var/log/containers
+              readOnly: true
+
+            - name: varlogpods
+              mountPath: /var/log/pods
+              readOnly: true
+
+            - name: bazarr-config
+              mountPath: /mnt/bazarr
+              readOnly: true
+
+            - name: jackett-config
+              mountPath: /mnt/jackett
+              readOnly: true
+
+            - name: prowlarr-config
+              mountPath: /mnt/prowlarr
+              readOnly: true
+
+            - name: qbittorrent-config
+              mountPath: /mnt/qbittorrent
+              readOnly: true
+
+            - name: sonarr-config
+              mountPath: /mnt/sonarr
+              readOnly: true
+
+      volumes:
+        - name: config
+          configMap:
+            name: loki-agent-config
+
+        - name: positions
+          emptyDir: {}
+
+        - name: varlogcontainers
+          hostPath:
+            path: /var/log/containers
+
+        - name: varlogpods
+          hostPath:
+            path: /var/log/pods
+
+        - name: bazarr-config
+          persistentVolumeClaim:
+            claimName: bazarr-monitoring-config
+
+        - name: jackett-config
+          persistentVolumeClaim:
+            claimName: jackett-monitoring-config
+
+        - name: prowlarr-config
+          persistentVolumeClaim:
+            claimName: prowlarr-monitoring-config
+
+        - name: qbittorrent-config
+          persistentVolumeClaim:
+            claimName: qbittorrent-monitoring-config
+
+        - name: sonarr-config
+          persistentVolumeClaim:
+            claimName: sonarr-monitoring-config

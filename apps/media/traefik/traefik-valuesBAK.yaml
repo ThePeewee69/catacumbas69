@@ -1,0 +1,32 @@
+deployment:
+  kind: Deployment
+
+hostNetwork: false
+
+service:
+  enabled: true
+  type: ClusterIP
+
+ports:
+  web:
+    port: 8080
+    expose:
+      default: true
+
+  websecure:
+    port: 8443
+    expose:
+      default: true
+
+  traefik:
+    port: 9000
+    expose:
+      default: true
+
+api:
+  dashboard: true
+  insecure: false
+
+additionalArguments:
+  - "--providers.kubernetesingress=true"
+  - "--providers.kubernetescrd=true"

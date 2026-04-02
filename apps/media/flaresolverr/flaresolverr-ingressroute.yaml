@@ -1,0 +1,16 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: flaresolverr
+  namespace: media
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: PathPrefix(`/flaresolverr`)
+      kind: Rule
+      middlewares:
+        - name: flaresolverr-strip
+      services:
+        - name: flaresolverr
+          port: 8191

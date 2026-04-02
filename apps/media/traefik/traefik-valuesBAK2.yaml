@@ -1,0 +1,36 @@
+deployment:
+  kind: Deployment
+
+hostNetwork: true
+replicas: 2
+replicaCount: 2
+
+service:
+  enabled: false
+
+ports:
+  web:
+    port: 8080
+    expose:
+      default: true
+
+  websecure:
+    port: 8443
+    expose:
+      default: true
+
+  traefik:
+    port: 9000
+    expose:
+      default: false
+
+api:
+  dashboard: true
+  insecure: false
+
+providers:
+  kubernetesIngress:
+    enabled: true
+  kubernetesCRD:
+    enabled: true
+

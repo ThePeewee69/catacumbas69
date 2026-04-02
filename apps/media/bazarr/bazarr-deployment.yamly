@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bazarr
+  namespace: media
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bazarr
+  template:
+    metadata:
+      labels:
+        app: bazarr
+    spec:
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+        - name: set-basepath
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              CONFIG="/config/config/config.yaml"
+
+              echo "[init] Ensuring url_base in $CONFIG"
+              mkdir -p "$(dirname "$CONFIG")"
+              touch "$CONFIG"
+
+              if grep -q "^url_base:" "$CONFIG"; then
+                sed -i 's|^url_base:.*|url_base: /bazarr|' "$CONFIG"
+              else
+                echo "url_base: /bazarr" >> "$CONFIG"
+              fi
+
+              echo "[init] url_base set to /bazarr"
+
+          volumeMounts:
+            - name: bazarr-config
+              mountPath: /config
+
+      containers:
+        - name: bazarr
+          image: lscr.io/linuxserver/bazarr:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6767
+              name: http
+          env:
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+            - name: TZ
+              value: "Europe/Lisbon"
+
+          volumeMounts:
+            - name: bazarr-config
+              mountPath: /config
+            - name: sonarr-media-data
+              mountPath: /data
+
+          readinessProbe:
+            tcpSocket:
+              port: 6767
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 6
+
+          livenessProbe:
+            tcpSocket:
+              port: 6767
+            initialDelaySeconds: 90
+            periodSeconds: 30
+
+      volumes:
+        - name: bazarr-config
+          persistentVolumeClaim:
+            claimName: bazarr-config
+        - name: sonarr-media-data
+          persistentVolumeClaim:
+            claimName: sonarr-media-data

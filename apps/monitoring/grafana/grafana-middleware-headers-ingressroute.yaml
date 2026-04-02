@@ -1,0 +1,10 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: grafana-headers
+  namespace: monitoring
+spec:
+  headers:
+    customRequestHeaders:
+      X-Forwarded-Host: "grafana.catacumbas69.com:8080"
+      X-Forwarded-Proto: "http"

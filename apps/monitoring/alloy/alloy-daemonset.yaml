@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: alloy
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: alloy
+  template:
+    metadata:
+      labels:
+        app: alloy
+    spec:
+      serviceAccountName: loki-agent
+      containers:
+        - name: alloy
+          image: grafana/alloy:latest
+          args:
+            - run
+            - /etc/alloy/config.alloy
+
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+
+            - name: varlogpods
+              mountPath: /var/log/pods
+              readOnly: true
+
+            - name: bazarr-config
+              mountPath: /mnt/bazarr
+              readOnly: true
+
+            - name: jackett-config
+              mountPath: /mnt/jackett
+              readOnly: true
+
+            - name: prowlarr-config
+              mountPath: /mnt/prowlarr
+              readOnly: true
+
+            - name: qbittorrent-config
+              mountPath: /mnt/qbittorrent
+              readOnly: true
+
+            - name: sonarr-config
+              mountPath: /mnt/sonarr
+              readOnly: true
+
+      volumes:
+        - name: config
+          configMap:
+            name: alloy-config
+
+        - name: varlogpods
+          hostPath:
+            path: /var/log/pods
+
+        - name: bazarr-config
+          persistentVolumeClaim:
+            claimName: bazarr-monitoring-config
+
+        - name: jackett-config
+          persistentVolumeClaim:
+            claimName: jackett-monitoring-config
+
+        - name: prowlarr-config
+          persistentVolumeClaim:
+            claimName: prowlarr-monitoring-config
+
+        - name: qbittorrent-config
+          persistentVolumeClaim:
+            claimName: qbittorrent-monitoring-config
+
+        - name: sonarr-config
+          persistentVolumeClaim:
+            claimName: sonarr-monitoring-config

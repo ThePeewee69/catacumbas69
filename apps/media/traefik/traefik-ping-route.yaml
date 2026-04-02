@@ -1,0 +1,14 @@
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: ping
+  namespace: kube-system
+spec:
+  entryPoints:
+    - web   # HTTP 80
+  routes:
+    - match: Path(`/ping`)
+      kind: Rule
+      services:
+        - name: api@internal
+          kind: TraefikService

@@ -1,0 +1,18 @@
+---
+# IngressRoute do Rancher
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: rancher
+  namespace: cattle-system
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`rancher.catacumbas69.com`)
+      kind: Rule
+      services:
+        - name: rancher
+          port: 80
+  tls:
+    secretName: pass123

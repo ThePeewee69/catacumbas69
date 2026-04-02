@@ -1,0 +1,210 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-agent-config
+  namespace: monitoring
+data:
+  loki-agent-config.yaml: |
+    server:
+      http_listen_port: 3101
+      grpc_listen_port: 0
+
+    positions:
+      filename: /run/positions.yaml
+
+    clients:
+      - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+        batchwait: 1s
+        batchsize: 102400
+        backoff_config:
+          min_period: 500ms
+          max_period: 5s
+          max_retries: 10
+
+    scrape_configs:
+
+      # =================================================
+      # Kubernetes Pods (k3s / containerd)
+      # =================================================
+      - job_name: kubernetes-pods
+
+        pipeline_stages:
+          - cri: {}
+
+          - json:
+              expressions:
+                level: level
+                msg: msg
+                time: time
+              drop_malformed: false
+
+          - timestamp:
+              source: time
+              format: RFC3339
+
+          - template:
+              source: level
+              template: '{{ ToLower .Value }}'
+              destination: level
+
+          - labels:
+              level:
+
+        kubernetes_sd_configs:
+          - role: pod
+
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace]
+            regex: media|monitoring
+            action: keep
+
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: (.+)
+            action: replace
+            target_label: app
+
+      # =================================================
+      # Bazarr
+      # =================================================
+      - job_name: bazarr-logs
+        static_configs:
+          - targets: [localhost]
+            labels:
+              namespace: media
+              app: bazarr
+              job: bazarr
+              __path__: /mnt/bazarr/log/*.log
+
+        pipeline_stages:
+          - regex:
+              expression: '^(?P<time>[^|]+)\|(?P<level>[^|]+)\|(?P<component>[^|]+)\|(?P<msg>.+)$'
+
+          - timestamp:
+              source: time
+              format: "2006-01-02 15:04:05"
+
+          - template:
+              source: level
+              template: '{{ ToLower .Value }}'
+              destination: level
+
+          - labels:
+              level:
+
+      # =================================================
+      # Jackett
+      # =================================================
+      - job_name: jackett-logs
+        static_configs:
+          - targets: [localhost]
+            labels:
+              namespace: media
+              app: jackett
+              job: jackett
+              __path__: /mnt/jackett/Jackett/log.*
+
+        pipeline_stages:
+          - regex:
+              expression: '^(?P<time>[^|]+)\|(?P<level>[^|]+)\|(?P<component>[^|]+)\|(?P<msg>.+)$'
+
+          - timestamp:
+              source: time
+              format: "2006-01-02 15:04:05"
+
+          - template:
+              source: level
+              template: '{{ ToLower .Value }}'
+              destination: level
+
+          - labels:
+              level:
+
+      # =================================================
+      # Prowlarr
+      # =================================================
+      - job_name: prowlarr-logs
+        static_configs:
+          - targets: [localhost]
+            labels:
+              namespace: media
+              app: prowlarr
+              job: prowlarr
+              __path__: /mnt/prowlarr/logs/prowlarr.*
+
+        pipeline_stages:
+          - regex:
+              expression: '^(?P<time>[^|]+)\|(?P<level>[^|]+)\|(?P<component>[^|]+)\|(?P<msg>.+)$'
+
+          - timestamp:
+              source: time
+              format: "2006-01-02 15:04:05"
+
+          - template:
+              source: level
+              template: '{{ ToLower .Value }}'
+              destination: level
+
+          - labels:
+              level:
+
+      # =================================================
+      # qBittorrent
+      # =================================================
+      - job_name: qbittorrent-logs
+        static_configs:
+          - targets: [localhost]
+            labels:
+              namespace: media
+              app: qbittorrent
+              job: qbittorrent
+              __path__: /mnt/qbittorrent/qBittorrent/logs/*.log
+
+        pipeline_stages:
+          - regex:
+              expression: '^\((?P<level_letter>[A-Z])\)\s+(?P<time>[^-]+)\s+-\s+(?P<msg>.*)'
+
+          - timestamp:
+              source: time
+              format: "2006-01-02 15:04:05"
+
+          - template:
+              source: level_letter
+              template: '{{ if eq .Value "N" }}info{{ else if eq .Value "W" }}warn{{ else if eq .Value "C" }}error{{ else }}info{{ end }}'
+              destination: level
+
+          - labels:
+              level:
+
+      # =================================================
+      # Sonarr
+      # =================================================
+      - job_name: sonarr-logs
+        static_configs:
+          - targets: [localhost]
+            labels:
+              namespace: media
+              app: sonarr
+              job: sonarr
+              __path__: /mnt/sonarr/logs/sonarr.*
+
+        pipeline_stages:
+          - regex:
+              expression: '^(?P<time>[^|]+)\|(?P<level>[^|]+)\|(?P<component>[^|]+)\|(?P<msg>.+)$'
+
+          - timestamp:
+              source: time
+              format: "2006-01-02 15:04:05"
+
+          - template:
+              source: level
+              template: '{{ ToLower .Value }}'
+              destination: level
+
+          - labels:
+              level:

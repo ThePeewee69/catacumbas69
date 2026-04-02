@@ -1,0 +1,17 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: bazarr
+  namespace: media
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: PathPrefix(`/bazarr`)
+      kind: Rule
+      middlewares:
+        - name: bazarr-headers
+      services:
+        - name: bazarr
+          port: 6767
+

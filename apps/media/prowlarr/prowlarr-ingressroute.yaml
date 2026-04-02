@@ -1,0 +1,18 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: prowlarr
+  namespace: media
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: PathPrefix(`/prowlarr`)
+      kind: Rule
+      priority: 100
+      middlewares:
+        - name: prowlarr-headers
+      services:
+        - name: prowlarr
+          port: 9696
+

@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-config
+  namespace: monitoring
+data:
+  config.alloy: |
+
+    logging {
+      level  = "info"
+      format = "logfmt"
+    }
+
+    loki.write "default" {
+      endpoint {
+        url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+      }
+    }
+
+    discovery.kubernetes "pods" {
+      role = "pod"
+    }
+
+    loki.source.kubernetes "pods" {
+      targets = discovery.kubernetes.pods.targets
+      forward_to = [
+        loki.process.kubernetes.receiver,
+      ]
+    }
+
+    loki.process "kubernetes" {
+      stage.labels {
+        values = {
+          namespace = "${namespace}",
+          pod       = "${pod}",
+          container = "${container}",
+          node      = "${node}",
+        }
+      }
+      forward_to = [
+        loki.write.default.receiver,
+      ]
+    }
+
+    loki.process "arr" {
+      stage.regex {
+        expression = "^(?P<time>[^|]+)\\|(?P<level>[^|]+)\\|(?P<component>[^|]+)\\|(?P<msg>.+)$"
+      }
+      stage.labels {
+        values = {
+          level = "level",
+        }
+      }
+      stage.output {
+        source = "msg"
+      }
+      forward_to = [
+        loki.write.default.receiver,
+      ]
+    }
+
+    loki.process "qbit" {
+      stage.regex {
+        expression = "^\\((?P<level_letter>[A-Z])\\)\\s+(?P<time>[^-]+)\\s+-\\s+(?P<msg>.*)"
+      }
+      stage.template {
+        source = "level_letter"
+        template = "{{ if eq .Value \"N\" }}info{{ else if eq .Value \"W\" }}warn{{ else if eq .Value \"C\" }}error{{ else }}info{{ end }}"
+      }
+      stage.labels {
+        values = {
+          level = "level_letter",
+        }
+      }
+      stage.output {
+        source = "msg"
+      }
+      forward_to = [
+        loki.write.default.receiver,
+      ]
+    }
+
+    loki.process "global_labels" {
+      stage.labels {
+        values = {
+          job = "alloy",
+        }
+      }
+      forward_to = [
+        loki.write.default.receiver,
+      ]
+    }

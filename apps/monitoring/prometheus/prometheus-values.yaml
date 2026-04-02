@@ -1,0 +1,31 @@
+prometheus:
+  prometheusSpec:
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+nodeExporter:
+  enabled: true
+
+kubeStateMetrics:
+  enabled: true
+
+grafana:
+  enabled: true
+
+  grafana.ini:
+    server:
+      domain: grafana.catacumbas69.com
+      root_url: http://grafana.catacumbas69.com:8080
+      serve_from_sub_path: false
+      enable_gzip: true
+      router_logging: true
+      enforce_domain: false
+
+  ingress:
+    enabled: false
+
+  service:
+    type: ClusterIP
+    port: 3000
+
+  adminPassword: admin
