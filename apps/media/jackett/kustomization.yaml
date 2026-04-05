@@ -6,7 +6,7 @@ resources:
   - jackett-persistentVolumeClaim.yaml
   - jackett-deployment.yaml
   - jackett-service.yaml
-  - jackett-middleware-headers.yaml
+#  - jackett-middleware-headers.yaml
 #  - jackett-middleware-redirect--not-needed.yaml
 #  - jackett-middleware-strip--not-needed.yaml
   - jackett-ingressroute.yaml

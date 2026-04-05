@@ -7,11 +7,12 @@ spec:
   entryPoints:
     - web
   routes:
-    - match: PathPrefix(`/jackett`)
+    - match: Host(`jackett.catacumbas69.com`)
+#    - match: PathPrefix(`/jackett`)
       kind: Rule
-      middlewares:
-        - name: jackett-headers
       services:
         - name: jackett
           port: 9117
+#      middlewares:
+#        - name: jackett-headers
 
