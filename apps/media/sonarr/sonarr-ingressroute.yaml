@@ -7,11 +7,12 @@ spec:
   entryPoints:
     - web
   routes:
-    - match: PathPrefix(`/sonarr`)
+    - match: Host(`sonarr.catacumbas69.com`)
+#    - match: PathPrefix(`/sonarr`)
       kind: Rule
-      middlewares:
-        - name: sonarr-headers
       services:
         - name: sonarr
           port: 8989
+#      middlewares:
+#        - name: sonarr-headers
 

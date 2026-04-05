@@ -8,5 +8,5 @@ resources:
   - sonarr-persistentVolumeClaim.yaml
   - sonarr-deployment-with_NFS.yaml
   - sonarr-service.yaml
-  - sonarr-middleware-headers.yaml
+#  - sonarr-middleware-headers.yaml
   - sonarr-ingressroute.yaml

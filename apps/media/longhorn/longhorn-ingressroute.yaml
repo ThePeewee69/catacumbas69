@@ -7,10 +7,10 @@ spec:
   entryPoints:
     - web
   routes:
-  - match: Host(`longhorn.catacumbas69.com`)
-    kind: Rule
-    services:
-    - name: longhorn-frontend
-      port: 80
-#    middlewares:
-#    - name: longhorn-strip
+    - match: Host(`longhorn.catacumbas69.com`)
+      kind: Rule
+      services:
+      - name: longhorn-frontend
+        port: 80
+  #    middlewares:
+  #    - name: longhorn-strip
