@@ -3,6 +3,6 @@ kind: Kustomization
 
 resources:
   - alloy
-  - grafana
-  - loki
-  - prometheus
+#  - grafana
+#  - loki
+#  - prometheus
