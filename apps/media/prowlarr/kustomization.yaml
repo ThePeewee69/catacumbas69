@@ -3,7 +3,7 @@ kind: Kustomization
 
 resources:
   - prowlarr-persistentVolume.yaml
-  - prowlarr-persistentVolume.yaml
+  - prowlarr-persistentVolumeClaim.yaml
   - prowlarr-deployment.yaml
   - prowlarr-service.yaml
 #  - prowlarr-middleware-headers.yaml
