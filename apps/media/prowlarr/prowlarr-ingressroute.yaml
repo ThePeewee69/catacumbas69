@@ -7,12 +7,13 @@ spec:
   entryPoints:
     - web
   routes:
-    - match: PathPrefix(`/prowlarr`)
-      kind: Rule
+    - match: Host(`prowlarr.catacumbas69.com`)
+#    - match: PathPrefix(`/prowlarr`)
       priority: 100
-      middlewares:
-        - name: prowlarr-headers
+      kind: Rule
       services:
         - name: prowlarr
           port: 9696
+#      middlewares:
+#        - name: prowlarr-headers
 
