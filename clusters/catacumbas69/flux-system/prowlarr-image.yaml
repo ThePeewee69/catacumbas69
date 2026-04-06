@@ -1,0 +1,31 @@
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"image.toolkit.fluxcd.io/v1","kind":"ImageRepository","metadata":{"annotations":{},"name":"prowlarr","namespace":"flux-system"},"spec":{"image":"lscr.io/linuxserver/prowlarr","interval":"1m"}}
+  name: prowlarr
+  namespace: flux-system
+spec:
+  exclusionList:
+  - ^.*\.sig$
+  image: lscr.io/linuxserver/prowlarr
+  interval: 1m0s
+  provider: generic
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"image.toolkit.fluxcd.io/v1","kind":"ImagePolicy","metadata":{"annotations":{},"name":"prowlarr","namespace":"flux-system"},"spec":{"imageRepositoryRef":{"name":"prowlarr"},"policy":{"semver":{"range":"\u003e=0.0.0"}}}}
+  name: prowlarr
+  namespace: flux-system
+spec:
+  digestReflectionPolicy: Never
+  imageRepositoryRef:
+    name: prowlarr
+  policy:
+    semver:
+      range: '>=0.0.0'
