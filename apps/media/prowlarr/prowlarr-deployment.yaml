@@ -42,7 +42,7 @@ spec:
       containers:
         - name: prowlarr
 #          image: lscr.io/linuxserver/prowlarr:latest
-          image: lscr.io/linuxserver/prowlarr:2.3.0.5236 # {"$imagepolicy": "flux-system:prowlarr"}
+          image: lscr.io/linuxserver/prowlarr:2.3.0 # {"$imagepolicy": "flux-system:prowlarr"}
           imagePullPolicy: IfNotPresent
 
           ports:
