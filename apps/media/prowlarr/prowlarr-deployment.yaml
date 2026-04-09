@@ -15,7 +15,6 @@ spec:
     spec:
       securityContext:
         fsGroup: 1000
-
       initContainers:
         - name: set-basepath
           image: busybox:latest
@@ -38,17 +37,14 @@ spec:
           volumeMounts:
             - name: prowlarr-config
               mountPath: /config
-
       containers:
         - name: prowlarr
-#          image: lscr.io/linuxserver/prowlarr:latest
-          image: lscr.io/linuxserver/prowlarr:2.3.0 # {"$imagepolicy": "flux-system:prowlarr"}
+          #          image: lscr.io/linuxserver/prowlarr:latest
+          image: lscr.io/linuxserver/prowlarr:2.3.5 # {"$imagepolicy": "flux-system:prowlarr"}
           imagePullPolicy: IfNotPresent
-
           ports:
             - containerPort: 9696
               name: http
-
           env:
             - name: PUID
               value: "1000"
@@ -60,24 +56,20 @@ spec:
               value: "/prowlarr"
             - name: Prowlarr__BindAddress
               value: "*"
-
           volumeMounts:
             - name: prowlarr-config
               mountPath: /config
-
           readinessProbe:
             tcpSocket:
               port: 9696
             initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 6
-
           livenessProbe:
             tcpSocket:
               port: 9696
             initialDelaySeconds: 90
             periodSeconds: 30
-
       volumes:
         - name: prowlarr-config
           persistentVolumeClaim:
