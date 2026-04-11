@@ -22,7 +22,7 @@ spec:
             - name: NEXTAUTH_URL
               value: "http://homarr.catacumbas69.com"
             - name: NEXTAUTH_SECRET
-              value: "uma-string-aleatoria-qualquer-min-32-chars"
+              value: "YPCNoNRJ0rb/Ylho6jGxK8CZZ807Yyzly+iJVa2j1ak="
           volumeMounts:
             - name: config
               mountPath: /app/data/configs
