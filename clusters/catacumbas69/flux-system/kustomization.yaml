@@ -8,3 +8,6 @@ resources:
   - sonarr-image.yaml
   - jackett-image.yaml
   - prowlarr-image.yaml
+  - longhorn-image.yaml
+  - homarr.yaml
+  - homarr-image.yaml

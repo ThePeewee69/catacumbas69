@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homarr
+  namespace: media
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: homarr
+  template:
+    metadata:
+      labels:
+        app: homarr
+    spec:
+      containers:
+        - name: homarr
+          image: ghcr.io/ajnart/homarr:0.15.10 # {"$imagepolicy": "flux-system:homarr"}
+          ports:
+            - containerPort: 7575
+          env:
+            - name: BASE_URL
+              value: "/homarr"
+          volumeMounts:
+            - name: config
+              mountPath: /app/data/configs
+            - name: icons
+              mountPath: /app/public/icons
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: homarr-config
+        - name: icons
+          emptyDir: {}

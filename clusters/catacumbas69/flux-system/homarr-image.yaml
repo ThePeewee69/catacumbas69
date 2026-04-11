@@ -1,0 +1,22 @@
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: homarr
+  namespace: flux-system
+spec:
+  image: ghcr.io/ajnart/homarr
+  interval: 1m
+
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: homarr
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: homarr
+  policy:
+    semver:
+      range: '>=0.0.0'

@@ -6,7 +6,4 @@ resources:
   - homarr-persistentVolumeClaim.yaml
   - homarr-deployment.yaml
   - homarr-service.yaml
-#  - jackett-middleware-headers.yaml
-#  - jackett-middleware-redirect--not-needed.yaml
-#  - jackett-middleware-strip--not-needed.yaml
   - homarr-ingressroute.yaml
