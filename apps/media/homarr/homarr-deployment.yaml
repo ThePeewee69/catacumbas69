@@ -19,8 +19,10 @@ spec:
           ports:
             - containerPort: 7575
           env:
-            - name: BASE_URL
-              value: "/homarr"
+            - name: NEXTAUTH_URL
+              value: "http://homarr.catacumbas69.com"
+            - name: NEXTAUTH_SECRET
+              value: "uma-string-aleatoria-qualquer-min-32-chars"
           volumeMounts:
             - name: config
               mountPath: /app/data/configs
