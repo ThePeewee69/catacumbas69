@@ -20,7 +20,7 @@ spec:
             - containerPort: 7575
           env:
             - name: NEXTAUTH_URL
-              value: "http://homarr.catacumbas69.com"
+              value: "http://homarr.catacumbas69.com:8080"
             - name: NEXTAUTH_SECRET
               value: "YPCNoNRJ0rb/Ylho6jGxK8CZZ807Yyzly+iJVa2j1ak="
           volumeMounts:
