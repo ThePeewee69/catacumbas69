@@ -25,7 +25,7 @@ spec:
               value: "YPCNoNRJ0rb/Ylho6jGxK8CZZ807Yyzly+iJVa2j1ak="
           volumeMounts:
             - name: config
-              mountPath: /app/data/configs
+              mountPath: /app/data
             - name: icons
               mountPath: /app/public/icons
       volumes:
