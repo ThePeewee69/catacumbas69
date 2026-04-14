@@ -15,11 +15,13 @@ spec:
     spec:
       containers:
         - name: homarr
-          image: ghcr.io/ajnart/homarr:0.15.10 # {"$imagepolicy": "flux-system:homarr"}
+          image: ghcr.io/ajnart/homarr:0.16.1 # {"$imagepolicy": "flux-system:homarr"}
           ports:
             - containerPort: 7575
           env:
             - name: NEXTAUTH_URL
+              value: "http://homarr.catacumbas69.com:8080"
+            - name: PUBLIC_URL
               value: "http://homarr.catacumbas69.com:8080"
             - name: NEXTAUTH_SECRET
               value: "YPCNoNRJ0rb/Ylho6jGxK8CZZ807Yyzly+iJVa2j1ak="

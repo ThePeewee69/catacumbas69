@@ -19,5 +19,5 @@ spec:
     name: homarr
   policy:
     semver:
-      range: '>=0.15.0 <0.16.0'
-#      range: '>=0.0.0'
+#      range: '>=0.15.0 <0.16.0'
+      range: '>=0.0.0'
