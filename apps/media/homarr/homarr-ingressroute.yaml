@@ -12,4 +12,5 @@ spec:
       services:
         - name: homarr
           port: 7575
-
+      middlewares:
+        - name: homarr-headers

@@ -1,0 +1,11 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: homarr-headers
+  namespace: media
+spec:
+  headers:
+    customRequestHeaders:
+      X-Forwarded-Proto: "http"
+      X-Forwarded-Host: "homarr.catacumbas69.com"
+      X-Forwarded-Port: "8080"

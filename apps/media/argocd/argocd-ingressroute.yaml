@@ -3,11 +3,9 @@ kind: IngressRoute
 metadata:
   name: argocd
   namespace: argocd
-
 spec:
   entryPoints:
     - websecure
-
   routes:
     - match: Host(`argocd.catacumbas69.com`)
       kind: Rule

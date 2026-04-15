@@ -6,4 +6,5 @@ resources:
   - homarr-persistentVolumeClaim.yaml
   - homarr-deployment.yaml
   - homarr-service.yaml
+  - homarr-middleware-headers.yaml
   - homarr-ingressroute.yaml

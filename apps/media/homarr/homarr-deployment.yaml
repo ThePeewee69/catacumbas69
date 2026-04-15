@@ -19,12 +19,16 @@ spec:
           ports:
             - containerPort: 7575
           env:
+            - name: NEXTAUTH_URL_INTERNAL
+              value: "http://homarr:7575"
             - name: NEXTAUTH_URL
               value: "http://homarr.catacumbas69.com:8080"
             - name: PUBLIC_URL
               value: "http://homarr.catacumbas69.com:8080"
             - name: NEXTAUTH_SECRET
               value: "YPCNoNRJ0rb/Ylho6jGxK8CZZ807Yyzly+iJVa2j1ak="
+            - name: TRUST_PROXY
+              value: "true"
           volumeMounts:
             - name: config
               mountPath: /data
