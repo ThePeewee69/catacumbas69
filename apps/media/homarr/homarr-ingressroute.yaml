@@ -8,6 +8,7 @@ spec:
     - web
   routes:
     - match: Host(`homarr.catacumbas69.com`)
+      priority: 120
       kind: Rule
       services:
         - name: homarr
