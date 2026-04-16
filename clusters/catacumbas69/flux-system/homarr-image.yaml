@@ -5,7 +5,7 @@ metadata:
   name: homarr
   namespace: flux-system
 spec:
-  image: ghcr.io/ajnart/homarr
+  image: ghcr.io/homarr-labs/homarr
   interval: 1m
 
 ---
