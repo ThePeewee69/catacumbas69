@@ -17,7 +17,7 @@ spec:
         - name: homarr
           image: ghcr.io/homarr-labs/homarr:v1.59.1 # {"$imagepolicy": "flux-system:homarr"}
           ports:
-            - containerPort: 3000
+            - containerPort: 7575
           env:
             - name: SECRET_ENCRYPTION_KEY
               value: "443aa238ee2f3acd3b537ea015cea35e8b3c92c7547199197221a7395b2aa745"

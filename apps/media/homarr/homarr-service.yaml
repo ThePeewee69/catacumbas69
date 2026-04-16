@@ -9,5 +9,5 @@ spec:
     app: homarr
   ports:
     - name: http
-      port: 3000
-      targetPort: 3000
+      port: 7575
+      targetPort: 7575

@@ -12,6 +12,6 @@ spec:
       kind: Rule
       services:
         - name: homarr
-          port: 3000
+          port: 7575
       middlewares:
         - name: homarr-headers
