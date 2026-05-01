@@ -5,11 +5,12 @@ resources:
 #  - argocd
 #  - bazarr
 #  - flaresolverr
+  - homarr
   - jackett
+  - lidarr
 #  - longhorn
   - prowlarr
 #  - qbittorrent
 #  - rancher
   - sonarr
 #  - traefik
-  - homarr
