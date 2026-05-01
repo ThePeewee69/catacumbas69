@@ -10,4 +10,6 @@ resources:
   - prowlarr-image.yaml
   - homarr.yaml
   - homarr-image.yaml
+  - lidarr.yaml
+  - lidarr-image.yaml
 #  - longhorn-image.yaml
