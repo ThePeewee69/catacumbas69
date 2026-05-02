@@ -5,6 +5,7 @@ resources:
   - gotk-sync.yaml
   - apps-flux-sync.yaml
   - nginx-image.yaml
+  - sonarr.yaml
   - sonarr-image.yaml
   - jackett-image.yaml
   - prowlarr-image.yaml

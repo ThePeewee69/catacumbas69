@@ -2,28 +2,19 @@
 apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageRepository
 metadata:
-  annotations:
-    kubectl.kubernetes.io/last-applied-configuration: |
-      {"apiVersion":"image.toolkit.fluxcd.io/v1","kind":"ImageRepository","metadata":{"annotations":{},"name":"sonarr","namespace":"flux-system"},"spec":{"image":"lscr.io/linuxserver/sonarr","interval":"1m"}}
   name: sonarr
   namespace: flux-system
 spec:
-  exclusionList:
-  - ^.*\.sig$
   image: lscr.io/linuxserver/sonarr
-  interval: 1m0s
-  provider: generic
+  interval: 1m
+
 ---
 apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImagePolicy
 metadata:
-  annotations:
-    kubectl.kubernetes.io/last-applied-configuration: |
-      {"apiVersion":"image.toolkit.fluxcd.io/v1","kind":"ImagePolicy","metadata":{"annotations":{},"name":"sonarr","namespace":"flux-system"},"spec":{"imageRepositoryRef":{"name":"sonarr"},"policy":{"semver":{"range":"\u003e=0.0.0"}}}}
   name: sonarr
   namespace: flux-system
 spec:
-  digestReflectionPolicy: Never
   imageRepositoryRef:
     name: sonarr
   policy:
