@@ -13,5 +13,5 @@ spec:
       services:
         - name: lidarr
           port: 8686
-      middlewares:
-        - name: lidarr-headers
+#      middlewares:
+#        - name: lidarr-headers
