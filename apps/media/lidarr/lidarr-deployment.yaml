@@ -30,6 +30,8 @@ spec:
               mountPath: /config
             - name: media
               mountPath: /data
+            - name: downloads
+              mountPath: /downloads
       volumes:
         - name: config
           persistentVolumeClaim:
@@ -37,3 +39,6 @@ spec:
         - name: media
           persistentVolumeClaim:
             claimName: lidarr-media-data
+        - name: downloads
+          persistentVolumeClaim:
+            claimName: media-downloads

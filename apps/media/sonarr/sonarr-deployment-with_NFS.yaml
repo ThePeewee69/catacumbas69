@@ -56,6 +56,8 @@ spec:
               mountPath: /config
             - name: sonarr-media-data
               mountPath: /data
+            - name: downloads
+              mountPath: /downloads
           readinessProbe:
             tcpSocket:
               port: 8989
@@ -74,3 +76,6 @@ spec:
         - name: sonarr-media-data
           persistentVolumeClaim:
             claimName: sonarr-media-data
+        - name: downloads
+          persistentVolumeClaim:
+            claimName: media-downloads
