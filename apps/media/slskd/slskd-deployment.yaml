@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slskd
+  namespace: media
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: slskd
+  template:
+    metadata:
+      labels:
+        app: slskd
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: slskd
+          image: slskd/slskd:latest
+          ports:
+            - containerPort: 5030
+              name: web
+            - containerPort: 50300
+              name: soulseek
+              protocol: TCP
+          env:
+            - name: TZ
+              value: "Europe/Lisbon"
+            - name: SLSKD_REMOTE_CONFIGURATION
+              value: "true"
+            - name: SLSKD_SLSK_USERNAME
+              value: "peewee69"
+            - name: SLSKD_SLSK_PASSWORD
+              value: "Pass123-456-789"
+            - name: SLSKD_API_KEYS_0_KEY
+              value: "814728bfc19de7ec9f3608b4f7dbb0a7"   # ← api key para o Soularr
+            - name: SLSKD_API_KEYS_0_NAME
+              value: "soularr"
+          volumeMounts:
+            - name: config
+              mountPath: /app
+            - name: downloads
+              mountPath: /downloads
+            - name: music
+              mountPath: /music
+              readOnly: true
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: slskd-config
+        - name: downloads
+          persistentVolumeClaim:
+            claimName: media-downloads
+        - name: music
+          persistentVolumeClaim:
+            claimName: lidarr-media-data

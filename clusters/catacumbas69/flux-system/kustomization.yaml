@@ -13,4 +13,8 @@ resources:
   - homarr-image.yaml
   - lidarr.yaml
   - lidarr-image.yaml
+  - soularr.yaml
+  - soularr-image.yaml
+  - slskd.yaml
+  - slskd-image.yaml
 #  - longhorn-image.yaml

@@ -12,5 +12,7 @@ resources:
   - prowlarr
 #  - qbittorrent
 #  - rancher
+  - slskd
   - sonarr
+  - soularr
 #  - traefik

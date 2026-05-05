@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: soularr
+  namespace: media
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: soularr
+  template:
+    metadata:
+      labels:
+        app: soularr
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: soularr
+          image: mrusse08/soularr:latest
+          env:
+            - name: TZ
+              value: "Europe/Lisbon"
+            - name: SCRIPT_INTERVAL
+              value: "300"
+            - name: WEBUI_ENABLED
+              value: "true"
+          ports:
+            - containerPort: 8265
+              name: web
+          volumeMounts:
+            - name: config
+              mountPath: /data/config.conf
+              subPath: config.conf
+            - name: downloads
+              mountPath: /downloads
+      volumes:
+        - name: config
+          configMap:
+            name: soularr-config
+        - name: downloads
+          persistentVolumeClaim:
+            claimName: media-downloads

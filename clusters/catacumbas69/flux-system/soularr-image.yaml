@@ -1,0 +1,22 @@
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  name: soularr
+  namespace: flux-system
+spec:
+  image: mrusse08/soularr
+  interval: 1m
+
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: soularr
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: soularr
+  policy:
+    semver:
+      range: '>=0.0.0'

@@ -1,0 +1,14 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: soularr
+  namespace: media
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`soularr.catacumbas69.com`)
+      kind: Rule
+      services:
+        - name: soularr
+          port: 8265
