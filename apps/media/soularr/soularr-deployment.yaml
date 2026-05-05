@@ -31,8 +31,8 @@ spec:
               name: web
           volumeMounts:
             - name: config
-              mountPath: /data/config.conf
-              subPath: config.conf
+              mountPath: /data/config.ini
+              subPath: config.ini
             - name: downloads
               mountPath: /downloads
       volumes:
