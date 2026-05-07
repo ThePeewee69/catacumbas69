@@ -8,6 +8,7 @@ spec:
     - web
   routes:
     - match: Host(`slskd.catacumbas69.com`)
+      priority: 179
       kind: Rule
       services:
         - name: slskd
