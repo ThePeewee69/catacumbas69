@@ -33,12 +33,17 @@ spec:
             - name: config
               mountPath: /data/config.ini
               subPath: config.ini
+            - name: data
+              mountPath: /data
             - name: downloads
               mountPath: /downloads
       volumes:
         - name: config
           configMap:
-            name: soularr-config
+            name: soularr-configMap-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: soularr-config
         - name: downloads
           persistentVolumeClaim:
             claimName: media-downloads
