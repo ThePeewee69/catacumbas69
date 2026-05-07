@@ -5,6 +5,9 @@ metadata:
   namespace: media
 data:
   config.ini: |
+    [Settings]
+    log_to_file = True
+    
     [Lidarr]
     api_key = 136e185aa709436aba0b3cdc064856e2
     host_url = http://lidarr.media.svc.cluster.local:8686
