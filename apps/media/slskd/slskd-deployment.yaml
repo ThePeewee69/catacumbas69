@@ -40,6 +40,8 @@ spec:
               value: "814728bfc19de7ec9f3608b4f7dbb0a7"   # ← api key para o Soularr
             - name: SLSKD_API_KEYS_0_NAME
               value: "soularr"
+            - name: SLSKD_SHARED_DIR
+              value: "/music/Music/share"
           volumeMounts:
             - name: config
               mountPath: /app
