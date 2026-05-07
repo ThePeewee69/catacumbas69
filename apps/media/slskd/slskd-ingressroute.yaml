@@ -12,3 +12,7 @@ spec:
       services:
         - name: slskd
           port: 5030
+          responseForwarding:
+            flushInterval: "100ms"
+      middlewares:
+        - name: slskd-headers

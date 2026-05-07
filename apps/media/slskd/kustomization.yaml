@@ -5,4 +5,5 @@ resources:
   - slskd-persistentVolumeClaim.yaml
   - slskd-deployment.yaml
   - slskd-service.yaml
+  - slskd-middleware-headers.yaml
   - slskd-ingressroute.yaml
