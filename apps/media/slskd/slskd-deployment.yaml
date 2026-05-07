@@ -31,7 +31,7 @@ spec:
             - name: SLSKD_REMOTE_CONFIGURATION
               value: "true"
             - name: SLSKD_SLSK_USERNAME
-              value: "peewee69"
+              value: "ThePeewee69"
             - name: SLSKD_SLSK_PASSWORD
               value: "Pass123-456-789"
             - name: SLSKD_API_KEYS_0_KEY
