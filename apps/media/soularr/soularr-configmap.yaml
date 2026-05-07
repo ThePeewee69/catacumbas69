@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: soularr-configMap-config
+  name: soularr-configmap-config
   namespace: media
 data:
   config.ini: |

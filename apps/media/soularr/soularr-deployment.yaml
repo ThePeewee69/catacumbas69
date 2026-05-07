@@ -40,7 +40,7 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: soularr-configMap-config
+            name: soularr-configmap-config
         - name: data
           persistentVolumeClaim:
             claimName: soularr-config
