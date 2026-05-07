@@ -30,10 +30,12 @@ spec:
               value: "Europe/Lisbon"
             - name: SLSKD_REMOTE_CONFIGURATION
               value: "true"
-            - name: SLSKD_SLSK_USERNAME
-              value: "ThePeewee69"
-            - name: SLSKD_SLSK_PASSWORD
-              value: "Pass123-456-789"
+            - name: SLSKD_NO_AUTH
+              value: "true"
+#            - name: SLSKD_SLSK_USERNAME
+#              value: "ThePeewee69"
+#            - name: SLSKD_SLSK_PASSWORD
+#              value: "Pass123-456-789"
             - name: SLSKD_API_KEYS_0_KEY
               value: "814728bfc19de7ec9f3608b4f7dbb0a7"   # ← api key para o Soularr
             - name: SLSKD_API_KEYS_0_NAME
