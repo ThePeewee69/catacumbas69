@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: soularr-config
+  namespace: media
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  volumeName: "soularr-pv"
+  storageClassName: ""
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
