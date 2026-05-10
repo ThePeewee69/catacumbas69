@@ -11,7 +11,7 @@ data:
     [Lidarr]
     api_key = 136e185aa709436aba0b3cdc064856e2
     host_url = http://lidarr.media.svc.cluster.local:8686
-    download_dir = /downloads
+    download_dir = /data/Music/mp3/
     disable_sync = False
 
     [Slskd]
