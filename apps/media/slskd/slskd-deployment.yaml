@@ -42,6 +42,10 @@ spec:
               value: "soularr"
             - name: SLSKD_SHARED_DIR
               value: "/music/Music/share"
+            - name: SLSKD_DOWNLOADS_DIR
+              value: "/downloads/down/Temp/soulseek/downloads"
+            - name: SLSKD_INCOMPLETE_DIR
+              value: "/downloads/down/Temp/soulseek/incomplete"
           volumeMounts:
             - name: config
               mountPath: /app
