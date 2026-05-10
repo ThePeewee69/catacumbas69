@@ -18,7 +18,7 @@ data:
     api_key = 814728bfc19de7ec9f3608b4f7dbb0a7
     host_url = http://slskd.media.svc.cluster.local:5030
     url_base = /
-    download_dir = /downloads
+    download_dir = /downloads/down/Temp/soulseek/downloads
     delete_searches = False
     stalled_timeout = 3600
 
