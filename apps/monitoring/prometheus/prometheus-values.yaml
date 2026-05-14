@@ -5,6 +5,8 @@ prometheus:
 
 nodeExporter:
   enabled: true
+  service:
+    port: 19100
 
 kubeStateMetrics:
   enabled: true
@@ -26,17 +28,6 @@ grafana:
     auth.anonymous:
       enabled: true
       org_role: Viewer
-
-  kubeStateMetrics:
-    enabled: true
-
-  nodeExporter:
-    service:
-      port: 19100
-
-  prometheus:
-    prometheusSpec:
-      serviceMonitorSelectorNilUsesHelmValues: false
 
   ingress:
     enabled: false
