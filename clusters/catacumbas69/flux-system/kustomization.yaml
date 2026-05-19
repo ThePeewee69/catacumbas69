@@ -17,4 +17,5 @@ resources:
   - soularr-image.yaml
   - slskd.yaml
   - slskd-image.yaml
+  - monitoring.yaml
 #  - longhorn-image.yaml
