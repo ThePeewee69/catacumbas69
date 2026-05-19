@@ -5,3 +5,4 @@ resources:
   - alloy
   - loki
   - prometheus
+  - storage.yaml

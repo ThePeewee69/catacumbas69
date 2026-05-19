@@ -18,6 +18,16 @@ spec:
       prometheusSpec:
         serviceMonitorSelectorNilUsesHelmValues: false
         podMonitorSelectorNilUsesHelmValues: false
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: ""
+              volumeName: prometheus-pv
+              accessModes:
+                - ReadWriteMany
+              resources:
+                requests:
+                  storage: 10Gi
     nodeExporter:
       enabled: true
       service:
@@ -44,3 +54,7 @@ spec:
         enabled: false
       service:
         type: ClusterIP
+      persistence:
+        enabled: true
+        storageClassName: ""
+        existingClaim: grafana-pvc
