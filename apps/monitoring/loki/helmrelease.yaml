@@ -34,6 +34,10 @@ spec:
         type: filesystem
     singleBinary:
       replicas: 1
+      persistence:
+        enabled: true
+        storageClass: ""
+        existingClaim: loki-pvc
     read:
       replicas: 0
     write:
@@ -43,9 +47,7 @@ spec:
     gateway:
       enabled: true
     persistence:
-      enabled: true
-      size: 100Gi
-      storageClassName: longhorn
+      enabled: false
     resources:
       requests:
         cpu: 100m
