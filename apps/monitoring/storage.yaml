@@ -22,7 +22,6 @@ spec:
     - timeo=600
     - retrans=2
     - hard
-
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -39,7 +38,6 @@ spec:
   resources:
     requests:
       storage: 5Gi
-
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -64,7 +62,6 @@ spec:
     - timeo=600
     - retrans=2
     - hard
-
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -81,7 +78,6 @@ spec:
   resources:
     requests:
       storage: 10Gi
-
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -106,7 +102,6 @@ spec:
     - timeo=600
     - retrans=2
     - hard
-
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -123,7 +118,6 @@ spec:
   resources:
     requests:
       storage: 2Gi
-
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -148,7 +142,6 @@ spec:
     - timeo=600
     - retrans=2
     - hard
-
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -165,3 +158,83 @@ spec:
   resources:
     requests:
       storage: 100Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jackett-monitoring-pv
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: 192.168.86.50
+    path: /volume1/k3s/media/Jackett
+  mountOptions:
+    - nfsvers=4.0
+    - noatime
+    - lookupcache=all
+    - timeo=600
+    - retrans=2
+    - hard
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jackett-monitoring-config
+  namespace: monitoring
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  volumeName: jackett-monitoring-pv
+  storageClassName: ""
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: sonarr-monitoring-pv
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: 192.168.86.50
+    path: /volume1/k3s/media/Sonarr
+  mountOptions:
+    - nfsvers=4.0
+    - noatime
+    - lookupcache=all
+    - timeo=600
+    - retrans=2
+    - hard
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sonarr-monitoring-config
+  namespace: monitoring
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  volumeName: sonarr-monitoring-pv
+  storageClassName: ""
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
