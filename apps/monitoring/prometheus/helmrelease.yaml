@@ -22,7 +22,6 @@ spec:
           volumeClaimTemplate:
             spec:
               storageClassName: ""
-              volumeName: prometheus-pv
               accessModes:
                 - ReadWriteMany
               resources:
