@@ -36,6 +36,12 @@ spec:
     grafana:
       adminPassword: Pass123-456-789
       enabled: true
+      securityContext:
+        runAsUser: 472
+        runAsGroup: 472
+        fsGroup: 472
+      initChownData:
+        enabled: false
       grafana.ini:
         server:
           domain: grafana.catacumbas69.com
