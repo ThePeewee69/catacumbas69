@@ -29,6 +29,10 @@ loki.process "kubernetes" {
       node      = "${node}",
     }
   }
+  stage.drop {
+    older_than = "24h"
+    drop_counter_reason = "too old"
+  }
   forward_to = [
     loki.write.default.receiver,
   ]
