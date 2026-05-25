@@ -23,19 +23,17 @@ loki.source.kubernetes "pods" {
 loki.process "kubernetes" {
   stage.labels {
     values = {
-      namespace = "${namespace}",
-      pod       = "${pod}",
-      container = "${container}",
-      node      = "${node}",
+      namespace  = "namespace",
+      pod        = "pod",
+      container  = "container",
+      node       = "node_name",
     }
   }
   stage.drop {
     older_than = "24h"
     drop_counter_reason = "too old"
   }
-  forward_to = [
-    loki.write.default.receiver,
-  ]
+  forward_to = [loki.write.default.receiver]
 }
 
 loki.process "arr" {
