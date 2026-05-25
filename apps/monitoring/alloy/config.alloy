@@ -15,6 +15,21 @@ discovery.kubernetes "pods" {
 
 loki.source.kubernetes "pods" {
   targets    = discovery.kubernetes.pods.targets
+  forward_to = [loki.process.extract_labels.receiver]
+}
+
+loki.process "extract_labels" {
+  stage.regex {
+    expression = "^(?P<namespace>[^/]+)/(?P<pod>[^:]+):(?P<container>.+)$"
+    source     = "instance"
+  }
+  stage.labels {
+    values = {
+      namespace = "namespace",
+      pod       = "pod",
+      container = "container",
+    }
+  }
   forward_to = [loki.write.default.receiver]
 }
 
