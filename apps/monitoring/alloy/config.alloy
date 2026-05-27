@@ -20,6 +20,12 @@ discovery.relabel "pods" {
     source_labels = ["__meta_kubernetes_pod_label_app"]
     target_label  = "app"
   }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+    regex         = "(.+)"
+    target_label  = "app"
+  }
 }
 
 loki.source.kubernetes "pods" {
