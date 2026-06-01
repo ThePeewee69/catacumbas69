@@ -9,6 +9,10 @@ loki.write "default" {
   }
 }
 
+// ─────────────────────────────────────────────
+// Kubernetes pod log discovery + label extraction
+// ─────────────────────────────────────────────
+
 discovery.kubernetes "pods" {
   role = "pod"
 }
@@ -48,6 +52,84 @@ loki.process "extract_labels" {
   forward_to = [loki.write.default.receiver]
 }
 
+// ─────────────────────────────────────────────
+// File-based log sources (arr-stack + qBittorrent)
+// ─────────────────────────────────────────────
+
+local.file_match "qbittorrent" {
+  path_targets = [{
+    __path__ = "/mnt/qbittorrent/qBittorrent/logs/*.log",
+    app       = "qbittorrent",
+    namespace = "media",
+    job       = "file",
+  }]
+}
+
+loki.source.file "qbittorrent" {
+  targets    = local.file_match.qbittorrent.targets
+  forward_to = [loki.process.qbit.receiver]
+}
+
+local.file_match "sonarr" {
+  path_targets = [{
+    __path__ = "/mnt/sonarr/logs/sonarr*.txt",
+    app       = "sonarr",
+    namespace = "media",
+    job       = "file",
+  }]
+}
+
+loki.source.file "sonarr" {
+  targets    = local.file_match.sonarr.targets
+  forward_to = [loki.process.arr.receiver]
+}
+
+local.file_match "jackett" {
+  path_targets = [{
+    __path__ = "/mnt/jackett/Jackett/log*.txt",
+    app       = "jackett",
+    namespace = "media",
+    job       = "file",
+  }]
+}
+
+loki.source.file "jackett" {
+  targets    = local.file_match.jackett.targets
+  forward_to = [loki.process.arr.receiver]
+}
+
+local.file_match "prowlarr" {
+  path_targets = [{
+    __path__ = "/mnt/prowlarr/logs/prowlarr*.txt",
+    app       = "prowlarr",
+    namespace = "media",
+    job       = "file",
+  }]
+}
+
+loki.source.file "prowlarr" {
+  targets    = local.file_match.prowlarr.targets
+  forward_to = [loki.process.arr.receiver]
+}
+
+local.file_match "bazarr" {
+  path_targets = [{
+    __path__ = "/mnt/bazarr/log/*.log",
+    app       = "bazarr",
+    namespace = "media",
+    job       = "file",
+  }]
+}
+
+loki.source.file "bazarr" {
+  targets    = local.file_match.bazarr.targets
+  forward_to = [loki.process.arr.receiver]
+}
+
+// ─────────────────────────────────────────────
+// Log processing pipelines
+// ─────────────────────────────────────────────
+
 loki.process "arr" {
   stage.regex {
     expression = "^(?P<time>[^|]+)\\|(?P<level>[^|]+)\\|(?P<component>[^|]+)\\|(?P<msg>.+)$"
@@ -60,9 +142,7 @@ loki.process "arr" {
   stage.output {
     source = "msg"
   }
-  forward_to = [
-    loki.write.default.receiver,
-  ]
+  forward_to = [loki.write.default.receiver]
 }
 
 loki.process "qbit" {
@@ -70,7 +150,7 @@ loki.process "qbit" {
     expression = "^\\((?P<level_letter>[A-Z])\\)\\s+(?P<time>[^-]+)\\s+-\\s+(?P<msg>.*)"
   }
   stage.template {
-    source = "level_letter"
+    source   = "level_letter"
     template = "{{ if eq .Value \"N\" }}info{{ else if eq .Value \"W\" }}warn{{ else if eq .Value \"C\" }}error{{ else }}info{{ end }}"
   }
   stage.labels {
@@ -81,18 +161,5 @@ loki.process "qbit" {
   stage.output {
     source = "msg"
   }
-  forward_to = [
-    loki.write.default.receiver,
-  ]
-}
-
-loki.process "global_labels" {
-  stage.labels {
-    values = {
-      job = "alloy",
-    }
-  }
-  forward_to = [
-    loki.write.default.receiver,
-  ]
+  forward_to = [loki.write.default.receiver]
 }
