@@ -38,6 +38,10 @@ loki.source.kubernetes "pods" {
 }
 
 loki.process "extract_labels" {
+  stage.drop {
+    older_than          = "168h"
+    drop_counter_reason = "too old"
+  }
   stage.regex {
     expression = "^(?P<namespace>[^/]+)/(?P<pod>[^:]+):(?P<container>.+)$"
     source     = "instance"
@@ -53,7 +57,7 @@ loki.process "extract_labels" {
 }
 
 // ─────────────────────────────────────────────
-// File-based log sources (arr-stack + qBittorrent)
+// File-based log sources
 // ─────────────────────────────────────────────
 
 local.file_match "qbittorrent" {
@@ -131,6 +135,10 @@ loki.source.file "bazarr" {
 // ─────────────────────────────────────────────
 
 loki.process "arr" {
+  stage.drop {
+    older_than          = "168h"
+    drop_counter_reason = "too old"
+  }
   stage.regex {
     expression = "^(?P<time>[^|]+)\\|(?P<level>[^|]+)\\|(?P<component>[^|]+)\\|(?P<msg>.+)$"
   }
@@ -146,6 +154,10 @@ loki.process "arr" {
 }
 
 loki.process "qbit" {
+  stage.drop {
+    older_than          = "168h"
+    drop_counter_reason = "too old"
+  }
   stage.regex {
     expression = "^\\((?P<level_letter>[A-Z])\\)\\s+(?P<time>[^-]+)\\s+-\\s+(?P<msg>.*)"
   }
