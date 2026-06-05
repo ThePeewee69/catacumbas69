@@ -154,12 +154,16 @@ loki.process "arr" {
 }
 
 loki.process "qbit" {
+  stage.regex {
+    expression = "^\\((?P<level_letter>[A-Z])\\)\\s+(?P<time>[^-]+)\\s+-\\s+(?P<msg>.*)"
+  }
+  stage.timestamp {
+    source = "time"
+    format = "2006-01-02T15:04:05"
+  }
   stage.drop {
     older_than          = "168h"
     drop_counter_reason = "too old"
-  }
-  stage.regex {
-    expression = "^\\((?P<level_letter>[A-Z])\\)\\s+(?P<time>[^-]+)\\s+-\\s+(?P<msg>.*)"
   }
   stage.template {
     source   = "level_letter"
