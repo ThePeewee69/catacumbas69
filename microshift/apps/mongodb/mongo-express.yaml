@@ -4,9 +4,6 @@ metadata:
   name: mongo-express
   namespace: mongodb
 spec:
-  containers:
-    - name: mongo-express
-      image: quay.io/repository/app-sre/mongo-express:latest
   replicas: 1
   selector:
     matchLabels:
@@ -18,7 +15,7 @@ spec:
     spec:
       containers:
         - name: mongo-express
-          image: mongo-express:latest
+          image: quay.io/repository/app-sre/mongo-express:latest
           ports:
             - containerPort: 8081
           env:
