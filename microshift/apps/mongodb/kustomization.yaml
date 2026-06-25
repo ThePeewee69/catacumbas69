@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - mongodb-cluster.yaml
   - mongo-express.yaml
+  - mongo-express-route.yaml
