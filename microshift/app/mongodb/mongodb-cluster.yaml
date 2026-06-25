@@ -1,0 +1,40 @@
+apiVersion: mongodbcommunity.mongodb.com/v1
+kind: MongoDBCommunity
+metadata:
+  name: catacumbas69
+  namespace: mongodb
+spec:
+  members: 3
+  type: ReplicaSet
+  version: "7.0.0"
+  security:
+    authentication:
+      modes: ["SCRAM"]
+  users:
+    - name: peewee69
+      db: admin
+      passwordSecretRef:
+        name: mongodb-password
+      roles:
+        - name: clusterAdmin
+          db: admin
+        - name: userAdminAnyDatabase
+          db: admin
+        - name: readWriteAnyDatabase
+          db: admin
+      scramCredentialsSecretName: peewee69-scram
+  additionalMongodConfig:
+    storage.wiredTiger.engineConfig.journalCompressor: zlib
+  statefulSet:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: mongod
+              resources:
+                requests:
+                  memory: 512Mi
+                  cpu: 250m
+                limits:
+                  memory: 1Gi
+                  cpu: 500m
