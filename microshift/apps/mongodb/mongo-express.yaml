@@ -19,11 +19,8 @@ spec:
           ports:
             - containerPort: 8081
           env:
-            # Liga ao teu StateFulSet 'catacumbas69' usando o formato de connection string do Mongo
             - name: ME_CONFIG_MONGODB_URL
-              value: "mongodb://peewee69:Pass123-456-789@catacumbas69-0.catacumbas69.mongodb.svc.cluster.local:27017,catacumbas69-1.catacumbas69.mongodb.svc.cluster.local:27017,
-              catacumbas69-2.catacumbas69.mongodb.svc.cluster.local:27017/?replicaSet=catacumbas69&authSource=admin"
-            # Credenciais para acederes à página web do Mongo Express
+              value: "mongodb://peewee69:Pass123-456-789@catacumbas69-svc.mongodb.svc.cluster.local:27017/admin?replicaSet=catacumbas69"
             - name: ME_CONFIG_BASICAUTH_USERNAME
               value: "peewee69"
             - name: ME_CONFIG_BASICAUTH_PASSWORD
