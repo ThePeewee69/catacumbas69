@@ -4,6 +4,9 @@ metadata:
   name: mongo-express
   namespace: mongodb
 spec:
+  containers:
+    - name: mongo-express
+      image: quay.io/repository/app-sre/mongo-express:latest
   replicas: 1
   selector:
     matchLabels:
