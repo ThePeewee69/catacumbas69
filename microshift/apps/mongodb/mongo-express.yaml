@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: mongo-express
-          image: quay.io/repository/app-sre/mongo-express:latest
+          image: quay.io/podman/mongo-express:latest
           ports:
             - containerPort: 8081
           env:
