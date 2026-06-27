@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prisma-studio
+  namespace: mongodb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prisma-studio
+  template:
+    metadata:
+      labels:
+        app: prisma-studio
+    spec:
+      containers:
+        - name: prisma-studio
+          image: docker.io/timato/prisma-studio:latest
+          ports:
+            - containerPort: 5555
+          env:
+            - name: DATABASE_URL
+              value: "mongodb://peewee69:Pass123-456-789@catacumbas69-svc.mongodb.svc.cluster.local:27017/admin?replicaSet=catacumbas69"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prisma-studio
+  namespace: mongodb
+spec:
+  ports:
+    - port: 5555
+      targetPort: 5555
+  selector:
+    app: prisma-studio
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: prisma-studio-web
+  namespace: mongodb
+spec:
+  host: studio.catacumbas69.com
+  to:
+    kind: Service
+    name: prisma-studio
+    weight: 100
+  port:
+    targetPort: 5555
