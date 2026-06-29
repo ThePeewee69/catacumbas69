@@ -26,44 +26,24 @@ spec:
               
               mkdir -p /tmp/app && cd /tmp/app
               
-              # 1. Criar o package.json para ativar EcmaScript Modules (ESM)
-              cat << 'EOF' > package.json
-              {
-                "type": "module",
-                "dependencies": {
-                  "@prisma/client": "latest",
-                  "prisma": "latest"
-                }
-              }
-              EOF
-              
-              # 2. Criar o novo ficheiro de configuração exigido pelo Prisma 7
-              cat << 'EOF' > prisma.config.js
-              import { defineConfig } from 'prisma/config';
-
-              export default defineConfig({
-                earlyAccess: true,
-                datasource: {
-                  provider: 'mongodb',
-                  url: process.env.DATABASE_URL
-                }
-              });
-              EOF
-              
-              # 3. O schema.prisma agora só precisa de declarar o generator
+              # Escrever o schema clássico compatível com a v6
               cat << 'EOF' > schema.prisma
+              datasource db {
+                provider = "mongodb"
+                url      = env("DATABASE_URL")
+              }
               generator client {
                 provider = "prisma-client-js"
               }
               EOF
               
-              echo "A instalar a versão MAIS RECENTE do Prisma (v7.x)..."
-              npm install
+              echo "A instalar o Prisma CLI e Client v6 (Estável)..."
+              npm install prisma@6.14.0 @prisma/client@6.14.0
               
-              echo "A gerar o Client com as novas especificações da v7..."
+              echo "A gerar o Prisma Client nativo..."
               npx prisma generate
               
-              echo "A lançar o Prisma Studio v7 na porta 5555..."
+              echo "A inicializar o Prisma Studio..."
               npx prisma studio --port 5555 --browser none
           ports:
             - containerPort: 5555
