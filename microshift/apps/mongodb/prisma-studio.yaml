@@ -19,7 +19,8 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              # Configurar o npm para usar apenas a pasta /tmp (permissões locais livres)
+              # Forçar o HOME a ser o /tmp para desviar todas as criações de lixo/cache da raiz
+              export HOME=/tmp
               export NPM_CONFIG_PREFIX=/tmp/npm-global
               export PATH=$PATH:/tmp/npm-global/bin
               export npm_config_cache=/tmp/npm-cache
@@ -36,10 +37,7 @@ spec:
               }
               EOF
               
-              # Instalar pacotes necessários no Alpine para o motor nativo do Prisma
-              echo "A instalar dependências do sistema..."
-              apk add --no-cache openssl direnv libc6-compat
-              
+              # libc6-compat e openssl já não são estritamente necessários porque o prisma-client saca os binários locais no npm install
               echo "A instalar o Prisma CLI e Client localmente..."
               npm install prisma @prisma/client
               
