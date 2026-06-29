@@ -19,7 +19,6 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              # Forçar o HOME a ser o /tmp para desviar todas as criações de lixo/cache da raiz
               export HOME=/tmp
               export NPM_CONFIG_PREFIX=/tmp/npm-global
               export PATH=$PATH:/tmp/npm-global/bin
@@ -37,12 +36,12 @@ spec:
               }
               EOF
               
-              # libc6-compat e openssl já não são estritamente necessários porque o prisma-client saca os binários locais no npm install
-              echo "A instalar o Prisma CLI e Client localmente..."
+              echo "A instalar o Prisma CLI e Client..."
               npm install prisma @prisma/client
               
-              echo "A inicializar o Prisma Studio na porta 5555..."
-              npx prisma studio --port 5555 --browser none
+              echo "A inicializar o Prisma Studio com ligação direta..."
+              # Adicionado o argumento --url para forçar a string de ligação no Node 22
+              npx prisma studio --port 5555 --browser none --url "$DATABASE_URL"
           ports:
             - containerPort: 5555
           env:
