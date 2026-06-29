@@ -39,9 +39,12 @@ spec:
               echo "A instalar o Prisma CLI e Client..."
               npm install prisma @prisma/client
               
-              echo "A inicializar o Prisma Studio com ligação direta..."
-              # Adicionado o argumento --url para forçar a string de ligação no Node 22
-              npx prisma studio --port 5555 --browser none --url "$DATABASE_URL"
+              # Passo crucial exigido pelo Prisma para MongoDB:
+              echo "A gerar o Prisma Client nativo para MongoDB..."
+              npx prisma generate
+              
+              echo "A inicializar o Prisma Studio..."
+              npx prisma studio --port 5555 --browser none
           ports:
             - containerPort: 5555
           env:
