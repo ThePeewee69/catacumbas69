@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: prisma-studio
-          image: docker.io/timato/prisma-studio:latest
+          image: docker.io/wtho/prisma-studio:latest
           ports:
             - containerPort: 5555
           env:
