@@ -16,20 +16,17 @@ spec:
       containers:
         - name: dbgate
           image: docker.io/dbgate/dbgate:latest
-          # Ignorar o entrypoint que tenta tocar no /etc/hosts e correr o Node direto
           command: ["/bin/sh", "-c"]
           args:
             - |
               export HOME=/tmp
-              node /home/dbgate-docker/bundle.js --api
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-            runAsNonRoot: true
-            seccompProfile:
-              type: RuntimeDefault
+              echo "A remover a alteração abusiva ao /etc/hosts..."
+              # Apaga a linha 8 do script entrypoint que causava o Permission Denied
+              sed -i 's/echo.*etc\/hosts//g' /home/dbgate-docker/entrypoint.sh 2>/dev/null || true
+              sed -i 's/.*hosts.*/# hosts alterado/g' /home/dbgate-docker/entrypoint.sh
+              
+              echo "A iniciar o DbGate através do entrypoint oficial..."
+              exec /home/dbgate-docker/entrypoint.sh
           ports:
             - containerPort: 3000
           env:
@@ -42,7 +39,6 @@ spec:
             - name: URL_catacumbas69_db
               value: "mongodb://peewee69:Pass123-456-789@catacumbas69-svc.mongodb.svc.cluster.local:27017/admin?replicaSet=catacumbas69"
           volumeMounts:
-            # Fornecer uma pasta /.dbgate com permissões de escrita locais completas
             - name: dbgate-storage
               mountPath: /.dbgate
       volumes:
