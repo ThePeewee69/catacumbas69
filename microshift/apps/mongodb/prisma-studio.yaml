@@ -26,7 +26,6 @@ spec:
               
               mkdir -p /tmp/app && cd /tmp/app
               
-              # Escrever o schema clássico compatível com a v6
               cat << 'EOF' > schema.prisma
               datasource db {
                 provider = "mongodb"
@@ -39,6 +38,10 @@ spec:
               
               echo "A instalar o Prisma CLI e Client v6 (Estável)..."
               npm install prisma@6.14.0 @prisma/client@6.14.0
+              
+              # Passo mágico para descobrir as coleções existentes no teu MongoDB:
+              echo "A ler a estrutura do MongoDB (Introspeção)..."
+              npx prisma db pull
               
               echo "A gerar o Prisma Client nativo..."
               npx prisma generate
