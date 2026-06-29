@@ -16,9 +16,24 @@ spec:
       containers:
         - name: dbgate
           image: docker.io/dbgate/dbgate:latest
+          # Forçar o DbGate a correr no contexto non-root seguro do OpenShift
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
           ports:
             - containerPort: 3000
           env:
+            # Enviar todas as configurações internas para o /tmp para evitar EACCES
+            - name: CONNECTIONS_DIR
+              value: "/tmp/dbgate-connections"
+            - name: PLUGINS_DIR
+              value: "/tmp/dbgate-plugins"
+            # Configuração da Base de Dados
             - name: CONNECTIONS
               value: "catacumbas69_db"
             - name: LABEL_catacumbas69_db
