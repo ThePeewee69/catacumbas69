@@ -19,7 +19,13 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              mkdir -p /app && cd /app
+              # Configurar o npm para usar apenas a pasta /tmp (permissões locais livres)
+              export NPM_CONFIG_PREFIX=/tmp/npm-global
+              export PATH=$PATH:/tmp/npm-global/bin
+              export npm_config_cache=/tmp/npm-cache
+              
+              mkdir -p /tmp/app && cd /tmp/app
+              
               cat << 'EOF' > schema.prisma
               datasource db {
                 provider = "mongodb"
@@ -29,9 +35,14 @@ spec:
                 provider = "prisma-client-js"
               }
               EOF
-              echo "A instalar o Prisma CLI e Client..."
-              npm install -g prisma
-              npm install @prisma/client
+              
+              # Instalar pacotes necessários no Alpine para o motor nativo do Prisma
+              echo "A instalar dependências do sistema..."
+              apk add --no-cache openssl direnv libc6-compat
+              
+              echo "A instalar o Prisma CLI e Client localmente..."
+              npm install prisma @prisma/client
+              
               echo "A inicializar o Prisma Studio na porta 5555..."
               npx prisma studio --port 5555 --browser none
           ports:
