@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: prisma-studio
-          image: docker.io/library/node:18-alpine
+          image: docker.io/library/node:22-alpine
           command: ["/bin/sh", "-c"]
           args:
             - |
