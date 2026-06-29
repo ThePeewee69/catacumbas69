@@ -20,12 +20,8 @@ spec:
           args:
             - |
               export HOME=/tmp
-              echo "A remover a alteração abusiva ao /etc/hosts..."
-              # Apaga a linha 8 do script entrypoint que causava o Permission Denied
               sed -i 's/echo.*etc\/hosts//g' /home/dbgate-docker/entrypoint.sh 2>/dev/null || true
               sed -i 's/.*hosts.*/# hosts alterado/g' /home/dbgate-docker/entrypoint.sh
-              
-              echo "A iniciar o DbGate através do entrypoint oficial..."
               exec /home/dbgate-docker/entrypoint.sh
           ports:
             - containerPort: 3000
@@ -52,8 +48,8 @@ metadata:
   namespace: mongodb
 spec:
   ports:
-    - port: 80
-      targetPort: 3000
+    - port: 80            # <--- O Service passa a escutar no porto 80
+      targetPort: 3000    # <--- Mas envia o tráfego para a porta 3000 do container
   selector:
     app: dbgate
 ---
@@ -69,4 +65,4 @@ spec:
     name: dbgate
     weight: 100
   port:
-    targetPort: 80
+    targetPort: 80        # <--- A Route liga-se ao porto 80 do Service
