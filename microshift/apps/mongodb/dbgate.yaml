@@ -13,6 +13,26 @@ spec:
       labels:
         app: dbgate
     spec:
+      initContainers:
+        - name: populate-plugins
+          image: docker.io/dbgate/dbgate:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "=== [INIT] A preparar a diretoria de plugins em /tmp... ==="
+              mkdir -p /mnt/.dbgate/plugins
+              if [ -d "/home/dbgate-docker/plugins" ]; then
+                cp -r /home/dbgate-docker/plugins/. /mnt/.dbgate/plugins/
+                echo "=== [INIT] Plugins nativos copiados com sucesso! ==="
+                ls -la /mnt/.dbgate/plugins/
+              else
+                echo "=== [INIT] ERRO: Pasta de origem nao encontrada ==="
+                exit 1
+              fi
+          volumeMounts:
+            - name: dbgate-storage
+              mountPath: /mnt
       containers:
         - name: dbgate
           image: docker.io/dbgate/dbgate:latest
