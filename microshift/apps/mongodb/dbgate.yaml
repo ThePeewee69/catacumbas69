@@ -15,18 +15,19 @@ spec:
     spec:
       containers:
         - name: dbgate
-          image: docker.io/dbgate/dbgate-plugins:latest
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              export HOME=/tmp
-              sed -i 's/echo.*etc\/hosts//g' /home/dbgate-docker/entrypoint.sh 2>/dev/null || true
-              sed -i 's/.*hosts.*/# hosts alterado/g' /home/dbgate-docker/entrypoint.sh
-              export HOST=0.0.0.0
-              exec /home/dbgate-docker/entrypoint.sh
+          image: docker.io/dbgate/dbgate:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
           env:
+            # Enganar o processo para usar o /tmp para cache e plugins locais
+            - name: HOME
+              value: "/tmp"
+            - name: CONNECTIONS_DIR
+              value: "/tmp/.dbgate/connections"
+            - name: PLUGINS_DIR
+              value: "/tmp/.dbgate/plugins"
+            # Configuração da Base de Dados
             - name: CONNECTIONS
               value: "catacumbas69_db"
             - name: LABEL_catacumbas69_db
@@ -37,7 +38,7 @@ spec:
               value: "mongodb://peewee69:Pass123-456-789@catacumbas69-svc.mongodb.svc.cluster.local:27017/admin?replicaSet=catacumbas69"
           volumeMounts:
             - name: dbgate-storage
-              mountPath: /.dbgate
+              mountPath: /tmp/.dbgate
       volumes:
         - name: dbgate-storage
           emptyDir: {}
