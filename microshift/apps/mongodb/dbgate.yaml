@@ -20,28 +20,29 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              # Corrigir o entrypoint para contornar as restrições do OpenShift
+              # Contornar restrições de escrita no /etc/hosts impostas pelo OpenShift
               sed -i 's/echo.*etc\/hosts//g' /home/dbgate-docker/entrypoint.sh 2>/dev/null || true
               sed -i 's/.*hosts.*/# hosts alterado/g' /home/dbgate-docker/entrypoint.sh
 
-              # Mudar temporariamente para a pasta de plugins para fazer o setup do driver
-              echo "=== [PRE-START] A preparar diretório de plugins... ==="
+              echo "=== [PRE-START] A preparar diretório de plugins ==="
               mkdir -p /tmp/.dbgate/plugins
               cd /tmp/.dbgate/plugins
 
-              echo "=== [PRE-START] A tentar descarregar o driver do MongoDB... ==="
+              echo "=== [PRE-START] A tentar instalar o driver nativo do MongoDB... ==="
               if npm install dbgate-plugin-mongodb --no-audit --no-fund --quiet; then
                 if [ -d "node_modules/dbgate-plugin-mongodb" ]; then
                   mv node_modules/dbgate-plugin-mongodb ./dbgate-plugin-mongodb
+                  rm -rf node_modules package-lock.json
                   echo "=== [PRE-START] Plugin do MongoDB instalado com sucesso! ==="
                 fi
               else
-                echo "=== [PRE-START] AVISO: npm install falhou (Sem internet ou DNS no pod?). ==="
+                echo "=== [PRE-START] AVISO CRÍTICO: npm install falhou! ==="
+                echo "Isto acontece se o pod não tiver rota para a Internet ou o DNS do MicroShift estiver isolado."
               fi
 
-              # A CORREÇÃO CRUCIAL: Voltar para a pasta raiz da aplicação
+              # Voltar à raiz da aplicação e arrancar o DbGate
               cd /home/dbgate-docker
-              echo "=== [PRE-START] A iniciar o DbGate... ==="
+              echo "=== [PRE-START] A iniciar a API do DbGate... ==="
               exec /home/dbgate-docker/entrypoint.sh
           ports:
             - containerPort: 3000
@@ -50,21 +51,23 @@ spec:
               value: "/tmp"
             - name: NPM_CONFIG_CACHE
               value: "/tmp/.npm"
+            - name: CONNECTIONS_DIR
+              value: "/tmp/.dbgate"
             - name: HOST
               value: "0.0.0.0"
             - name: CONNECTIONS
               value: "catacumbas69_db"
             - name: LABEL_catacumbas69_db
-              value: "Catacumbas 69"
+              value: "Catacumbas69"
             - name: ENGINE_catacumbas69_db
               value: "mongodb"
             - name: URL_catacumbas69_db
               value: "mongodb://peewee69:Pass123-456-789@catacumbas69-svc.mongodb.svc.cluster.local:27017/admin?replicaSet=catacumbas69"
           volumeMounts:
-            - name: dbgate-storage
-              mountPath: /tmp/.dbgate
+            - name: tmp-scratch
+              mountPath: /tmp
       volumes:
-        - name: dbgate-storage
+        - name: tmp-scratch
           emptyDir: {}
 ---
 apiVersion: v1
