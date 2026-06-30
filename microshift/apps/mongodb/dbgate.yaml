@@ -21,7 +21,6 @@ spec:
           args:
             - |
               export HOME=/tmp
-              # Remover a tentativa de escrita no /etc/hosts que rebenta no OpenShift
               sed -i 's/echo.*etc\/hosts//g' /home/dbgate-docker/entrypoint.sh 2>/dev/null || true
               sed -i 's/.*hosts.*/# hosts alterado/g' /home/dbgate-docker/entrypoint.sh
               export HOST=0.0.0.0
@@ -33,7 +32,6 @@ spec:
               value: "catacumbas69_db"
             - name: LABEL_catacumbas69_db
               value: "Catacumbas 69"
-            # ENGENHO CORRIGIDO: "mongodb" garante que ele carrega o driver nativo sem ir à net
             - name: ENGINE_catacumbas69_db
               value: "mongodb"
             - name: URL_catacumbas69_db
@@ -52,7 +50,8 @@ metadata:
   namespace: mongodb
 spec:
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 3000
   selector:
     app: dbgate
@@ -69,4 +68,4 @@ spec:
     name: dbgate
     weight: 100
   port:
-    targetPort: 80
+    targetPort: http
