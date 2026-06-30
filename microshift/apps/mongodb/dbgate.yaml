@@ -17,24 +17,33 @@ spec:
         - name: dbgate
           image: docker.io/dbgate/dbgate:latest
           imagePullPolicy: IfNotPresent
-          # Saltar o entrypoint que tenta alterar o /etc/hosts e arrancar o Node direto
           command: ["/bin/sh", "-c"]
           args:
             - |
               export HOME=/tmp
+              # Remover a tentativa de escrita no /etc/hosts que rebenta no OpenShift
+              sed -i 's/echo.*etc\/hosts//g' /home/dbgate-docker/entrypoint.sh 2>/dev/null || true
+              sed -i 's/.*hosts.*/# hosts alterado/g' /home/dbgate-docker/entrypoint.sh
               export HOST=0.0.0.0
-              exec node /home/dbgate-docker/bundle.js
+              exec /home/dbgate-docker/entrypoint.sh
           ports:
             - containerPort: 3000
           env:
             - name: CONNECTIONS
               value: "catacumbas69_db"
             - name: LABEL_catacumbas69_db
-              value: "Catacumbas69"
+              value: "Catacumbas 69"
+            # ENGENHO CORRIGIDO: "mongodb" garante que ele carrega o driver nativo sem ir à net
             - name: ENGINE_catacumbas69_db
               value: "mongodb"
             - name: URL_catacumbas69_db
               value: "mongodb://peewee69:Pass123-456-789@catacumbas69-svc.mongodb.svc.cluster.local:27017/admin?replicaSet=catacumbas69"
+          volumeMounts:
+            - name: dbgate-storage
+              mountPath: /.dbgate
+      volumes:
+        - name: dbgate-storage
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
