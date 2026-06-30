@@ -20,37 +20,42 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              # Corrigir o entrypoint para não falhar com a política de segurança do OpenShift
+              # Corrigir o entrypoint para contornar as restrições do OpenShift
               sed -i 's/echo.*etc\/hosts//g' /home/dbgate-docker/entrypoint.sh 2>/dev/null || true
               sed -i 's/.*hosts.*/# hosts alterado/g' /home/dbgate-docker/entrypoint.sh
 
-              # Forçar a pré-instalação do plugin do MongoDB antes do binário principal iniciar
-              echo "=== [PRE-START] A tentar instalar o plugin mongodb... ==="
+              # Mudar temporariamente para a pasta de plugins para fazer o setup do driver
+              echo "=== [PRE-START] A preparar diretório de plugins... ==="
               mkdir -p /tmp/.dbgate/plugins
               cd /tmp/.dbgate/plugins
+
+              echo "=== [PRE-START] A tentar descarregar o driver do MongoDB... ==="
               if npm install dbgate-plugin-mongodb --no-audit --no-fund --quiet; then
-                mv node_modules/dbgate-plugin-mongodb ./dbgate-plugin-mongodb 2>/dev/null || true
-                echo "=== [PRE-START] Plugin instalado com sucesso! ==="
+                if [ -d "node_modules/dbgate-plugin-mongodb" ]; then
+                  mv node_modules/dbgate-plugin-mongodb ./dbgate-plugin-mongodb
+                  echo "=== [PRE-START] Plugin do MongoDB instalado com sucesso! ==="
+                fi
               else
-                echo "=== [PRE-START] AVISO: npm install falhou. O pod poderá estar sem acesso à Internet/DNS. ==="
+                echo "=== [PRE-START] AVISO: npm install falhou (Sem internet ou DNS no pod?). ==="
               fi
 
+              # A CORREÇÃO CRUCIAL: Voltar para a pasta raiz da aplicação
+              cd /home/dbgate-docker
+              echo "=== [PRE-START] A iniciar o DbGate... ==="
               exec /home/dbgate-docker/entrypoint.sh
           ports:
             - containerPort: 3000
           env:
-            # Forçar caminhos globais no /tmp para garantir que qualquer processo do npm tem escrita
             - name: HOME
               value: "/tmp"
             - name: NPM_CONFIG_CACHE
               value: "/tmp/.npm"
             - name: HOST
               value: "0.0.0.0"
-            # Configuração da tua base de dados
             - name: CONNECTIONS
               value: "catacumbas69_db"
             - name: LABEL_catacumbas69_db
-              value: "Catacumbas69"
+              value: "Catacumbas 69"
             - name: ENGINE_catacumbas69_db
               value: "mongodb"
             - name: URL_catacumbas69_db
