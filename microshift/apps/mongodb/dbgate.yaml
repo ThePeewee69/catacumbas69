@@ -15,7 +15,8 @@ spec:
     spec:
       containers:
         - name: dbgate
-          image: docker.io/dbgate/dbgate:latest
+          # USAR A IMAGEM QUE JÁ TRAZ OS DRIVERS PRÉ-INSTALADOS
+          image: docker.io/dbgate/dbgate-plugins:latest
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -30,7 +31,7 @@ spec:
             - name: CONNECTIONS
               value: "catacumbas69_db"
             - name: LABEL_catacumbas69_db
-              value: "Catacumbas69"
+              value: "Catacumbas 69"
             - name: ENGINE_catacumbas69_db
               value: "mongo"
             - name: URL_catacumbas69_db
@@ -48,10 +49,22 @@ metadata:
   name: dbgate
   namespace: mongodb
 spec:
-  type: NodePort          # <--- Muda para NodePort para expor direto na máquina
   ports:
-    - port: 3000
+    - port: 80
       targetPort: 3000
-      nodePort: 32080     # <--- Porto físico que vai ficar aberto no teu meloes
   selector:
     app: dbgate
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: dbgate-web
+  namespace: mongodb
+spec:
+  host: dbgate.catacumbas69.com
+  to:
+    kind: Service
+    name: dbgate
+    weight: 100
+  port:
+    targetPort: 80
