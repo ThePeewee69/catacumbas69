@@ -27,7 +27,7 @@ spec:
             - name: CONNECTIONS
               value: "catacumbas69_db"
             - name: LABEL_catacumbas69_db
-              value: "Catacumbas 69"
+              value: "Catacumbas69"
             - name: ENGINE_catacumbas69_db
               value: "mongodb"
             - name: URL_catacumbas69_db
