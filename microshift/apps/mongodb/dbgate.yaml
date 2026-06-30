@@ -15,7 +15,6 @@ spec:
     spec:
       containers:
         - name: dbgate
-          # USAR A IMAGEM QUE JÁ TRAZ OS DRIVERS PRÉ-INSTALADOS
           image: docker.io/dbgate/dbgate-plugins:latest
           command: ["/bin/sh", "-c"]
           args:
