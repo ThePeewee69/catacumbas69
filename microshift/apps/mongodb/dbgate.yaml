@@ -13,35 +13,6 @@ spec:
       labels:
         app: dbgate
     spec:
-      initContainers:
-        - name: populate-plugins
-          image: docker.io/dbgate/dbgate:latest
-          imagePullPolicy: IfNotPresent
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              echo "=== [INIT] A iniciar varrimento dinâmico de plugins... ==="
-              TARGET_DIR="/mnt/.dbgate/plugins"
-              mkdir -p "$TARGET_DIR"
-
-              # Caça o diretório do plugin do mongo em qualquer lado da imagem
-              FOUND_PATH=$(find / -type d -name "dbgate-plugin-mongodb" 2>/dev/null | head -n 1)
-
-              if [ -n "$FOUND_PATH" ]; then
-                # Obtém o diretório pai que aloja todos os plugins nativos
-                SRC_DIR=$(dirname "$FOUND_PATH")
-                echo "=== [INIT] Sucesso! Plugins detetados em: $SRC_DIR ==="
-                cp -r "$SRC_DIR"/. "$TARGET_DIR"/
-                echo "=== [INIT] Plugins transferidos com sucesso para o volume. ==="
-                ls -la "$TARGET_DIR"
-              else
-                echo "=== [INIT] ERRO: Não foi possível localizar 'dbgate-plugin-mongodb' ==="
-                echo "=== Rastreio do diretório da aplicação: ==="
-                ls -la /home/dbgate-docker 2>/dev/null
-              fi
-          volumeMounts:
-            - name: dbgate-storage
-              mountPath: /mnt
       containers:
         - name: dbgate
           image: docker.io/dbgate/dbgate:latest
