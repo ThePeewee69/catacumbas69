@@ -20,54 +20,62 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              # Contornar restrições de escrita no /etc/hosts impostas pelo OpenShift
+              # 1. Corrigir o entrypoint original para contornar restrições do OpenShift
               sed -i 's/echo.*etc\/hosts//g' /home/dbgate-docker/entrypoint.sh 2>/dev/null || true
               sed -i 's/.*hosts.*/# hosts alterado/g' /home/dbgate-docker/entrypoint.sh
 
-              echo "=== [PRE-START] A preparar diretório de plugins ==="
-              mkdir -p /tmp/.dbgate/plugins
-              cd /tmp/.dbgate/plugins
+              # 2. DESCOBERTA DINÂMICA: Localizar onde os plugins estão realmente guardados
+              echo "=== [PRE-START] A varrer o sistema à procura dos plugins nativos... ==="
+              REAL_PLUGINS_DIR=""
 
-              echo "=== [PRE-START] A tentar instalar o driver nativo do MongoDB... ==="
-              if npm install dbgate-plugin-mongodb --no-audit --no-fund --quiet; then
-                if [ -d "node_modules/dbgate-plugin-mongodb" ]; then
-                  mv node_modules/dbgate-plugin-mongodb ./dbgate-plugin-mongodb
-                  rm -rf node_modules package-lock.json
-                  echo "=== [PRE-START] Plugin do MongoDB instalado com sucesso! ==="
-                fi
+              if [ -d "/home/dbgate-docker/.dbgate/plugins/dbgate-plugin-mongodb" ]; then
+                REAL_PLUGINS_DIR="/home/dbgate-docker/.dbgate/plugins"
+              elif [ -d "/home/dbgate-docker/plugins/dbgate-plugin-mongodb" ]; then
+                REAL_PLUGINS_DIR="/home/dbgate-docker/plugins"
               else
-                echo "=== [PRE-START] AVISO CRÍTICO: npm install falhou! ==="
-                echo "Isto acontece se o pod não tiver rota para a Internet ou o DNS do MicroShift estiver isolado."
+                # Procura profunda caso a imagem tenha mudado a estrutura interna
+                FOUND=$(find /home/dbgate-docker -type d -name "dbgate-plugin-mongodb" 2>/dev/null | head -n 1)
+                if [ -n "$FOUND" ]; then
+                  REAL_PLUGINS_DIR=$(dirname "$FOUND")
+                fi
               fi
 
-              # Voltar à raiz da aplicação e arrancar o DbGate
+              # 3. Forçar o DbGate a ler os plugins diretamente do sítio certo
+              if [ -n "$REAL_PLUGINS_DIR" ]; then
+                echo "=== [PRE-START] Sucesso! Plugins detetados em: $REAL_PLUGINS_DIR ==="
+                export PLUGINS_DIR="$REAL_PLUGINS_DIR"
+              else
+                echo "=== [PRE-START] AVISO: Não encontrei o driver nas pastas padrão. ==="
+                echo "=== Estrutura atual de /home/dbgate-docker: ==="
+                ls -la /home/dbgate-docker 2>/dev/null
+              fi
+
+              # 4. Voltar ao diretório da aplicação e arrancar o processo principal
               cd /home/dbgate-docker
-              echo "=== [PRE-START] A iniciar a API do DbGate... ==="
+              echo "=== [PRE-START] A lançar o servidor DbGate... ==="
               exec /home/dbgate-docker/entrypoint.sh
           ports:
             - containerPort: 3000
           env:
             - name: HOME
               value: "/tmp"
-            - name: NPM_CONFIG_CACHE
-              value: "/tmp/.npm"
-            - name: CONNECTIONS_DIR
+            - name: DATA_DIR
               value: "/tmp/.dbgate"
             - name: HOST
               value: "0.0.0.0"
             - name: CONNECTIONS
               value: "catacumbas69_db"
             - name: LABEL_catacumbas69_db
-              value: "Catacumbas69"
+              value: "Catacumbas 69"
             - name: ENGINE_catacumbas69_db
               value: "mongodb"
             - name: URL_catacumbas69_db
               value: "mongodb://peewee69:Pass123-456-789@catacumbas69-svc.mongodb.svc.cluster.local:27017/admin?replicaSet=catacumbas69"
           volumeMounts:
-            - name: tmp-scratch
-              mountPath: /tmp
+            - name: dbgate-storage
+              mountPath: /tmp/.dbgate
       volumes:
-        - name: tmp-scratch
+        - name: dbgate-storage
           emptyDir: {}
 ---
 apiVersion: v1
