@@ -13,7 +13,6 @@ spec:
       labels:
         app: dbgate
     spec:
-      # Contentor temporário para preparar os ficheiros em disco
       initContainers:
         - name: populate-plugins
           image: docker.io/dbgate/dbgate:latest
@@ -21,19 +20,28 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              echo "=== [INIT] A preparar diretoria de segurança para os plugins... ==="
-              mkdir -p /mnt/.dbgate/plugins
-              if [ -d "/home/dbgate-docker/.dbgate/plugins" ]; then
-                cp -r /home/dbgate-docker/.dbgate/plugins/. /mnt/.dbgate/plugins/
-                echo "=== [INIT] Plugins nativos copiados com sucesso! ==="
+              echo "=== [INIT] A iniciar varrimento dinâmico de plugins... ==="
+              TARGET_DIR="/mnt/.dbgate/plugins"
+              mkdir -p "$TARGET_DIR"
+
+              # Caça o diretório do plugin do mongo em qualquer lado da imagem
+              FOUND_PATH=$(find / -type d -name "dbgate-plugin-mongodb" 2>/dev/null | head -n 1)
+
+              if [ -n "$FOUND_PATH" ]; then
+                # Obtém o diretório pai que aloja todos os plugins nativos
+                SRC_DIR=$(dirname "$FOUND_PATH")
+                echo "=== [INIT] Sucesso! Plugins detetados em: $SRC_DIR ==="
+                cp -r "$SRC_DIR"/. "$TARGET_DIR"/
+                echo "=== [INIT] Plugins transferidos com sucesso para o volume. ==="
+                ls -la "$TARGET_DIR"
               else
-                echo "=== [INIT] Pasta padrão não encontrada, a tentar rota alternativa... ==="
-                cp -r /home/dbgate-docker/plugins/. /mnt/.dbgate/plugins/ || true
+                echo "=== [INIT] ERRO: Não foi possível localizar 'dbgate-plugin-mongodb' ==="
+                echo "=== Rastreio do diretório da aplicação: ==="
+                ls -la /home/dbgate-docker 2>/dev/null
               fi
           volumeMounts:
             - name: dbgate-storage
               mountPath: /mnt
-      # Contentor Principal (Corre sem alterações ao entrypoint original)
       containers:
         - name: dbgate
           image: docker.io/dbgate/dbgate:latest
