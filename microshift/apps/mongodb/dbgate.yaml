@@ -20,14 +20,33 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              export HOME=/tmp
+              # Corrigir o entrypoint para não falhar com a política de segurança do OpenShift
               sed -i 's/echo.*etc\/hosts//g' /home/dbgate-docker/entrypoint.sh 2>/dev/null || true
               sed -i 's/.*hosts.*/# hosts alterado/g' /home/dbgate-docker/entrypoint.sh
-              export HOST=0.0.0.0
+
+              # Forçar a pré-instalação do plugin do MongoDB antes do binário principal iniciar
+              echo "=== [PRE-START] A tentar instalar o plugin mongodb... ==="
+              mkdir -p /tmp/.dbgate/plugins
+              cd /tmp/.dbgate/plugins
+              if npm install dbgate-plugin-mongodb --no-audit --no-fund --quiet; then
+                mv node_modules/dbgate-plugin-mongodb ./dbgate-plugin-mongodb 2>/dev/null || true
+                echo "=== [PRE-START] Plugin instalado com sucesso! ==="
+              else
+                echo "=== [PRE-START] AVISO: npm install falhou. O pod poderá estar sem acesso à Internet/DNS. ==="
+              fi
+
               exec /home/dbgate-docker/entrypoint.sh
           ports:
             - containerPort: 3000
           env:
+            # Forçar caminhos globais no /tmp para garantir que qualquer processo do npm tem escrita
+            - name: HOME
+              value: "/tmp"
+            - name: NPM_CONFIG_CACHE
+              value: "/tmp/.npm"
+            - name: HOST
+              value: "0.0.0.0"
+            # Configuração da tua base de dados
             - name: CONNECTIONS
               value: "catacumbas69_db"
             - name: LABEL_catacumbas69_db
@@ -38,7 +57,7 @@ spec:
               value: "mongodb://peewee69:Pass123-456-789@catacumbas69-svc.mongodb.svc.cluster.local:27017/admin?replicaSet=catacumbas69"
           volumeMounts:
             - name: dbgate-storage
-              mountPath: /.dbgate
+              mountPath: /tmp/.dbgate
       volumes:
         - name: dbgate-storage
           emptyDir: {}
