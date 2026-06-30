@@ -13,54 +13,36 @@ spec:
       labels:
         app: dbgate
     spec:
-      containers:
-        - name: dbgate
+      # Contentor temporário para preparar os ficheiros em disco
+      initContainers:
+        - name: populate-plugins
           image: docker.io/dbgate/dbgate:latest
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
             - |
-              # 1. Corrigir o entrypoint original para contornar restrições do OpenShift
-              sed -i 's/echo.*etc\/hosts//g' /home/dbgate-docker/entrypoint.sh 2>/dev/null || true
-              sed -i 's/.*hosts.*/# hosts alterado/g' /home/dbgate-docker/entrypoint.sh
-
-              # 2. DESCOBERTA DINÂMICA: Localizar onde os plugins estão realmente guardados
-              echo "=== [PRE-START] A varrer o sistema à procura dos plugins nativos... ==="
-              REAL_PLUGINS_DIR=""
-
-              if [ -d "/home/dbgate-docker/.dbgate/plugins/dbgate-plugin-mongodb" ]; then
-                REAL_PLUGINS_DIR="/home/dbgate-docker/.dbgate/plugins"
-              elif [ -d "/home/dbgate-docker/plugins/dbgate-plugin-mongodb" ]; then
-                REAL_PLUGINS_DIR="/home/dbgate-docker/plugins"
+              echo "=== [INIT] A preparar diretoria de segurança para os plugins... ==="
+              mkdir -p /mnt/.dbgate/plugins
+              if [ -d "/home/dbgate-docker/.dbgate/plugins" ]; then
+                cp -r /home/dbgate-docker/.dbgate/plugins/. /mnt/.dbgate/plugins/
+                echo "=== [INIT] Plugins nativos copiados com sucesso! ==="
               else
-                # Procura profunda caso a imagem tenha mudado a estrutura interna
-                FOUND=$(find /home/dbgate-docker -type d -name "dbgate-plugin-mongodb" 2>/dev/null | head -n 1)
-                if [ -n "$FOUND" ]; then
-                  REAL_PLUGINS_DIR=$(dirname "$FOUND")
-                fi
+                echo "=== [INIT] Pasta padrão não encontrada, a tentar rota alternativa... ==="
+                cp -r /home/dbgate-docker/plugins/. /mnt/.dbgate/plugins/ || true
               fi
-
-              # 3. Forçar o DbGate a ler os plugins diretamente do sítio certo
-              if [ -n "$REAL_PLUGINS_DIR" ]; then
-                echo "=== [PRE-START] Sucesso! Plugins detetados em: $REAL_PLUGINS_DIR ==="
-                export PLUGINS_DIR="$REAL_PLUGINS_DIR"
-              else
-                echo "=== [PRE-START] AVISO: Não encontrei o driver nas pastas padrão. ==="
-                echo "=== Estrutura atual de /home/dbgate-docker: ==="
-                ls -la /home/dbgate-docker 2>/dev/null
-              fi
-
-              # 4. Voltar ao diretório da aplicação e arrancar o processo principal
-              cd /home/dbgate-docker
-              echo "=== [PRE-START] A lançar o servidor DbGate... ==="
-              exec /home/dbgate-docker/entrypoint.sh
+          volumeMounts:
+            - name: dbgate-storage
+              mountPath: /mnt
+      # Contentor Principal (Corre sem alterações ao entrypoint original)
+      containers:
+        - name: dbgate
+          image: docker.io/dbgate/dbgate:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
           env:
             - name: HOME
               value: "/tmp"
-            - name: DATA_DIR
-              value: "/tmp/.dbgate"
             - name: HOST
               value: "0.0.0.0"
             - name: CONNECTIONS
@@ -73,7 +55,7 @@ spec:
               value: "mongodb://peewee69:Pass123-456-789@catacumbas69-svc.mongodb.svc.cluster.local:27017/admin?replicaSet=catacumbas69"
           volumeMounts:
             - name: dbgate-storage
-              mountPath: /tmp/.dbgate
+              mountPath: /tmp
       volumes:
         - name: dbgate-storage
           emptyDir: {}
