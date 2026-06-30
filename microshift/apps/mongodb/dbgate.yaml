@@ -17,31 +17,24 @@ spec:
         - name: dbgate
           image: docker.io/dbgate/dbgate:latest
           imagePullPolicy: IfNotPresent
+          # Saltar o entrypoint que tenta alterar o /etc/hosts e arrancar o Node direto
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              export HOME=/tmp
+              export HOST=0.0.0.0
+              exec node /home/dbgate-docker/bundle.js
           ports:
             - containerPort: 3000
           env:
-            # Enganar o processo para usar o /tmp para cache e plugins locais
-            - name: HOME
-              value: "/tmp"
-            - name: CONNECTIONS_DIR
-              value: "/tmp/.dbgate/connections"
-            - name: PLUGINS_DIR
-              value: "/tmp/.dbgate/plugins"
-            # Configuração da Base de Dados
             - name: CONNECTIONS
               value: "catacumbas69_db"
             - name: LABEL_catacumbas69_db
-              value: "Catacumbas 69"
+              value: "Catacumbas69"
             - name: ENGINE_catacumbas69_db
-              value: "mongo"
+              value: "mongodb"
             - name: URL_catacumbas69_db
               value: "mongodb://peewee69:Pass123-456-789@catacumbas69-svc.mongodb.svc.cluster.local:27017/admin?replicaSet=catacumbas69"
-          volumeMounts:
-            - name: dbgate-storage
-              mountPath: /tmp/.dbgate
-      volumes:
-        - name: dbgate-storage
-          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
