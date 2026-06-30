@@ -22,6 +22,10 @@ spec:
               export HOME=/tmp
               sed -i 's/echo.*etc\/hosts//g' /home/dbgate-docker/entrypoint.sh 2>/dev/null || true
               sed -i 's/.*hosts.*/# hosts alterado/g' /home/dbgate-docker/entrypoint.sh
+              
+              # Forçar a API e o servidor a aceitarem ligações externas ao contentor
+              export HOST=0.0.0.0
+              
               exec /home/dbgate-docker/entrypoint.sh
           ports:
             - containerPort: 3000
@@ -48,8 +52,8 @@ metadata:
   namespace: mongodb
 spec:
   ports:
-    - port: 80            # <--- O Service passa a escutar no porto 80
-      targetPort: 3000    # <--- Mas envia o tráfego para a porta 3000 do container
+    - port: 80
+      targetPort: 3000
   selector:
     app: dbgate
 ---
@@ -65,4 +69,4 @@ spec:
     name: dbgate
     weight: 100
   port:
-    targetPort: 80        # <--- A Route liga-se ao porto 80 do Service
+    targetPort: 80
