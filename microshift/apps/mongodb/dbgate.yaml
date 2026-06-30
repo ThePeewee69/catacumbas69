@@ -47,9 +47,9 @@ spec:
             - name: CONNECTIONS
               value: "catacumbas69_db"
             - name: LABEL_catacumbas69_db
-              value: "Catacumbas69"
+              value: "Catacumbas 69"
             - name: ENGINE_catacumbas69_db
-              value: "mongodb"
+              value: "mongo"
             - name: URL_catacumbas69_db
               value: "mongodb://peewee69:Pass123-456-789@catacumbas69-svc.mongodb.svc.cluster.local:27017/admin?replicaSet=catacumbas69"
           volumeMounts:
