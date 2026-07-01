@@ -5,4 +5,4 @@ resources:
   - mongodb-cluster.yaml
   - mongo-express.yaml
   - mongo-express-route.yaml
-  - dbgate.yaml
+  - mongodb-compass.yaml
