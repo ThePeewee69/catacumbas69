@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongoku
+  namespace: mongodb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongoku
+  template:
+    metadata:
+      labels:
+        app: mongoku
+    spec:
+      containers:
+        - name: mongoku
+          image: docker.io/tsndr/mongoku:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: web
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongoku
+  namespace: mongodb
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+  selector:
+    app: mongoku
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: mongoku-web
+  namespace: mongodb
+spec:
+  host: mongoku.catacumbas69.com
+  to:
+    kind: Service
+    name: mongoku
+    weight: 100
+  port:
+    targetPort: http
