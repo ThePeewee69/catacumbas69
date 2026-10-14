@@ -6,3 +6,4 @@ resources:
   - mongo-express.yaml
   - mongo-express-route.yaml
   - dbgate.yaml
+  - mongui.yaml
