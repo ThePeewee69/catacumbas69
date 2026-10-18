@@ -49,6 +49,9 @@ metadata:
   namespace: mongodb
 spec:
   host: mongui.catacumbas69.com
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
   to:
     kind: Service
     name: mongui
