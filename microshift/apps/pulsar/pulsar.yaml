@@ -90,3 +90,57 @@ spec:
     weight: 100
   port:
     targetPort: admin
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pulsar-manager
+  namespace: pulsar
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pulsar-manager
+  template:
+    metadata:
+      labels:
+        app: pulsar-manager
+    spec:
+      containers:
+        - name: pulsar-manager
+          image: docker.io/apachepulsar/pulsar-manager:v0.4.0
+          ports:
+            - containerPort: 9527
+              name: web
+            - containerPort: 7750
+              name: api
+          env:
+            - name: SPRING_CONFIGURATION_FILE
+              value: /pulsar-manager/pulsar-manager/application.properties
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pulsar-manager
+  namespace: pulsar
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: 9527
+  selector:
+    app: pulsar-manager
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: pulsar-manager
+  namespace: pulsar
+spec:
+  host: pulsar.catacumbas69.com
+  to:
+    kind: Service
+    name: pulsar-manager
+    weight: 100
+  port:
+    targetPort: http
