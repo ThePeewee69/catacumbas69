@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pulsar
+  namespace: pulsar
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pulsar
+  template:
+    metadata:
+      labels:
+        app: pulsar
+    spec:
+      containers:
+        - name: pulsar
+          image: docker.io/apachepulsar/pulsar:4.2.2
+          command: ["bin/pulsar"]
+          args: ["standalone"]
+          ports:
+            - containerPort: 6650
+              name: broker
+            - containerPort: 8080
+              name: admin
+          env:
+            - name: PULSAR_MEM
+              value: "-Xms512m -Xmx1g -XX:MaxDirectMemorySize=1g"
+          volumeMounts:
+            - name: pulsar-data
+              mountPath: /pulsar/data
+          readinessProbe:
+            httpGet:
+              path: /admin/v2/brokers/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 10
+          resources:
+            requests:
+              memory: 1Gi
+              cpu: 500m
+            limits:
+              memory: 3Gi
+              cpu: 2
+      volumes:
+        - name: pulsar-data
+          persistentVolumeClaim:
+            claimName: pulsar-data-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pulsar-data-pvc
+  namespace: pulsar
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: topolvm-provisioner
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pulsar
+  namespace: pulsar
+spec:
+  ports:
+    - name: broker
+      port: 6650
+      targetPort: 6650
+    - name: admin
+      port: 8080
+      targetPort: 8080
+  selector:
+    app: pulsar
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: pulsar-admin
+  namespace: pulsar
+spec:
+  host: pulsar.catacumbas69.com
+  to:
+    kind: Service
+    name: pulsar
+    weight: 100
+  port:
+    targetPort: admin
