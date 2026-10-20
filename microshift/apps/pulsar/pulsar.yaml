@@ -137,7 +137,7 @@ metadata:
   name: pulsar-manager
   namespace: pulsar
 spec:
-  host: pulsar.catacumbas69.com
+  host: pulsar-manager.catacumbas69.com
   to:
     kind: Service
     name: pulsar-manager
