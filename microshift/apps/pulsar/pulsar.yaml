@@ -117,6 +117,14 @@ spec:
           env:
             - name: SPRING_CONFIGURATION_FILE
               value: /pulsar-manager/pulsar-manager/application.properties
+            - name: DEFAULT_SUPERUSER_ENABLED
+              value: "true"
+            - name: DEFAULT_SUPERUSER_NAME
+              value: "peewee69"
+            - name: DEFAULT_SUPERUSER_PASSWORD
+              value: "Pass123-456-789"
+            - name: DEFAULT_SUPERUSER_EMAIL
+              value: "hpereira@gmail.com"
 ---
 apiVersion: v1
 kind: Service
