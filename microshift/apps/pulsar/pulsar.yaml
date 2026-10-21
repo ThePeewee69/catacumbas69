@@ -152,3 +152,62 @@ spec:
     weight: 100
   port:
     targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pulsar-admin-console
+  namespace: pulsar
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pulsar-admin-console
+  template:
+    metadata:
+      labels:
+        app: pulsar-admin-console
+    spec:
+      containers:
+        - name: pulsar-admin-console
+          image: docker.io/datastax/pulsar-admin-console:2.2.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6454
+              name: web
+          env:
+            - name: SERVICE_URL
+              value: "http://pulsar.pulsar.svc.cluster.local:8080"
+            - name: PULSAR_URL
+              value: "pulsar://pulsar.pulsar.svc.cluster.local:6650"
+            - name: AUTH_MODE
+              value: "none"
+            - name: TENANT
+              value: "public"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pulsar-admin-console
+  namespace: pulsar
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: 6454
+  selector:
+    app: pulsar-admin-console
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: pulsar-admin-console
+  namespace: pulsar
+spec:
+  host: pulsar-console.catacumbas69.com
+  to:
+    kind: Service
+    name: pulsar-admin-console
+    weight: 100
+  port:
+    targetPort: http
