@@ -34,6 +34,8 @@ spec:
           env:
             - name: PULSAR_MEM
               value: "-Xms512m -Xmx1g -XX:MaxDirectMemorySize=1g"
+            - name: PULSAR_GC_LOG_DIR
+              value: /tmp
           volumeMounts:
             - name: pulsar-data
               mountPath: /pulsar/data
