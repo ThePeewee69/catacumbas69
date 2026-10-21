@@ -184,6 +184,14 @@ spec:
               value: "none"
             - name: TENANT
               value: "public"
+      volumeMounts:
+        - name: config
+          mountPath: /home/appuser/config/default.json
+          subPath: default.json
+      volumes:
+        - name: config
+          configMap:
+            name: pulsar-admin-console-config
 ---
 apiVersion: v1
 kind: Service
@@ -211,3 +219,56 @@ spec:
     weight: 100
   port:
     targetPort: http
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pulsar-admin-console-config
+  namespace: pulsar
+data:
+  default.json: |
+    {
+      "auth_mode": "none",
+      "cluster_name": "standalone",
+      "tenant": "public",
+      "server_config": {
+        "port": "6454",
+        "pulsar_url": "http://pulsar.pulsar.svc.cluster.local:8080",
+        "websocket_url": "ws://pulsar.pulsar.svc.cluster.local:8080",
+        "function_worker_url": "",
+        "log_level": "info",
+        "token_path": "",
+        "admin_token": "",
+        "token_secret": "",
+        "token_options": {
+          "private_key_path": "",
+          "claim": "sub",
+          "expires_in": "12h",
+          "algorithm": "HS256"
+        },
+        "ssl": {
+          "verify_certs": false,
+          "hostname_validation": false,
+          "ca_path": "",
+          "cert_path": "",
+          "key_path": ""
+        },
+        "kubernetes": {
+          "k8s_namespace": "pulsar",
+          "kubernetes_service_host": "",
+          "service_port": ""
+        },
+        "user_auth": {
+          "username": "",
+          "password": ""
+        }
+      },
+      "polling_interval": "10000",
+      "functions_disabled": "false",
+      "clients_disabled": "false",
+      "host_overrides": {
+        "pulsar": "pulsar://pulsar.pulsar.svc.cluster.local:6650",
+        "ws": "ws://pulsar.pulsar.svc.cluster.local:8080",
+        "http": "http://pulsar.pulsar.svc.cluster.local:8080"
+      }
+    }
