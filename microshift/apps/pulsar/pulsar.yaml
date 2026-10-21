@@ -27,6 +27,7 @@ spec:
             - standalone
             - --advertised-address
             - pulsar.pulsar.svc.cluster.local
+            - --no-functions-worker
           ports:
             - containerPort: 6650
               name: broker
