@@ -17,7 +17,10 @@ spec:
         - name: pulsar
           image: docker.io/apachepulsar/pulsar:4.2.2
           command: ["bin/pulsar"]
-          args: ["standalone"]
+          args:
+            - standalone
+            - --advertised-address
+            - pulsar.pulsar.svc.cluster.local
           ports:
             - containerPort: 6650
               name: broker
