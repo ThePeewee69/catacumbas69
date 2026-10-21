@@ -5,6 +5,8 @@ metadata:
   namespace: pulsar
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: pulsar
@@ -13,6 +15,9 @@ spec:
       labels:
         app: pulsar
     spec:
+      securityContext:
+        runAsUser: 1000150000
+        runAsGroup: 1000150000
       containers:
         - name: pulsar
           image: docker.io/apachepulsar/pulsar:4.2.2
