@@ -35,13 +35,9 @@ spec:
           env:
             - name: PULSAR_MEM
               value: "-Xms512m -Xmx1g -XX:MaxDirectMemorySize=1g"
-            - name: PULSAR_GC_LOG_DIR
-              value: /tmp
-            - name: PULSAR_LOG_DIR
-              value: /pulsar/data/logs
-            - name: PULSAR_GC_LOG_DIR
-              value: /pulsar/data/logs
           volumeMounts:
+            - name: pulsar-logs
+              mountPath: /pulsar/logs
             - name: pulsar-data
               mountPath: /pulsar/data
           readinessProbe:
@@ -59,6 +55,8 @@ spec:
               memory: 3Gi
               cpu: 2
       volumes:
+        - name: pulsar-logs
+          emptyDir: {}
         - name: pulsar-data
           persistentVolumeClaim:
             claimName: pulsar-data-pvc
