@@ -26,7 +26,7 @@ spec:
           args:
             - standalone
             - --advertised-address
-            - pulsar.pulsar.svc.cluster.local
+            - $(MY_POD_IP)
             - --no-functions-worker
           ports:
             - containerPort: 6650
@@ -36,15 +36,18 @@ spec:
           env:
             - name: PULSAR_MEM
               value: "-Xms512m -Xmx1g -XX:MaxDirectMemorySize=1g"
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
           volumeMounts:
             - name: pulsar-logs
               mountPath: /pulsar/logs
             - name: pulsar-data
               mountPath: /pulsar/data
           readinessProbe:
-            httpGet:
-              path: /admin/v2/brokers/health
-              port: 8080
+            tcpSocket:
+              port: 6650
             initialDelaySeconds: 60
             periodSeconds: 10
             failureThreshold: 10
