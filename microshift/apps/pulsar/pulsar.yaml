@@ -94,6 +94,26 @@ spec:
   selector:
     app: pulsar
 ---
+# NodePort para acesso externo (Mac, dev local)
+apiVersion: v1
+kind: Service
+metadata:
+  name: pulsar-external
+  namespace: pulsar
+spec:
+  type: NodePort
+  ports:
+    - name: broker
+      port: 6650
+      targetPort: 6650
+      nodePort: 31650
+    - name: admin
+      port: 8080
+      targetPort: 8080
+      nodePort: 31080
+  selector:
+    app: pulsar
+---
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
