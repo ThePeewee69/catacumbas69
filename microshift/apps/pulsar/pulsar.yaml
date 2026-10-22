@@ -185,7 +185,7 @@ data:
       "server_config": {
         "port": "6454",
         "pulsar_url": "http://pulsar.pulsar.svc.cluster.local:8080",
-        "websocket_url": "ws://pulsar.pulsar.svc.cluster.local:8080",
+        "websocket_url": "ws://pulsar.catacumbas69.com",
         "function_worker_url": "",
         "log_level": "info",
         "token_path": "",
@@ -229,7 +229,7 @@ data:
       "clients_disabled": "false",
       "host_overrides": {
         "pulsar": "pulsar://pulsar.pulsar.svc.cluster.local:6650",
-        "ws": "ws://pulsar.pulsar.svc.cluster.local:8080",
+        "ws": "ws://pulsar.catacumbas69.com",
         "http": "http://pulsar.pulsar.svc.cluster.local:8080"
       }
     }
