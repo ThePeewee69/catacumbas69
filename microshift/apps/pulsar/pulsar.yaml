@@ -182,7 +182,7 @@ data:
       "server_config": {
         "port": "6454",
         "pulsar_url": "http://pulsar.pulsar.svc.cluster.local:8080",
-        "websocket_url": "ws://pulsar.catacumbas69.com",
+        "websocket_url": "ws://pulsar.pulsar.svc.cluster.local:8080",
         "function_worker_url": "",
         "log_level": "info",
         "token_path": "",
@@ -195,8 +195,8 @@ data:
           "algorithm": "HS256"
         },
         "ssl": {
-          "verify_certs": true,
-          "hostname_validation": true,
+          "verify_certs": false,
+          "hostname_validation": false,
           "ca_path": "",
           "cert_path": "",
           "key_path": ""
@@ -226,8 +226,8 @@ data:
       "clients_disabled": "false",
       "host_overrides": {
         "pulsar": "pulsar://pulsar.pulsar.svc.cluster.local:6650",
-        "ws": "ws://pulsar.catacumbas69.com",
-        "http": "http://pulsar.catacumbas69.com"
+        "ws": "ws://pulsar.pulsar.svc.cluster.local:8080",
+        "http": "http://pulsar.pulsar.svc.cluster.local:8080"
       }
     }
 ---
