@@ -1,0 +1,104 @@
+---
+# ── Deployment ──────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pulsar-client
+  namespace: pulsar
+  labels:
+    app: pulsar-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pulsar-client
+  template:
+    metadata:
+      labels:
+        app: pulsar-client
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: pulsar-client
+          image: docker.io/peewee69/pulsar-client:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8081
+              name: http
+          env:
+            - name: PULSAR_SERVICE_URL
+              value: "http://pulsar.pulsar.svc.cluster.local:8080"
+            - name: PULSAR_BROKER_URL
+              value: "pulsar://pulsar.pulsar.svc.cluster.local:6650"
+            # URI do MongoDB — substituir YOURPASSWORD pela password real
+            # ou criar o secret antes de aplicar:
+            #   oc create secret generic mongodb-uri-secret -n pulsar \
+            #     --from-literal=uri="mongodb://peewee69:YOURPASSWORD@catacumbas69-0.catacumbas69-svc.mongodb.svc.cluster.local:27017,catacumbas69-1.catacumbas69-svc.mongodb.svc.cluster.local:27017,catacumbas69-2.catacumbas69-svc.mongodb.svc.cluster.local:27017/catacumbas69?authSource=admin&replicaSet=catacumbas69"
+            - name: MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-uri-secret
+                  key: uri
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8081
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8081
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+---
+# ── Service ──────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: pulsar-client
+  namespace: pulsar
+  labels:
+    app: pulsar-client
+spec:
+  selector:
+    app: pulsar-client
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+---
+# ── Route ────────────────────────────────────────────────────────────────────
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: pulsar-client
+  namespace: pulsar
+  labels:
+    app: pulsar-client
+spec:
+  host: pulsar-client.catacumbas69.com
+  to:
+    kind: Service
+    name: pulsar-client
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

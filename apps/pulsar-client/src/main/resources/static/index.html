@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pulsar Client</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --sidebar: #161b27;
+    --panel: #1a2035;
+    --border: #2a3148;
+    --accent: #6366f1;
+    --accent2: #818cf8;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --success: #22c55e;
+    --danger: #ef4444;
+    --warn: #f59e0b;
+    --font: 'Segoe UI', system-ui, sans-serif;
+    --mono: 'Fira Code', 'Cascadia Code', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; height: 100vh; display: flex; overflow: hidden; }
+
+  /* ── Sidebar ── */
+  #sidebar { width: 280px; min-width: 280px; background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  #sidebar-header { padding: 16px; border-bottom: 1px solid var(--border); }
+  #sidebar-header h1 { font-size: 16px; font-weight: 700; color: var(--accent2); letter-spacing: .5px; display: flex; align-items: center; gap: 8px; }
+  #sidebar-header h1 svg { width: 20px; height: 20px; }
+  #sidebar-tree { flex: 1; overflow-y: auto; padding: 8px 0; }
+
+  .tree-section { margin-bottom: 4px; }
+  .tree-item { display: flex; align-items: center; gap: 6px; padding: 6px 12px; cursor: pointer; border-radius: 6px; margin: 1px 6px; transition: background .15s; user-select: none; }
+  .tree-item:hover { background: rgba(99,102,241,.12); }
+  .tree-item.active { background: rgba(99,102,241,.2); color: var(--accent2); }
+  .tree-item .icon { font-size: 13px; opacity: .7; flex-shrink: 0; }
+  .tree-item .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+  .tree-item .badge { font-size: 10px; background: var(--border); border-radius: 999px; padding: 1px 6px; color: var(--muted); flex-shrink: 0; }
+  .tree-indent1 { padding-left: 28px; }
+  .tree-indent2 { padding-left: 44px; }
+
+  .tree-heading { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); padding: 8px 16px 4px; }
+
+  .del-btn { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 13px; padding: 2px 4px; border-radius: 4px; opacity: 0; transition: opacity .15s, color .15s; }
+  .tree-item:hover .del-btn { opacity: 1; }
+  .del-btn:hover { color: var(--danger); }
+
+  /* ── Main ── */
+  #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  #topbar { background: var(--panel); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; align-items: center; gap: 12px; }
+  #topbar .breadcrumb { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; flex: 1; }
+  #topbar .breadcrumb span { color: var(--text); }
+  #content { flex: 1; overflow-y: auto; padding: 20px; }
+
+  /* ── Cards ── */
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+  .card-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .card-title .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 2px; margin-bottom: 20px; background: var(--sidebar); border-radius: 8px; padding: 4px; border: 1px solid var(--border); width: fit-content; }
+  .tab { padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--muted); transition: all .15s; border: none; background: none; font-family: var(--font); }
+  .tab.active { background: var(--accent); color: #fff; font-weight: 600; }
+  .tab:hover:not(.active) { color: var(--text); background: rgba(255,255,255,.05); }
+
+  /* ── Stats grid ── */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat-card { background: var(--sidebar); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .stat-card .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 4px; }
+  .stat-card .stat-value { font-size: 22px; font-weight: 700; color: var(--accent2); font-family: var(--mono); }
+  .stat-card .stat-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* ── Forms ── */
+  .form-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
+  .field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 160px; }
+  .field label { font-size: 12px; color: var(--muted); font-weight: 500; }
+  input[type=text], input[type=number], textarea, select {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); padding: 8px 10px; font-size: 13px; font-family: var(--font);
+    width: 100%; transition: border-color .15s; outline: none;
+  }
+  input[type=text]:focus, input[type=number]:focus, textarea:focus, select:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 80px; font-family: var(--mono); }
+
+  /* ── Buttons ── */
+  .btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; font-family: var(--font); transition: all .15s; display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #5254cc; }
+  .btn-danger { background: rgba(239,68,68,.15); color: var(--danger); border: 1px solid rgba(239,68,68,.3); }
+  .btn-danger:hover { background: rgba(239,68,68,.25); }
+  .btn-secondary { background: var(--border); color: var(--text); }
+  .btn-secondary:hover { background: #374160; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); padding: 10px 14px; text-align: left; background: var(--sidebar); border-bottom: 1px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid rgba(42,49,72,.5); font-size: 13px; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  td .mono { font-family: var(--mono); font-size: 12px; color: var(--accent2); }
+  td .muted { color: var(--muted); font-size: 12px; }
+  td .payload { font-family: var(--mono); font-size: 12px; max-width: 400px; word-break: break-all; white-space: pre-wrap; color: var(--text); }
+
+  /* ── Tags ── */
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .tag-green { background: rgba(34,197,94,.15); color: var(--success); }
+  .tag-blue { background: rgba(99,102,241,.15); color: var(--accent2); }
+  .tag-orange { background: rgba(245,158,11,.15); color: var(--warn); }
+  .tag-binary { background: rgba(100,116,139,.15); color: var(--muted); }
+
+  /* ── Notification toast ── */
+  .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; z-index: 9999; display: flex; align-items: center; gap: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.4); transition: all .3s; }
+  .toast-success { background: rgba(34,197,94,.2); border: 1px solid rgba(34,197,94,.4); color: var(--success); }
+  .toast-error { background: rgba(239,68,68,.2); border: 1px solid rgba(239,68,68,.4); color: var(--danger); }
+
+  /* ── Empty state ── */
+  .empty { text-align: center; padding: 48px 24px; color: var(--muted); }
+  .empty .big { font-size: 40px; margin-bottom: 12px; }
+  .empty p { font-size: 14px; }
+
+  /* ── Subs list ── */
+  .sub-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--sidebar); border-radius: 8px; margin-bottom: 8px; border: 1px solid var(--border); }
+  .sub-item .sub-name { font-family: var(--mono); font-size: 13px; color: var(--accent2); }
+  .sub-item .sub-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* ── Loading ── */
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.2); border-top-color: #fff; border-radius: 50%; animation: spin .6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── New topic row ── */
+  .new-topic-inline { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .new-topic-inline input { flex: 1; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+</style>
+</head>
+<body x-data="app()" x-init="init()">
+
+<!-- ══ Sidebar ══════════════════════════════════════════════════════════════ -->
+<div id="sidebar">
+  <div id="sidebar-header">
+    <h1>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+      </svg>
+      Pulsar Client
+    </h1>
+  </div>
+
+  <div id="sidebar-tree">
+    <!-- Loading -->
+    <template x-if="loading.tenants">
+      <div style="padding:24px;text-align:center;color:var(--muted)">
+        <div class="spinner"></div>
+      </div>
+    </template>
+
+    <!-- Tenants -->
+    <template x-for="tenant in tenants" :key="tenant">
+      <div class="tree-section">
+        <div class="tree-item" :class="{active: sel.tenant===tenant && !sel.namespace}"
+             @click="selectTenant(tenant)">
+          <span class="icon">🏠</span>
+          <span class="label" x-text="tenant"></span>
+        </div>
+
+        <!-- Namespaces -->
+        <template x-if="sel.tenant===tenant">
+          <div>
+            <template x-for="ns in namespaces" :key="ns">
+              <div class="tree-section">
+                <div class="tree-item tree-indent1"
+                     :class="{active: sel.namespace===ns && !sel.topic}"
+                     @click="selectNamespace(ns)">
+                  <span class="icon">📁</span>
+                  <span class="label" x-text="ns"></span>
+                </div>
+
+                <!-- Topics -->
+                <template x-if="sel.namespace===ns">
+                  <div>
+                    <template x-for="topic in topics" :key="topic">
+                      <div class="tree-item tree-indent2"
+                           :class="{active: sel.topic===topic}"
+                           @click="selectTopic(topic)">
+                        <span class="icon">📨</span>
+                        <span class="label" x-text="topic"></span>
+                        <button class="del-btn" @click.stop="deleteTopic(topic)" title="Eliminar topic">✕</button>
+                      </div>
+                    </template>
+
+                    <!-- New topic -->
+                    <div class="new-topic-inline" style="padding:4px 10px 4px 44px;">
+                      <input type="text" x-model="newTopic" placeholder="novo topic…"
+                             @keydown.enter="createTopic()"
+                             style="font-size:12px;padding:5px 8px;">
+                      <button class="btn btn-primary" style="padding:5px 10px;font-size:12px;"
+                              @click="createTopic()" :disabled="!newTopic">+</button>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </div>
+        </template>
+      </div>
+    </template>
+
+    <template x-if="!loading.tenants && tenants.length===0">
+      <div class="empty"><p>Sem tenants disponíveis</p></div>
+    </template>
+  </div>
+</div>
+
+<!-- ══ Main ════════════════════════════════════════════════════════════════ -->
+<div id="main">
+  <div id="topbar">
+    <div class="breadcrumb">
+      <span style="color:var(--muted)" x-text="sel.tenant || 'Seleciona um tenant'"></span>
+      <template x-if="sel.namespace">
+        <><span style="color:var(--border)">›</span><span x-text="sel.namespace"></span></>
+      </template>
+      <template x-if="sel.topic">
+        <><span style="color:var(--border)">›</span><span style="color:var(--accent2)" x-text="sel.topic"></span></>
+      </template>
+    </div>
+    <button class="btn btn-secondary" style="font-size:12px;" @click="reload()">↺ Recarregar</button>
+  </div>
+
+  <div id="content">
+
+    <!-- ─ Welcome ─ -->
+    <template x-if="!sel.topic">
+      <div class="empty" style="margin-top:60px;">
+        <div class="big">📨</div>
+        <p style="font-size:16px;color:var(--text);margin-bottom:8px;">Pulsar Client</p>
+        <p>Seleciona um topic na barra lateral para começar.</p>
+      </div>
+    </template>
+
+    <!-- ─ Topic view ─ -->
+    <template x-if="sel.topic">
+      <div>
+        <!-- Tabs -->
+        <div class="tabs">
+          <button class="tab" :class="{active:tab==='stats'}" @click="tab='stats'">📊 Estatísticas</button>
+          <button class="tab" :class="{active:tab==='produce'}" @click="tab='produce'">📤 Enviar</button>
+          <button class="tab" :class="{active:tab==='subs'}" @click="tab='subs';loadSubs()">🔔 Subscrições</button>
+          <button class="tab" :class="{active:tab==='backlog'}" @click="tab='backlog';loadSubs()">📋 Backlog</button>
+        </div>
+
+        <!-- ── Stats tab ── -->
+        <template x-if="tab==='stats'">
+          <div>
+            <template x-if="loading.stats">
+              <div style="text-align:center;padding:40px"><div class="spinner"></div></div>
+            </template>
+            <template x-if="!loading.stats && stats">
+              <div>
+                <div class="stats-grid">
+                  <div class="stat-card">
+                    <div class="stat-label">Mensagens/s entrada</div>
+                    <div class="stat-value" x-text="fmt(stats.msgRateIn)"></div>
+                    <div class="stat-sub" x-text="fmtBytes(stats.msgThroughputIn) + '/s'"></div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-label">Mensagens/s saída</div>
+                    <div class="stat-value" x-text="fmt(stats.msgRateOut)"></div>
+                    <div class="stat-sub" x-text="fmtBytes(stats.msgThroughputOut) + '/s'"></div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-label">Total em backlog</div>
+                    <div class="stat-value" x-text="fmtNum(stats.msgBacklog ?? sumBacklog(stats))"></div>
+                    <div class="stat-sub">mensagens</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-label">Produtores</div>
+                    <div class="stat-value" x-text="Object.keys(stats.publishers ?? {}).length"></div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-label">Subscrições</div>
+                    <div class="stat-value" x-text="Object.keys(stats.subscriptions ?? {}).length"></div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-label">Armazenamento</div>
+                    <div class="stat-value" x-text="fmtBytes(stats.storageSize ?? 0)"></div>
+                  </div>
+                </div>
+
+                <!-- Subscriptions detail -->
+                <template x-if="stats.subscriptions && Object.keys(stats.subscriptions).length > 0">
+                  <div class="card">
+                    <div class="card-title"><span class="dot"></span>Detalhes das Subscrições</div>
+                    <div class="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Nome</th>
+                            <th>Tipo</th>
+                            <th>Backlog</th>
+                            <th>Msg/s</th>
+                            <th>Consumers</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <template x-for="[name, sub] in Object.entries(stats.subscriptions)" :key="name">
+                            <tr>
+                              <td><span class="mono" x-text="name"></span></td>
+                              <td><span class="tag tag-blue" x-text="sub.type ?? '-'"></span></td>
+                              <td><span class="mono" x-text="fmtNum(sub.msgBacklog ?? 0)"></span></td>
+                              <td x-text="fmt(sub.msgRateOut ?? 0)"></td>
+                              <td x-text="(sub.consumers ?? []).length"></td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- ── Produce tab ── -->
+        <template x-if="tab==='produce'">
+          <div class="card">
+            <div class="card-title"><span class="dot"></span>Enviar Mensagem</div>
+            <div class="form-row">
+              <div class="field">
+                <label>Message Key (opcional)</label>
+                <input type="text" x-model="produce.key" placeholder="ex: user-123">
+              </div>
+            </div>
+            <div class="field" style="margin-bottom:12px;">
+              <label>Payload</label>
+              <textarea x-model="produce.payload" placeholder='{"evento":"teste","valor":42}' rows="6"></textarea>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <button class="btn btn-primary" @click="sendMessage()" :disabled="!produce.payload || loading.produce">
+                <template x-if="loading.produce"><span class="spinner"></span></template>
+                <template x-if="!loading.produce">📤</template>
+                Enviar
+              </button>
+              <template x-if="produce.lastId">
+                <span style="font-size:12px;color:var(--success)">✓ enviado: <span class="mono" x-text="produce.lastId" style="font-size:11px;"></span></span>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── Subscriptions tab ── -->
+        <template x-if="tab==='subs'">
+          <div>
+            <div class="card">
+              <div class="card-title"><span class="dot"></span>Subscrições Actuais</div>
+              <template x-if="loading.subs">
+                <div style="text-align:center;padding:20px"><div class="spinner"></div></div>
+              </template>
+              <template x-if="!loading.subs && subscriptions.length === 0">
+                <p style="color:var(--muted);font-size:13px;">Sem subscrições neste topic.</p>
+              </template>
+              <template x-for="sub in subscriptions" :key="sub">
+                <div class="sub-item">
+                  <div>
+                    <div class="sub-name" x-text="sub"></div>
+                  </div>
+                  <button class="btn btn-danger" style="font-size:12px;padding:5px 10px;"
+                          @click="deleteSub(sub)">Eliminar</button>
+                </div>
+              </template>
+            </div>
+            <div class="card">
+              <div class="card-title"><span class="dot"></span>Nova Subscrição</div>
+              <div class="form-row">
+                <div class="field">
+                  <label>Nome da subscrição</label>
+                  <input type="text" x-model="newSub" placeholder="ex: meu-consumer"
+                         @keydown.enter="createSub()">
+                </div>
+                <button class="btn btn-primary" @click="createSub()" :disabled="!newSub || loading.newSub">
+                  <template x-if="loading.newSub"><span class="spinner"></span></template>
+                  Criar
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── Backlog tab ── -->
+        <template x-if="tab==='backlog'">
+          <div>
+            <div class="card">
+              <div class="card-title"><span class="dot"></span>Ver Mensagens em Backlog</div>
+              <div class="form-row">
+                <div class="field">
+                  <label>Subscrição</label>
+                  <select x-model="backlog.sub">
+                    <option value="">— selecionar —</option>
+                    <template x-for="s in subscriptions" :key="s">
+                      <option :value="s" x-text="s"></option>
+                    </template>
+                  </select>
+                </div>
+                <div class="field" style="max-width:120px;">
+                  <label>Quantidade</label>
+                  <input type="number" x-model.number="backlog.count" min="1" max="100">
+                </div>
+                <button class="btn btn-primary" @click="peekMessages()"
+                        :disabled="!backlog.sub || loading.backlog">
+                  <template x-if="loading.backlog"><span class="spinner"></span></template>
+                  Ver
+                </button>
+              </div>
+            </div>
+
+            <template x-if="backlog.messages.length > 0">
+              <div class="card">
+                <div class="card-title">
+                  <span class="dot"></span>
+                  <span x-text="backlog.messages.length + ' mensagem(ns)'"></span>
+                  <span style="font-size:11px;color:var(--muted);font-weight:400;">
+                    — peek (não consome)
+                  </span>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Message ID</th>
+                        <th>Key</th>
+                        <th>Publicado em</th>
+                        <th>Payload</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="(msg, i) in backlog.messages" :key="msg.messageId">
+                        <tr>
+                          <td class="muted" x-text="i+1"></td>
+                          <td><span class="mono" x-text="msg.messageId"></span></td>
+                          <td>
+                            <template x-if="msg.key">
+                              <span class="tag tag-orange" x-text="msg.key"></span>
+                            </template>
+                            <template x-if="!msg.key">
+                              <span class="muted">—</span>
+                            </template>
+                          </td>
+                          <td class="muted" x-text="fmtDate(msg.publishTime)"></td>
+                          <td>
+                            <template x-if="msg.binary">
+                              <span class="tag tag-binary">binário (base64)</span>
+                            </template>
+                            <div class="payload" x-text="msg.payload"></div>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </template>
+
+            <template x-if="!loading.backlog && backlog.messages.length === 0 && backlog.queried">
+              <div class="card empty">
+                <div class="big">📭</div>
+                <p>Sem mensagens em backlog nesta subscrição.</p>
+              </div>
+            </template>
+          </div>
+        </template>
+
+      </div>
+    </template>
+  </div>
+</div>
+
+<!-- ══ Toast ════════════════════════════════════════════════════════════════ -->
+<div x-show="toast.msg" x-transition class="toast"
+     :class="toast.type==='error' ? 'toast-error' : 'toast-success'">
+  <span x-text="toast.type==='error' ? '✕' : '✓'"></span>
+  <span x-text="toast.msg"></span>
+</div>
+
+<script>
+function app() {
+  return {
+    // State
+    tenants: [], namespaces: [], topics: [],
+    sel: { tenant: null, namespace: null, topic: null },
+    tab: 'stats',
+    stats: null,
+    subscriptions: [],
+    newTopic: '',
+    newSub: '',
+    produce: { payload: '', key: '', lastId: null },
+    backlog: { sub: '', count: 10, messages: [], queried: false },
+    toast: { msg: '', type: 'success' },
+    loading: { tenants: false, namespaces: false, topics: false, stats: false, subs: false, produce: false, backlog: false, newSub: false },
+
+    // ── Init ────────────────────────────────────────────────────────────────
+    async init() {
+      await this.loadTenants();
+    },
+
+    async reload() {
+      if (this.sel.topic) await this.selectTopic(this.sel.topic);
+      else if (this.sel.namespace) await this.selectNamespace(this.sel.namespace);
+      else if (this.sel.tenant) await this.selectTenant(this.sel.tenant);
+      else await this.loadTenants();
+    },
+
+    // ── API helper ──────────────────────────────────────────────────────────
+    async api(url, options = {}) {
+      const res = await fetch(url, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options
+      });
+      const ct = res.headers.get('content-type') ?? '';
+      const body = ct.includes('json') ? await res.json() : await res.text();
+      if (!res.ok) throw new Error(body?.error ?? body ?? res.statusText);
+      return body;
+    },
+
+    notify(msg, type = 'success') {
+      this.toast = { msg, type };
+      setTimeout(() => this.toast = { msg: '', type: 'success' }, 3500);
+    },
+
+    // ── Tenants / Namespaces / Topics ────────────────────────────────────────
+    async loadTenants() {
+      this.loading.tenants = true;
+      try { this.tenants = await this.api('/api/tenants'); }
+      catch (e) { this.notify('Erro a carregar tenants: ' + e.message, 'error'); }
+      finally { this.loading.tenants = false; }
+    },
+
+    async selectTenant(t) {
+      this.sel = { tenant: t, namespace: null, topic: null };
+      this.namespaces = []; this.topics = [];
+      this.stats = null; this.subscriptions = [];
+      this.loading.namespaces = true;
+      try { this.namespaces = await this.api(`/api/namespaces/${t}`); }
+      catch (e) { this.notify('Erro namespaces: ' + e.message, 'error'); }
+      finally { this.loading.namespaces = false; }
+    },
+
+    async selectNamespace(ns) {
+      this.sel = { ...this.sel, namespace: ns, topic: null };
+      this.topics = []; this.stats = null; this.subscriptions = [];
+      this.loading.topics = true;
+      try { this.topics = await this.api(`/api/topics/${this.sel.tenant}/${ns}`); }
+      catch (e) { this.notify('Erro topics: ' + e.message, 'error'); }
+      finally { this.loading.topics = false; }
+    },
+
+    async selectTopic(t) {
+      this.sel = { ...this.sel, topic: t };
+      this.tab = 'stats'; this.stats = null;
+      this.produce = { payload: '', key: '', lastId: null };
+      this.backlog = { sub: '', count: 10, messages: [], queried: false };
+      await this.loadStats();
+      await this.loadSubs();
+    },
+
+    async createTopic() {
+      if (!this.newTopic.trim()) return;
+      try {
+        await this.api(`/api/topics/${this.sel.tenant}/${this.sel.namespace}/${this.newTopic}`, { method: 'POST' });
+        this.notify(`Topic "${this.newTopic}" criado`);
+        this.newTopic = '';
+        await this.selectNamespace(this.sel.namespace);
+      } catch (e) { this.notify('Erro: ' + e.message, 'error'); }
+    },
+
+    async deleteTopic(t) {
+      if (!confirm(`Eliminar topic "${t}"?\nTodas as mensagens e subscrições serão apagadas.`)) return;
+      try {
+        await this.api(`/api/topics/${this.sel.tenant}/${this.sel.namespace}/${t}`, { method: 'DELETE' });
+        this.notify(`Topic "${t}" eliminado`);
+        if (this.sel.topic === t) this.sel.topic = null;
+        await this.selectNamespace(this.sel.namespace);
+      } catch (e) { this.notify('Erro: ' + e.message, 'error'); }
+    },
+
+    // ── Stats ────────────────────────────────────────────────────────────────
+    async loadStats() {
+      this.loading.stats = true; this.stats = null;
+      try {
+        this.stats = await this.api(`/api/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/stats`);
+      } catch (e) { this.notify('Erro stats: ' + e.message, 'error'); }
+      finally { this.loading.stats = false; }
+    },
+
+    // ── Subscriptions ────────────────────────────────────────────────────────
+    async loadSubs() {
+      if (!this.sel.topic) return;
+      this.loading.subs = true;
+      try {
+        this.subscriptions = await this.api(`/api/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/subscriptions`);
+      } catch (e) { this.subscriptions = []; }
+      finally { this.loading.subs = false; }
+    },
+
+    async createSub() {
+      if (!this.newSub.trim()) return;
+      this.loading.newSub = true;
+      try {
+        await this.api(`/api/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/subscriptions/${this.newSub}`, { method: 'POST' });
+        this.notify(`Subscrição "${this.newSub}" criada`);
+        this.newSub = '';
+        await this.loadSubs();
+      } catch (e) { this.notify('Erro: ' + e.message, 'error'); }
+      finally { this.loading.newSub = false; }
+    },
+
+    async deleteSub(sub) {
+      if (!confirm(`Eliminar subscrição "${sub}"?`)) return;
+      try {
+        await this.api(`/api/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/subscriptions/${sub}`, { method: 'DELETE' });
+        this.notify(`Subscrição "${sub}" eliminada`);
+        await this.loadSubs();
+      } catch (e) { this.notify('Erro: ' + e.message, 'error'); }
+    },
+
+    // ── Produce ──────────────────────────────────────────────────────────────
+    async sendMessage() {
+      if (!this.produce.payload.trim()) return;
+      this.loading.produce = true; this.produce.lastId = null;
+      try {
+        const res = await this.api(`/api/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/produce`, {
+          method: 'POST',
+          body: JSON.stringify({ payload: this.produce.payload, key: this.produce.key })
+        });
+        this.produce.lastId = res.messageId;
+        this.notify('Mensagem enviada com sucesso');
+        await this.loadStats();
+      } catch (e) { this.notify('Erro ao enviar: ' + e.message, 'error'); }
+      finally { this.loading.produce = false; }
+    },
+
+    // ── Backlog ──────────────────────────────────────────────────────────────
+    async peekMessages() {
+      if (!this.backlog.sub) return;
+      this.loading.backlog = true; this.backlog.messages = []; this.backlog.queried = false;
+      try {
+        this.backlog.messages = await this.api(
+          `/api/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/peek/${this.backlog.sub}?count=${this.backlog.count}`
+        );
+        this.backlog.queried = true;
+      } catch (e) { this.notify('Erro peek: ' + e.message, 'error'); }
+      finally { this.loading.backlog = false; }
+    },
+
+    // ── Formatters ───────────────────────────────────────────────────────────
+    fmt(n) {
+      if (n == null) return '—';
+      return parseFloat(n).toFixed(2);
+    },
+    fmtNum(n) {
+      if (n == null) return '—';
+      return parseInt(n).toLocaleString('pt-PT');
+    },
+    fmtBytes(b) {
+      if (!b) return '0 B';
+      const k = 1024, sizes = ['B','KB','MB','GB','TB'];
+      const i = Math.floor(Math.log(b) / Math.log(k));
+      return (b / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i];
+    },
+    fmtDate(ts) {
+      if (!ts) return '—';
+      return new Date(ts).toLocaleString('pt-PT', { dateStyle:'short', timeStyle:'medium' });
+    },
+    sumBacklog(stats) {
+      if (!stats?.subscriptions) return 0;
+      return Object.values(stats.subscriptions).reduce((s, sub) => s + (sub.msgBacklog ?? 0), 0);
+    }
+  };
+}
+</script>
+</body>
+</html>
