@@ -1,0 +1,16 @@
+# NodePort para acesso externo ao MongoDB (Mac, IntelliJ, dev local)
+# Ligação externa: mongodb://peewee69:PASS@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-external
+  namespace: mongodb
+spec:
+  type: NodePort
+  ports:
+    - name: mongodb
+      port: 27017
+      targetPort: 27017
+      nodePort: 32017
+  selector:
+    app: catacumbas69
