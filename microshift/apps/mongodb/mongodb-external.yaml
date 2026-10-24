@@ -13,4 +13,4 @@ spec:
       targetPort: 27017
       nodePort: 32017
   selector:
-    app: catacumbas69
+    app: catacumbas69-svc
