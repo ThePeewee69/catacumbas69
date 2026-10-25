@@ -40,8 +40,6 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
-            - name: PULSAR_PREFIX_advertisedListeners
-              value: "internal:pulsar://$(MY_POD_IP):6650,external:pulsar://192.168.86.35:31650"
           volumeMounts:
             - name: pulsar-logs
               mountPath: /pulsar/logs
@@ -93,26 +91,6 @@ spec:
     - name: admin
       port: 8080
       targetPort: 8080
-  selector:
-    app: pulsar
----
-# NodePort para acesso externo (Mac, dev local)
-apiVersion: v1
-kind: Service
-metadata:
-  name: pulsar-external
-  namespace: pulsar
-spec:
-  type: NodePort
-  ports:
-    - name: broker
-      port: 6650
-      targetPort: 6650
-      nodePort: 31650
-    - name: admin
-      port: 8080
-      targetPort: 8080
-      nodePort: 31080
   selector:
     app: pulsar
 ---
