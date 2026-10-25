@@ -19,15 +19,33 @@ spec:
         runAsUser: 1000150000
         runAsGroup: 1000150000
         fsGroup: 1000150000
-      containers:
-        - name: pulsar
+      initContainers:
+        - name: conf-init
           image: docker.io/apachepulsar/pulsar:4.2.2
           command: ["/bin/sh", "-c"]
           args:
             - |
-              # Injeta advertisedListeners antes de arrancar (PULSAR_PREFIX_ não adiciona props novas em standalone)
-              echo "advertisedListeners=internal:pulsar://${MY_POD_IP}:6650,external:pulsar://192.168.86.35:31650" >> conf/standalone.conf
-              exec bin/pulsar standalone --advertised-address ${MY_POD_IP} --no-functions-worker
+              # Copia todos os confs para o emptyDir (podemos escrever aqui, não no layer da imagem)
+              cp -r /pulsar/conf/. /conf/
+              # Injeta advertisedListeners: interno (pod IP) + externo (NodePort do NUC)
+              printf '\nadvertisedListeners=internal:pulsar://%s:6650,external:pulsar://192.168.86.35:31650\n' "${MY_POD_IP}" >> /conf/standalone.conf
+          env:
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: pulsar-conf
+              mountPath: /conf
+      containers:
+        - name: pulsar
+          image: docker.io/apachepulsar/pulsar:4.2.2
+          command: ["bin/pulsar"]
+          args:
+            - standalone
+            - --advertised-address
+            - $(MY_POD_IP)
+            - --no-functions-worker
           ports:
             - containerPort: 6650
               name: broker
@@ -41,6 +59,8 @@ spec:
                 fieldRef:
                   fieldPath: status.podIP
           volumeMounts:
+            - name: pulsar-conf
+              mountPath: /pulsar/conf
             - name: pulsar-logs
               mountPath: /pulsar/logs
             - name: pulsar-data
@@ -59,6 +79,8 @@ spec:
               memory: 3Gi
               cpu: 2
       volumes:
+        - name: pulsar-conf
+          emptyDir: {}
         - name: pulsar-logs
           emptyDir: {}
         - name: pulsar-data
