@@ -1,8 +1,8 @@
 package com.catacumbas69.pulsarclient.config;
 
 import org.apache.pulsar.client.admin.PulsarAdmin;
+import org.apache.pulsar.client.api.ClientBuilder;
 import org.apache.pulsar.client.api.PulsarClient;
-import org.apache.pulsar.client.api.PulsarClientBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -36,7 +36,7 @@ public class PulsarConfig {
 
     @Bean(destroyMethod = "close")
     public PulsarClient pulsarClient() throws Exception {
-        PulsarClientBuilder builder = PulsarClient.builder()
+        ClientBuilder builder = PulsarClient.builder()
                 .serviceUrl(brokerUrl)
                 .operationTimeout(30, TimeUnit.SECONDS)
                 .connectionTimeout(30, TimeUnit.SECONDS);
