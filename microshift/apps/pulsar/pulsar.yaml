@@ -223,7 +223,7 @@ data:
       "auth_mode": "none",
       "cluster_name": "standalone",
       "tenant": "public",
-      "oauth_client_id": "",
+      "oauth2_client_id": "",
       "server_config": {
         "port": "6454",
         "pulsar_url": "http://pulsar.pulsar.svc.cluster.local:8080",
