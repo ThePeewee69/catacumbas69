@@ -2,6 +2,7 @@ package com.catacumbas69.pulsarclient.config;
 
 import org.apache.pulsar.client.admin.PulsarAdmin;
 import org.apache.pulsar.client.api.PulsarClient;
+import org.apache.pulsar.client.api.PulsarClientBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,6 +18,12 @@ public class PulsarConfig {
     @Value("${pulsar.broker-url}")
     private String brokerUrl;
 
+    /** Listener a usar no lookup do broker.
+     *  Vazio (padrão) → acesso interno no cluster (pod IP routable).
+     *  "external"     → acesso externo via NodePort 31650 (Mac/IntelliJ). */
+    @Value("${pulsar.listener-name:}")
+    private String listenerName;
+
     @Bean
     public PulsarAdmin pulsarAdmin() throws Exception {
         return PulsarAdmin.builder()
@@ -29,10 +36,15 @@ public class PulsarConfig {
 
     @Bean(destroyMethod = "close")
     public PulsarClient pulsarClient() throws Exception {
-        return PulsarClient.builder()
+        PulsarClientBuilder builder = PulsarClient.builder()
                 .serviceUrl(brokerUrl)
                 .operationTimeout(30, TimeUnit.SECONDS)
-                .connectionTimeout(30, TimeUnit.SECONDS)
-                .build();
+                .connectionTimeout(30, TimeUnit.SECONDS);
+
+        if (listenerName != null && !listenerName.isBlank()) {
+            builder.listenerName(listenerName);
+        }
+
+        return builder.build();
     }
 }
