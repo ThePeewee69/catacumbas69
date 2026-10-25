@@ -40,8 +40,6 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
-            # Expõe dois listeners: interno (pod IP) e externo (NodePort do NUC)
-            # Clientes externos (Mac/IntelliJ) usam listenerName=external
             - name: PULSAR_PREFIX_advertisedListeners
               value: "internal:pulsar://$(MY_POD_IP):6650,external:pulsar://192.168.86.35:31650"
           volumeMounts:
