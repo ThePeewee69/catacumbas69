@@ -115,6 +115,9 @@ spec:
     - name: admin
       port: 8080
       targetPort: 8080
+    - name: bookie
+      port: 3181
+      targetPort: 3181
   selector:
     app: pulsar
 ---
