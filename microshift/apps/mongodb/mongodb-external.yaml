@@ -1,4 +1,5 @@
 # NodePort para acesso externo ao MongoDB (Mac, IntelliJ, dev local)
+# Aponta sempre ao pod 0 (primário habitual) para evitar "NotWritablePrimary"
 # Ligação externa: mongodb://peewee69:PASS@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true
 apiVersion: v1
 kind: Service
@@ -13,4 +14,4 @@ spec:
       targetPort: 27017
       nodePort: 32017
   selector:
-    app: catacumbas69-svc
+    statefulset.kubernetes.io/pod-name: catacumbas69-0
