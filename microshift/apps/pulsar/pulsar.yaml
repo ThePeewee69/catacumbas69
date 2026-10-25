@@ -22,12 +22,12 @@ spec:
       containers:
         - name: pulsar
           image: docker.io/apachepulsar/pulsar:4.2.2
-          command: ["bin/pulsar"]
+          command: ["/bin/sh", "-c"]
           args:
-            - standalone
-            - --advertised-address
-            - $(MY_POD_IP)
-            - --no-functions-worker
+            - |
+              # Injeta advertisedListeners antes de arrancar (PULSAR_PREFIX_ não adiciona props novas em standalone)
+              echo "advertisedListeners=internal:pulsar://${MY_POD_IP}:6650,external:pulsar://192.168.86.35:31650" >> conf/standalone.conf
+              exec bin/pulsar standalone --advertised-address ${MY_POD_IP} --no-functions-worker
           ports:
             - containerPort: 6650
               name: broker
@@ -91,6 +91,26 @@ spec:
     - name: admin
       port: 8080
       targetPort: 8080
+  selector:
+    app: pulsar
+---
+# NodePort para acesso externo (Mac, dev local)
+apiVersion: v1
+kind: Service
+metadata:
+  name: pulsar-external
+  namespace: pulsar
+spec:
+  type: NodePort
+  ports:
+    - name: broker
+      port: 6650
+      targetPort: 6650
+      nodePort: 31650
+    - name: admin
+      port: 8080
+      targetPort: 8080
+      nodePort: 31080
   selector:
     app: pulsar
 ---
