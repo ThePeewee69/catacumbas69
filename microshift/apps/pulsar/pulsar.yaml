@@ -29,8 +29,12 @@ spec:
               cp -r /pulsar/conf/. /conf/
               # Injeta advertisedListeners: interno (pod IP) + externo (NodePort do NUC)
               printf '\nadvertisedListeners=internal:pulsar://%s:6650,external:pulsar://192.168.86.35:31650\n' "${MY_POD_IP}" >> /conf/standalone.conf
-              # Bookie ID estável — evita problemas de ledger após restart do pod (IP muda)
-              printf '\nbookkeeper_advertisedAddress=pulsar.pulsar.svc.cluster.local\n' >> /conf/standalone.conf
+              # Bookie ID estável: usar "localhost" em vez de pod IP (muda em cada restart)
+              # useHostNameAsBookieID=true → ZK guarda o hostname, não o IP
+              # bookiePort=3181 → porta fixa em vez de aleatória
+              printf '\nbookkeeper_advertisedAddress=localhost\n' >> /conf/standalone.conf
+              printf '\nbookkeeper_useHostNameAsBookieID=true\n' >> /conf/standalone.conf
+              printf '\nbookkeeper_bookiePort=3181\n' >> /conf/standalone.conf
           env:
             - name: MY_POD_IP
               valueFrom:
@@ -53,6 +57,8 @@ spec:
               name: broker
             - containerPort: 8080
               name: admin
+            - containerPort: 3181
+              name: bookie
           env:
             - name: PULSAR_MEM
               value: "-Xms512m -Xmx1g -XX:MaxDirectMemorySize=1g"
