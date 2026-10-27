@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pulsar
+  namespace: pulsar
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: pulsar
+  template:
+    metadata:
+      labels:
+        app: pulsar
+    spec:
+      securityContext:
+        runAsUser: 1000150000
+        runAsGroup: 1000150000
+        fsGroup: 1000150000
+      initContainers:
+        - name: conf-init
+          image: docker.io/apachepulsar/pulsar:4.2.2
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              # Copia todos os confs para o emptyDir
+              cp -r /pulsar/conf/. /conf/
+
+              # Injeta advertisedListeners: interno (pod IP) + externo (NodePort do NUC)
+              printf '\nadvertisedListeners=internal:pulsar://%s:6650,external:pulsar://192.168.86.35:31650\n' "${MY_POD_IP}" >> /conf/standalone.conf
+              printf '\nadvertisedAddress=localhost\n' >> /conf/standalone.conf
+              printf '\nmetadataStoreBackedBookkeeperPort=3181\n' >> /conf/standalone.conf
+
+              # Tenta fixar endereço estável para o bookie via bookkeeper.conf
+              printf '\nadvertisedAddress=localhost\nbookiePort=3181\n' >> /conf/bookkeeper.conf
+
+              # Limpa dados ao reiniciar (BKCluster regista bookie com IP do pod;
+              # ao reiniciar o IP muda e os ledgers antigos ficam inacessíveis).
+              # NOTA: pulsar-data TEM de estar montado aqui para o rm -rf funcionar!
+              PULSAR_DATA=/pulsar/data
+              if [ -d "${PULSAR_DATA}/metadata" ]; then
+                echo "[init] Restart detectado — a limpar bookkeeper e metadata..."
+                rm -rf "${PULSAR_DATA}/bookkeeper" "${PULSAR_DATA}/metadata"
+                echo "[init] Feito — broker arranca com estado fresco."
+              else
+                echo "[init] Instalação nova — sem dados para limpar."
+              fi
+          env:
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: pulsar-conf
+              mountPath: /conf
+            - name: pulsar-data
+              mountPath: /pulsar/data
+      containers:
+        - name: pulsar
+          image: docker.io/apachepulsar/pulsar:4.2.2
+          command: ["bin/pulsar"]
+          args:
+            - standalone
+            - --no-functions-worker
+          ports:
+            - containerPort: 6650
+              name: broker
+            - containerPort: 8080
+              name: admin
+            - containerPort: 3181
+              name: bookie
+          env:
+            - name: PULSAR_MEM
+              value: "-Xms512m -Xmx1g -XX:MaxDirectMemorySize=1g"
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: pulsar-conf
+              mountPath: /pulsar/conf
+            - name: pulsar-logs
+              mountPath: /pulsar/logs
+            - name: pulsar-data
+              mountPath: /pulsar/data
+          readinessProbe:
+            tcpSocket:
+              port: 6650
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 10
+          resources:
+            requests:
+              memory: 1Gi
+              cpu: 500m
+            limits:
+              memory: 3Gi
+              cpu: 2
+      volumes:
+        - name: pulsar-conf
+          emptyDir: {}
+        - name: pulsar-logs
+          emptyDir: {}
+        - name: pulsar-data
+          persistentVolumeClaim:
+            claimName: pulsar-data-pvc

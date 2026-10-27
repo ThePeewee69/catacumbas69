@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pulsar-admin-console
+  namespace: pulsar
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pulsar-admin-console
+  template:
+    metadata:
+      labels:
+        app: pulsar-admin-console
+    spec:
+      containers:
+        - name: pulsar-admin-console
+          image: docker.io/datastax/pulsar-admin-console:2.2.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: web
+              containerPort: 6454
+          volumeMounts:
+            - name: config
+              mountPath: /home/appuser/config/default.json
+              subPath: default.json
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: pulsar-admin-console-config

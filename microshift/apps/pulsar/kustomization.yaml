@@ -1,4 +1,18 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - pulsar.yaml
+  # Broker
+  - broker-deployment.yaml
+  - broker-pvc.yaml
+  - broker-svc.yaml
+  - broker-svc-nodeport.yaml
+  - broker-route.yaml
+  # Pulsar Manager
+  - manager-deployment.yaml
+  - manager-svc.yaml
+  - manager-route.yaml
+  # Admin Console
+  - console-configmap.yaml
+  - console-deployment.yaml
+  - console-svc.yaml
+  - console-route.yaml

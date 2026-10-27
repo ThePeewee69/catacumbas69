@@ -1,0 +1,12 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: pulsar-admin-console
+  namespace: pulsar
+spec:
+  host: pulsar-console.catacumbas69.com
+  to:
+    kind: Service
+    name: pulsar-admin-console
+  port:
+    targetPort: http

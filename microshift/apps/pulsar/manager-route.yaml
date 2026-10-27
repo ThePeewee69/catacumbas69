@@ -1,0 +1,13 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: pulsar-manager
+  namespace: pulsar
+spec:
+  host: pulsar-manager.catacumbas69.com
+  to:
+    kind: Service
+    name: pulsar-manager
+    weight: 100
+  port:
+    targetPort: http
