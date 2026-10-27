@@ -32,28 +32,19 @@ spec:
               printf '\nadvertisedAddress=localhost\n' >> /conf/standalone.conf
               printf '\nmetadataStoreBackedBookkeeperPort=3181\n' >> /conf/standalone.conf
 
-              # Limpa registos stale do bookie para evitar "Not enough non-faulty bookies" em restarts.
-              # O BKCluster usa o IP do pod + porta aleatória: numa nova instância o endereço muda
-              # e a entrada antiga em /ledgers/available/ bloqueia o arranque.
-              # Apagar /ledgers/available antes de iniciar força re-registo limpo.
-              METADATA_DIR=/pulsar/data/metadata
-              if [ -d "${METADATA_DIR}" ]; then
-                echo "Limpando registos stale do bookie em ${METADATA_DIR}..."
-                bin/pulsar metadata-shell \
-                  --metadata-store rocksdb://${METADATA_DIR} \
-                  --configuration-metadata-store rocksdb://${METADATA_DIR} \
-                  -e "ls /ledgers/available" 2>/dev/null \
-                  | grep -E "^[0-9]+\." \
-                  | while IFS= read -r entry; do
-                      echo "  Removendo: /ledgers/available/${entry}"
-                      bin/pulsar metadata-shell \
-                        --metadata-store rocksdb://${METADATA_DIR} \
-                        --configuration-metadata-store rocksdb://${METADATA_DIR} \
-                        -e "delete /ledgers/available/${entry}" 2>/dev/null || true
-                    done
-                echo "Limpeza concluída (ou sem entradas stale)."
+              # Ao reiniciar, o pod tem novo IP e o BKCluster regista o bookie num novo endereço.
+              # Ledgers abertos na sessão anterior ficam com ensemble a apontar para o IP antigo
+              # (e.g. "Not enough non-faulty bookies - ledger=N - Failed to add entry").
+              # Com 1 único bookie não há recovery possível — limpamos bookkeeper + metadata
+              # para garantir arranque limpo (comportamento equivalente a PVC wipe manual).
+              # Num ambiente de dev isso é aceitável; o broker recria os topics automaticamente.
+              PULSAR_DATA=/pulsar/data
+              if [ -d "${PULSAR_DATA}/metadata" ]; then
+                echo "[init] Restart detectado — a limpar bookkeeper e metadata (evita conflito de bookie)..."
+                rm -rf "${PULSAR_DATA}/bookkeeper" "${PULSAR_DATA}/metadata"
+                echo "[init] Feito — broker irá arrancar com estado fresco."
               else
-                echo "Metadata dir não existe ainda — instalação nova, sem limpeza necessária."
+                echo "[init] Instalação nova — sem dados para limpar."
               fi
           env:
             - name: MY_POD_IP
