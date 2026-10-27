@@ -29,12 +29,12 @@ spec:
               cp -r /pulsar/conf/. /conf/
               # Injeta advertisedListeners: interno (pod IP) + externo (NodePort do NUC)
               printf '\nadvertisedListeners=internal:pulsar://%s:6650,external:pulsar://192.168.86.35:31650\n' "${MY_POD_IP}" >> /conf/standalone.conf
-              # Bookie ID estável: usar "localhost" em vez de pod IP (muda em cada restart)
-              # useHostNameAsBookieID=true → ZK guarda o hostname, não o IP
-              # bookiePort=3181 → porta fixa em vez de aleatória
-              printf '\nbookkeeper_advertisedAddress=localhost\n' >> /conf/standalone.conf
-              printf '\nbookkeeper_useHostNameAsBookieID=true\n' >> /conf/standalone.conf
-              printf '\nbookkeeper_bookiePort=3181\n' >> /conf/standalone.conf
+              # advertisedAddress=localhost → broker e BKCluster herdam → bookie estável em ZK
+              # (o CLI --advertised-address seria sobreposto a isto, por isso não o usamos)
+              printf '\nadvertisedAddress=localhost\n' >> /conf/standalone.conf
+              # metadataStoreBackedBookkeeperPort → porta fixa para o BKCluster embebido do Pulsar 4.x
+              # (bookkeeper_bookiePort é para o cliente BK, não para o BKCluster server)
+              printf '\nmetadataStoreBackedBookkeeperPort=3181\n' >> /conf/standalone.conf
           env:
             - name: MY_POD_IP
               valueFrom:
@@ -49,8 +49,6 @@ spec:
           command: ["bin/pulsar"]
           args:
             - standalone
-            - --advertised-address
-            - $(MY_POD_IP)
             - --no-functions-worker
           ports:
             - containerPort: 6650
