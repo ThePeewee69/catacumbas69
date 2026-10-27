@@ -12,7 +12,14 @@ resources:
   - manager-svc.yaml
   - manager-route.yaml
   # Admin Console
-  - console-configmap.yaml
   - console-deployment.yaml
   - console-svc.yaml
   - console-route.yaml
+
+configMapGenerator:
+  - name: pulsar-admin-console-config
+    namespace: pulsar
+    options:
+      disableNameSuffixHash: true   # evita sufixo aleatório no nome
+    files:
+      - default.json=console-config.json
