@@ -17,9 +17,15 @@ resources:
   - console-route.yaml
 
 configMapGenerator:
+  - name: pulsar-init-script
+    namespace: pulsar
+    options:
+      disableNameSuffixHash: true
+    files:
+      - init.sh=broker-init-script.sh
   - name: pulsar-admin-console-config
     namespace: pulsar
     options:
-      disableNameSuffixHash: true   # evita sufixo aleatório no nome
+      disableNameSuffixHash: true
     files:
       - default.json=console-config.json
