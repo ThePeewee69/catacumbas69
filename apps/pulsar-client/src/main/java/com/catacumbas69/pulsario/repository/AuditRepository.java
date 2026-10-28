@@ -1,6 +1,6 @@
-package com.catacumbas69.pulsarclient.repository;
+package com.catacumbas69.pulsario.repository;
 
-import com.catacumbas69.pulsarclient.model.AuditEntry;
+import com.catacumbas69.pulsario.model.AuditEntry;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;

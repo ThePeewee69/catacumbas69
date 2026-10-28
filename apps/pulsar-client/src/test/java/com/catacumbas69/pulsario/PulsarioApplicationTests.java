@@ -1,8 +1,8 @@
-package com.catacumbas69.pulsarclient;
+package com.catacumbas69.pulsario;
 
 import org.junit.jupiter.api.Test;
 
-class PulsarClientApplicationTests {
+class PulsarioApplicationTests {
 
     @Test
     void contextLoads() {

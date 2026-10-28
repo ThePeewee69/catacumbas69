@@ -1,7 +1,7 @@
-package com.catacumbas69.pulsarclient.service;
+package com.catacumbas69.pulsario.service;
 
-import com.catacumbas69.pulsarclient.model.AuditEntry;
-import com.catacumbas69.pulsarclient.repository.AuditRepository;
+import com.catacumbas69.pulsario.model.AuditEntry;
+import com.catacumbas69.pulsario.repository.AuditRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;

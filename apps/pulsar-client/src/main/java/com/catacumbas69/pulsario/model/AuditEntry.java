@@ -1,4 +1,4 @@
-package com.catacumbas69.pulsarclient.model;
+package com.catacumbas69.pulsario.model;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;

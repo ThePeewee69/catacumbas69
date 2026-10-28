@@ -12,11 +12,11 @@
     </parent>
 
     <groupId>com.catacumbas69</groupId>
-    <artifactId>pulsar-client</artifactId>
+    <artifactId>pulsario</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
-    <name>pulsar-client</name>
-    <description>Pulsar Management Web Client</description>
+    <name>pulsario</name>
+    <description>Pulsário — Pulsar Management Web Client</description>
 
     <properties>
         <java.version>21</java.version>

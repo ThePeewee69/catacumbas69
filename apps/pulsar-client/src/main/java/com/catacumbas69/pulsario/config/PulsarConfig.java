@@ -1,4 +1,4 @@
-package com.catacumbas69.pulsarclient.config;
+package com.catacumbas69.pulsario.config;
 
 import org.apache.pulsar.client.admin.PulsarAdmin;
 import org.apache.pulsar.client.api.ClientBuilder;

@@ -1,9 +1,9 @@
-package com.catacumbas69.pulsarclient.controller;
+package com.catacumbas69.pulsario.controller;
 
-import com.catacumbas69.pulsarclient.dto.MessageDTO;
-import com.catacumbas69.pulsarclient.dto.ProduceRequest;
-import com.catacumbas69.pulsarclient.service.AuditService;
-import com.catacumbas69.pulsarclient.service.PulsarAdminService;
+import com.catacumbas69.pulsario.dto.MessageDTO;
+import com.catacumbas69.pulsario.dto.ProduceRequest;
+import com.catacumbas69.pulsario.service.AuditService;
+import com.catacumbas69.pulsario.service.PulsarAdminService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.apache.pulsar.common.policies.data.TopicStats;
 import org.springframework.beans.factory.annotation.Autowired;

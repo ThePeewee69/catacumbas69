@@ -1,4 +1,4 @@
-package com.catacumbas69.pulsarclient.dto;
+package com.catacumbas69.pulsario.dto;
 
 import java.util.Map;
 

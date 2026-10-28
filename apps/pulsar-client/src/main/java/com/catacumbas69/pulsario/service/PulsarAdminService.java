@@ -1,6 +1,6 @@
-package com.catacumbas69.pulsarclient.service;
+package com.catacumbas69.pulsario.service;
 
-import com.catacumbas69.pulsarclient.dto.MessageDTO;
+import com.catacumbas69.pulsario.dto.MessageDTO;
 import org.apache.pulsar.client.admin.PulsarAdmin;
 import org.apache.pulsar.client.api.*;
 import org.apache.pulsar.common.policies.data.TopicStats;

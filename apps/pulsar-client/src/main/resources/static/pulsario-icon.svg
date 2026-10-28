@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bgGrad" cx="40%" cy="35%" r="75%">
+      <stop offset="0%" stop-color="#1c1040"/>
+      <stop offset="100%" stop-color="#06060e"/>
+    </radialGradient>
+
+    <!-- Glow filter for the pulse line -->
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Stronger glow for the peak dot -->
+    <filter id="glowStrong" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Pulse line gradient: fades in/out at edges -->
+    <linearGradient id="pulseGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#0033bb" stop-opacity="0.0"/>
+      <stop offset="18%"  stop-color="#0077ff" stop-opacity="0.7"/>
+      <stop offset="42%"  stop-color="#00e5ff" stop-opacity="1.0"/>
+      <stop offset="58%"  stop-color="#00e5ff" stop-opacity="1.0"/>
+      <stop offset="82%"  stop-color="#0077ff" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#0033bb" stop-opacity="0.0"/>
+    </linearGradient>
+
+    <!-- Subtle star / ring clip -->
+    <clipPath id="iconClip">
+      <rect width="512" height="512" rx="100"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect width="512" height="512" rx="100" fill="url(#bgGrad)"/>
+
+  <!-- Subtle pulsar rings (concentric, very faint) -->
+  <g clip-path="url(#iconClip)" opacity="0.07">
+    <circle cx="256" cy="256" r="200" fill="none" stroke="#aaccff" stroke-width="1"/>
+    <circle cx="256" cy="256" r="155" fill="none" stroke="#aaccff" stroke-width="1"/>
+    <circle cx="256" cy="256" r="110" fill="none" stroke="#aaccff" stroke-width="1"/>
+    <circle cx="256" cy="256" r="65"  fill="none" stroke="#aaccff" stroke-width="1"/>
+  </g>
+
+  <!--
+    EKG / heartbeat pulse spanning the icon horizontally.
+    Path: flat in → ISO segment → spike up → spike down → return flat → flat out
+    Key x coords:  56 → 152 → 182 → 208 → 232 → 282 → 304 → 330 → 456
+    y=256 is the baseline (centre).
+    Peak at y=108, trough at y=390.
+  -->
+  <path
+    d="M 56,256
+       L 152,256
+       L 182,256
+       L 208,108
+       L 232,390
+       L 282,390
+       L 304,256
+       L 330,256
+       L 456,256"
+    stroke="url(#pulseGrad)"
+    stroke-width="15"
+    fill="none"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    filter="url(#glow)"/>
+
+  <!-- Glowing dot at the spike peak -->
+  <circle cx="208" cy="108" r="9" fill="#00e5ff" filter="url(#glowStrong)"/>
+
+  <!-- "P" wordmark — bottom-right, subtle -->
+  <text
+    x="352" y="450"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="96"
+    font-weight="bold"
+    fill="#ffffff"
+    opacity="0.10"
+    letter-spacing="-2">P</text>
+</svg>
