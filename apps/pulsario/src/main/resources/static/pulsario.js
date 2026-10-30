@@ -22,6 +22,23 @@ function app() {
     },
     modal: { type: null, message: null, editPayload: '', editKey: '', saving: false },
 
+    // ── Passário / Bridges ─────────────────────────────────────────────────
+    passario: {
+      url: localStorage.getItem('passarioUrl') || 'http://localhost:8082',
+    },
+    bridgesView: false,
+    bridges: {
+      list: [],
+      status: {},
+      loading: false,
+      formSaving: false,
+      form: null,   // null=closed; object=creating/editing
+      topics: [],          // all existing topics, full names (persistent://tenant/ns/topic)
+      topicsLoading: false,
+      srcFilter: '',
+      dstFilter: '',
+    },
+
     // ── Init ───────────────────────────────────────────────────────────────
     async init() {
       await this.loadTenants();
@@ -37,6 +54,7 @@ function app() {
     // ── Settings ───────────────────────────────────────────────────────────
     saveSettings() {
       localStorage.setItem('pulsarUrl', this.settings.pulsarUrl);
+      localStorage.setItem('passarioUrl', this.passario.url);
       this.settings.open = false;
       this.notify('Settings saved');
     },
@@ -45,15 +63,9 @@ function app() {
       this.settings.healthState = 'checking';
       this.settings.healthMsg = '';
       try {
-        const r = await fetch(this.settings.pulsarUrl + '/admin/v2/clusters');
-        if (r.ok) {
-          const clusters = await r.json();
-          this.settings.healthState = 'ok';
-          this.settings.healthMsg = 'clusters: ' + clusters.join(', ');
-        } else {
-          this.settings.healthState = 'error';
-          this.settings.healthMsg = 'HTTP ' + r.status;
-        }
+        const tenants = await this.api('/api/tenants');
+        this.settings.healthState = 'ok';
+        this.settings.healthMsg = tenants.length + ' tenant(s): ' + tenants.slice(0, 3).join(', ') + (tenants.length > 3 ? '…' : '');
       } catch (e) {
         this.settings.healthState = 'error';
         this.settings.healthMsg = e.message;
@@ -157,6 +169,7 @@ function app() {
     },
 
     async selectTopic(t) {
+      if (this.bridgesView) this.closeBridges();   // leaving the Bridges panel
       this.sel = { ...this.sel, topic: t };
       this.tab = 'stats'; this.stats = null;
       this.produce = { payload: '', key: '', lastId: null };
@@ -252,6 +265,175 @@ function app() {
         this.backlog.queried = true;
       } catch (e) { this.notify('Peek error: ' + e.message, 'error'); }
       finally { this.loading.backlog = false; }
+    },
+
+    // ── Bridges ────────────────────────────────────────────────────────────
+    openBridges() {
+      this.bridgesView = true;
+      this.loadBridges();
+      this.loadBridgeStatus();
+    },
+
+    closeBridges() {
+      this.bridgesView = false;
+      this.bridges.form = null;
+    },
+
+    async loadBridges() {
+      this.bridges.loading = true;
+      try {
+        this.bridges.list = await this.bridgesApi('/api/bridges');
+      } catch (e) {
+        this.notify('Passário: ' + e.message, 'error');
+      } finally {
+        this.bridges.loading = false;
+      }
+    },
+
+    async loadBridgeStatus() {
+      try {
+        const s = await this.bridgesApi('/api/bridges/status');
+        const map = {};
+        (s.workers || []).forEach(w => { map[w.bridgeId] = w; });
+        this.bridges.status = map;
+      } catch { /* ignore — Passário may not be running */ }
+    },
+
+    async toggleBridge(bridge) {
+      const action = bridge.enabled ? 'disable' : 'enable';
+      try {
+        await this.bridgesApi(`/api/bridges/${bridge.id}/${action}`, { method: 'POST' });
+        await this.loadBridges();
+        await this.loadBridgeStatus();
+        this.notify(`Bridge "${bridge.name}" ${bridge.enabled ? 'disabled' : 'enabled'}`);
+      } catch (e) {
+        this.notify('Passário: ' + e.message, 'error');
+      }
+    },
+
+    async deleteBridge(id) {
+      const bridge = this.bridges.list.find(b => b.id === id);
+      if (!confirm(`Delete bridge "${bridge?.name ?? id}"?\nThis will stop the relay immediately.`)) return;
+      try {
+        await this.bridgesApi(`/api/bridges/${id}`, { method: 'DELETE' });
+        this.notify('Bridge deleted');
+        await this.loadBridges();
+        await this.loadBridgeStatus();
+      } catch (e) {
+        this.notify('Passário: ' + e.message, 'error');
+      }
+    },
+
+    openNewBridge() {
+      this.bridges.form = {
+        id: null, name: '', description: '', enabled: true,
+        source: { topic: '', subscription: 'passario-bridge', subscriptionType: 'Shared' },
+        destinations: [],
+        preserveKey: true, preserveProperties: true
+      };
+      this.bridges.srcFilter = ''; this.bridges.dstFilter = '';
+      this.loadAllTopics();
+    },
+
+    openEditBridge(bridge) {
+      const f = JSON.parse(JSON.stringify(bridge));
+      f.destinations = this.bridgeDestTopics(f).map(topic => ({ topic }));
+      delete f.destination;
+      this.bridges.form = f;
+      this.bridges.srcFilter = ''; this.bridges.dstFilter = '';
+      this.loadAllTopics();
+    },
+
+    // Destination topics of a bridge (supports legacy single `destination`).
+    bridgeDestTopics(b) {
+      if (b?.destinations?.length) return b.destinations.map(d => d.topic).filter(Boolean);
+      return b?.destination?.topic ? [b.destination.topic] : [];
+    },
+
+    isDestSelected(t) {
+      return this.bridges.form?.destinations.some(d => d.topic === t);
+    },
+
+    toggleDestination(t) {
+      const ds = this.bridges.form.destinations;
+      const i = ds.findIndex(d => d.topic === t);
+      if (i >= 0) ds.splice(i, 1); else ds.push({ topic: t });
+    },
+
+    bridgeFormValid() {
+      const f = this.bridges.form;
+      return f && f.name && f.source.topic && f.source.subscription && f.destinations.length > 0;
+    },
+
+    // Walks tenants → namespaces → topics through Pulsário's own API and
+    // builds a flat list of full topic names for the bridge pickers.
+    async loadAllTopics() {
+      this.bridges.topicsLoading = true;
+      try {
+        const tenants = await this.api('/api/tenants');
+        const perNs = await Promise.all(tenants.map(async t => {
+          const nss = await this.api(`/api/namespaces/${t}`).catch(() => []);
+          return Promise.all(nss.map(async nsRaw => {
+            const ns = nsRaw.includes('/') ? nsRaw.split('/').pop() : nsRaw;
+            const topics = await this.api(`/api/topics/${t}/${ns}`).catch(() => []);
+            return topics.map(tp => tp.includes('://') ? tp : `persistent://${t}/${ns}/${tp}`);
+          }));
+        }));
+        this.bridges.topics = perNs.flat(2)
+          .filter(n => !n.split('/').pop().startsWith('__'))   // hide system topics
+          .sort();
+      } catch (e) {
+        this.notify('Error loading topics: ' + e.message, 'error');
+      } finally {
+        this.bridges.topicsLoading = false;
+      }
+    },
+
+    filteredTopics(filter, exclude = []) {
+      const f = (filter || '').toLowerCase();
+      const ex = Array.isArray(exclude) ? exclude : [exclude];
+      return this.bridges.topics.filter(t => !ex.includes(t) && (!f || t.toLowerCase().includes(f)));
+    },
+
+    closeBridgeForm() {
+      this.bridges.form = null;
+    },
+
+    async saveBridge() {
+      const f = this.bridges.form;
+      const isNew = !f.id;
+      this.bridges.formSaving = true;
+      try {
+        const payload = {
+          name: f.name, description: f.description, enabled: f.enabled,
+          source: f.source, destinations: f.destinations,
+          preserveKey: f.preserveKey, preserveProperties: f.preserveProperties
+        };
+        if (isNew) {
+          await this.bridgesApi('/api/bridges', { method: 'POST', body: JSON.stringify(payload) });
+        } else {
+          await this.bridgesApi(`/api/bridges/${f.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        }
+        this.bridges.form = null;
+        await this.loadBridges();
+        await this.loadBridgeStatus();
+        this.notify(isNew ? 'Bridge created' : 'Bridge updated');
+      } catch (e) {
+        this.notify('Passário: ' + e.message, 'error');
+      } finally {
+        this.bridges.formSaving = false;
+      }
+    },
+
+    async bridgesApi(path, options = {}) {
+      const res = await fetch(this.passario.url + path, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options
+      });
+      const ct = res.headers.get('content-type') ?? '';
+      const body = ct.includes('json') ? await res.json() : await res.text();
+      if (!res.ok) throw new Error(body?.message ?? body ?? res.statusText);
+      return body;
     },
 
     // ── Formatters ─────────────────────────────────────────────────────────

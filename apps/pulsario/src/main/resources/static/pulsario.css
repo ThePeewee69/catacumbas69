@@ -168,6 +168,87 @@ td .payload { font-family: var(--mono); font-size: 12px; max-width: 320px; word-
 .payload-view { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; color: var(--text); margin-top: 12px; max-height: 300px; overflow-y: auto; }
 .warn-note { background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.25); border-radius: 6px; padding: 10px 14px; font-size: 12px; color: var(--warn); margin-bottom: 16px; }
 
+/* ── Subscription picker (Peek tab) ── */
+.sub-picker { border: 1px solid var(--border); border-radius: 6px; background: var(--bg); overflow-y: auto; max-height: 140px; min-height: 60px; }
+.sub-picker-item { padding: 8px 12px; font-family: var(--mono); font-size: 13px; color: var(--text); cursor: pointer; border-bottom: 1px solid rgba(42,49,72,.4); transition: background .1s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sub-picker-item:last-child { border-bottom: none; }
+.sub-picker-item:hover { background: rgba(99,102,241,.12); }
+.sub-picker-item.selected { background: rgba(99,102,241,.2); color: var(--accent2); font-weight: 600; }
+.sub-picker-empty { padding: 10px 12px; font-size: 12px; color: var(--muted); font-style: italic; }
+
+/* ── Bridges panel ─────────────────────────────────────────────────────── */
+.bridges-panel { padding: 24px; max-width: 960px; margin: 0 auto; }
+.bridges-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
+
+/* topbar bridges button */
+.bridges-btn { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.bridges-btn.active { background: rgba(99,102,241,.2); color: var(--accent2); border-color: var(--accent); }
+
+/* bridge card */
+.bridge-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 12px; transition: border-color .15s; }
+.bridge-card:hover { border-color: rgba(99,102,241,.4); }
+.bridge-card.bridge-disabled { opacity: .7; }
+
+.bridge-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.bridge-card-title { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.bridge-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.bridge-description { font-size: 11px; color: var(--muted); }
+.bridge-card-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* status dot */
+.bridge-status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+.bridge-status-dot.running { background: var(--success); box-shadow: 0 0 6px rgba(34,197,94,.5); }
+.bridge-status-dot.disabled { background: rgba(100,116,139,.4); }
+
+/* route display */
+.bridge-route { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.bridge-topic-block { min-width: 0; }
+.bridge-topic { font-size: 12px; color: var(--muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 340px; }
+.bridge-arrow { font-size: 18px; color: var(--accent2); flex-shrink: 0; }
+.bridge-arrow-animated { display: inline-block; animation: bridge-pulse 1.2s ease-in-out infinite; color: var(--accent2); }
+@keyframes bridge-pulse { 0%,100% { opacity: 1; transform: translateX(0); } 50% { opacity: .5; transform: translateX(4px); } }
+
+.bridge-card-meta { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.bridge-stats { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* toggle button variants */
+.btn-success { background: rgba(34,197,94,.12); color: var(--success); border-color: rgba(34,197,94,.3); }
+.btn-success:hover { background: rgba(34,197,94,.2); }
+
+/* bridge form modal box */
+.bridge-form-box { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; width: 100%; max-width: 680px; padding: 24px; box-shadow: 0 24px 64px rgba(0,0,0,.7); max-height: 90vh; overflow-y: auto; }
+
+/* form section label */
+.form-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); font-weight: 600; margin: 14px 0 8px; border-bottom: 1px solid var(--border); padding-bottom: 5px; }
+
+/* checkbox label */
+.checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; color: var(--text); }
+.checkbox-label input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+
+/* topic picker (bridge form) */
+.topic-picker-selected { font-family: var(--mono); font-size: 12px; color: var(--accent2); background: rgba(99,102,241,.1); border: 1px solid rgba(99,102,241,.35); border-radius: 6px; padding: 7px 10px; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topic-picker-selected.empty { color: var(--muted); font-style: italic; background: transparent; border-style: dashed; border-color: var(--border); }
+.topic-picker-filter { margin-bottom: 6px; font-size: 12px; }
+/* exactly 3 rows visible: 3 × 34px + 2px container border */
+.topic-picker { max-height: 104px; min-height: 36px; flex: none; }
+.topic-picker .sub-picker-item { height: 34px; line-height: 16px; padding: 8px 12px 8px 11px; font-size: 12px; }
+.topic-picker .sub-picker-empty { height: 34px; padding: 9px 12px; }
+.topic-multi-item { display: flex; align-items: center; gap: 8px; }
+.topic-check { width: 14px; height: 14px; flex-shrink: 0; border: 1px solid var(--border); border-radius: 3px; font-size: 10px; line-height: 12px; text-align: center; color: #fff; }
+.topic-multi-item.selected .topic-check { background: var(--accent); border-color: var(--accent); }
+.topic-multi-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* selected destination chips — wraps, capped at ~2 rows */
+.topic-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; max-height: 64px; overflow-y: auto; }
+.topic-chips.empty { font-size: 12px; color: var(--muted); font-style: italic; border: 1px dashed var(--border); border-radius: 6px; padding: 7px 10px; }
+.topic-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; background: rgba(99,102,241,.14); border: 1px solid rgba(99,102,241,.4); border-radius: 14px; padding: 3px 4px 3px 10px; font-family: var(--mono); font-size: 11px; color: var(--accent2); }
+.topic-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topic-chip-x { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 10px; padding: 2px 5px; border-radius: 50%; }
+.topic-chip-x:hover { color: var(--danger); background: rgba(239,68,68,.12); }
+
+/* bridge card: multiple destinations stack */
+.bridge-topic-block .bridge-topic + .bridge-topic { margin-top: 2px; }
+
 /* scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

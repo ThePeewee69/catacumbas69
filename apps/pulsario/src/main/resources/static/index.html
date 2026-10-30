@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pulsário</title>
 <link rel="icon" type="image/svg+xml" href="/pulsario-icon.svg">
-<link rel="stylesheet" href="/pulsario.css">
+<link rel="stylesheet" href="/pulsario.css?v=5">
+<script src="/pulsario.js?v=5" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
-<script src="/pulsario.js" defer></script>
 </head>
 <body x-data="app()" x-init="init()">
 
@@ -30,7 +30,7 @@
       <div class="health-row">
         <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px;" @click="checkHealth()">
           <template x-if="settings.healthState==='checking'"><span class="spinner" style="width:12px;height:12px;"></span></template>
-          <template x-if="settings.healthState!=='checking'">🩺</template>
+          <template x-if="settings.healthState!=='checking'"><span>🩺</span></template>
           Health Check
         </button>
         <template x-if="settings.healthState==='ok'">
@@ -39,6 +39,16 @@
         <template x-if="settings.healthState==='error'">
           <span class="health-msg error">✕ <span x-text="settings.healthMsg"></span></span>
         </template>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="field" style="margin-bottom:12px;">
+        <label>Passário URL</label>
+        <input type="text" x-model="passario.url"
+               placeholder="http://localhost:8082"
+               @keydown.enter="saveSettings()">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;">Bridge microservice endpoint</div>
       </div>
 
       <div class="divider"></div>
@@ -99,6 +109,121 @@
             Re-produce
           </button>
         </template>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ══ Bridge form modal ══════════════════════════════════════════════════ -->
+<template x-if="bridges.form !== null">
+  <div class="overlay" @click.self="closeBridgeForm()">
+    <div class="bridge-form-box">
+      <div class="settings-title">
+        <span x-text="bridges.form && bridges.form.id ? '✏️ Edit Bridge' : '⇌ New Bridge'"></span>
+        <button class="close-btn" @click="closeBridgeForm()">✕</button>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Name *</label>
+          <input type="text" x-model="bridges.form.name" placeholder="e.g. orders-to-dlq"
+                 @keydown.enter="saveBridge()">
+        </div>
+        <div class="field">
+          <label>Description</label>
+          <input type="text" x-model="bridges.form.description" placeholder="Optional">
+        </div>
+      </div>
+
+      <div class="form-section-label">⬅ Source</div>
+      <div class="field" style="margin-bottom:12px;">
+        <label>Topic *</label>
+        <div class="topic-picker-selected" :class="{empty: !bridges.form.source.topic}"
+             x-text="bridges.form.source.topic || 'nenhum tópico selecionado'"></div>
+        <input type="text" x-model="bridges.srcFilter" placeholder="filtrar tópicos…" class="topic-picker-filter">
+        <div class="sub-picker topic-picker">
+          <template x-if="bridges.topicsLoading">
+            <div class="sub-picker-empty"><span class="spinner" style="width:12px;height:12px;"></span> a carregar tópicos…</div>
+          </template>
+          <template x-if="!bridges.topicsLoading && filteredTopics(bridges.srcFilter, bridges.form.destinations.map(d => d.topic)).length === 0">
+            <div class="sub-picker-empty">nenhum tópico encontrado</div>
+          </template>
+          <template x-for="t in filteredTopics(bridges.srcFilter, bridges.form.destinations.map(d => d.topic))" :key="t">
+            <div class="sub-picker-item" :class="{ selected: bridges.form.source.topic === t }"
+                 @click="bridges.form.source.topic = t" :title="t" x-text="t"></div>
+          </template>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Subscription name *</label>
+          <input type="text" x-model="bridges.form.source.subscription" placeholder="passario-bridge">
+        </div>
+        <div class="field" style="max-width:150px;">
+          <label>Type</label>
+          <select x-model="bridges.form.source.subscriptionType">
+            <option value="Shared">Shared</option>
+            <option value="Exclusive">Exclusive</option>
+            <option value="Failover">Failover</option>
+            <option value="Key_Shared">Key_Shared</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-section-label">➡ Destination</div>
+      <div class="field" style="margin-bottom:14px;">
+        <label>Topics * <span style="text-transform:none;letter-spacing:0;font-weight:400;"
+               x-text="'(' + bridges.form.destinations.length + ' selecionado' + (bridges.form.destinations.length === 1 ? '' : 's') + ')'"></span></label>
+        <div class="topic-chips" :class="{empty: bridges.form.destinations.length === 0}">
+          <template x-if="bridges.form.destinations.length === 0">
+            <span>nenhum tópico selecionado — escolhe um ou mais</span>
+          </template>
+          <template x-for="d in bridges.form.destinations" :key="d.topic">
+            <span class="topic-chip" :title="d.topic">
+              <span class="topic-chip-name" x-text="d.topic"></span>
+              <button type="button" class="topic-chip-x" @click="toggleDestination(d.topic)" title="Remover">✕</button>
+            </span>
+          </template>
+        </div>
+        <input type="text" x-model="bridges.dstFilter" placeholder="filtrar tópicos…" class="topic-picker-filter">
+        <div class="sub-picker topic-picker">
+          <template x-if="bridges.topicsLoading">
+            <div class="sub-picker-empty"><span class="spinner" style="width:12px;height:12px;"></span> a carregar tópicos…</div>
+          </template>
+          <template x-if="!bridges.topicsLoading && filteredTopics(bridges.dstFilter, bridges.form.source.topic).length === 0">
+            <div class="sub-picker-empty">nenhum tópico encontrado</div>
+          </template>
+          <template x-for="t in filteredTopics(bridges.dstFilter, bridges.form.source.topic)" :key="t">
+            <div class="sub-picker-item topic-multi-item" :class="{ selected: isDestSelected(t) }"
+                 @click="toggleDestination(t)" :title="t">
+              <span class="topic-check" x-text="isDestSelected(t) ? '✓' : ''"></span>
+              <span class="topic-multi-name" x-text="t"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <div class="form-section-label">Options</div>
+      <div style="display:flex;gap:20px;margin-bottom:18px;flex-wrap:wrap;">
+        <label class="checkbox-label">
+          <input type="checkbox" x-model="bridges.form.preserveKey"> Preserve message key
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" x-model="bridges.form.preserveProperties"> Preserve properties
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" x-model="bridges.form.enabled"> Enabled on save
+        </label>
+      </div>
+
+      <div class="divider"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn btn-secondary" @click="closeBridgeForm()">Cancel</button>
+        <button class="btn btn-primary" @click="saveBridge()"
+                :disabled="!bridgeFormValid() || bridges.formSaving">
+          <template x-if="bridges.formSaving"><span class="spinner"></span></template>
+          Save Bridge
+        </button>
       </div>
     </div>
   </div>
@@ -191,13 +316,161 @@
     </div>
 
     <button class="btn btn-secondary" style="font-size:12px;" @click="reload()">↺ Refresh</button>
+    <button class="btn btn-ghost bridges-btn" :class="{'active': bridgesView}"
+            @click="bridgesView ? closeBridges() : openBridges()" title="Passário Bridges">
+      <svg viewBox="0 0 32 32" style="width:14px;height:14px;flex-shrink:0;">
+        <rect x="1" y="9" width="9" height="14" rx="2.5" fill="#4f46e5"/>
+        <rect x="10" y="14.5" width="12" height="3" rx="1.5" fill="#312e81" opacity=".7"/>
+        <circle cx="13" cy="16" r="1.5" fill="#a5b4fc"/>
+        <circle cx="16" cy="16" r="1.5" fill="#818cf8"/>
+        <circle cx="19" cy="16" r="1.5" fill="#6366f1"/>
+        <path d="M18.5 13.5 L22.5 16 L18.5 18.5" fill="none" stroke="#818cf8" stroke-width="1.5"
+              stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="22" y="9" width="9" height="14" rx="2.5" fill="#6366f1"/>
+      </svg>
+      Bridges
+    </button>
     <button class="btn btn-ghost" style="font-size:13px;padding:7px 10px;" @click="settings.open=true" title="Settings">⚙️</button>
   </div>
 
   <div id="content">
 
+    <!-- ─ Bridges panel ─ -->
+    <template x-if="bridgesView">
+      <div class="bridges-panel">
+
+        <!-- Header -->
+        <div class="bridges-header">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <svg viewBox="0 0 32 32" style="width:32px;height:32px;flex-shrink:0;">
+              <rect x="1" y="9" width="9" height="14" rx="2.5" fill="#4f46e5"/>
+              <rect x="3" y="12" width="5" height="1.5" rx=".75" fill="#c7d2fe" opacity=".9"/>
+              <rect x="3" y="15" width="5" height="1.5" rx=".75" fill="#c7d2fe" opacity=".6"/>
+              <rect x="3" y="18" width="3" height="1.5" rx=".75" fill="#c7d2fe" opacity=".35"/>
+              <rect x="10" y="14.5" width="12" height="3" rx="1.5" fill="#312e81" opacity=".6"/>
+              <circle cx="12.5" cy="16" r="1.6" fill="#a5b4fc"/>
+              <circle cx="16"   cy="16" r="1.6" fill="#818cf8"/>
+              <circle cx="19.5" cy="16" r="1.6" fill="#6366f1"/>
+              <path d="M19 13.2 L23.5 16 L19 18.8" fill="none" stroke="#818cf8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              <rect x="22" y="9" width="9" height="14" rx="2.5" fill="#6366f1"/>
+              <rect x="24" y="12" width="5" height="1.5" rx=".75" fill="#e0e7ff" opacity=".9"/>
+              <rect x="24" y="15" width="5" height="1.5" rx=".75" fill="#e0e7ff" opacity=".6"/>
+              <rect x="24" y="18" width="3.5" height="1.5" rx=".75" fill="#e0e7ff" opacity=".35"/>
+            </svg>
+            <div>
+              <div style="font-size:16px;font-weight:700;color:var(--accent2);">Passário Bridges</div>
+              <div style="font-size:11px;color:var(--muted);" x-text="passario.url"></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span style="font-size:12px;color:var(--muted);" x-show="Object.keys(bridges.status).length > 0">
+              <span class="bridge-status-dot running" style="display:inline-block;"></span>
+              <span x-text="Object.keys(bridges.status).length + ' running'"></span>
+            </span>
+            <button class="btn btn-ghost" style="font-size:12px;"
+                    @click="loadBridges();loadBridgeStatus()" title="Refresh">↺</button>
+            <button class="btn btn-primary" style="font-size:12px;" @click="openNewBridge()">+ New Bridge</button>
+          </div>
+        </div>
+
+        <!-- Loading -->
+        <template x-if="bridges.loading">
+          <div style="text-align:center;padding:60px"><div class="spinner"></div></div>
+        </template>
+
+        <!-- Bridge list -->
+        <template x-if="!bridges.loading">
+          <div>
+            <!-- Empty state -->
+            <template x-if="bridges.list.length === 0">
+              <div class="card empty" style="margin-top:24px;">
+                <div style="font-size:48px;margin-bottom:12px;">⇌</div>
+                <p style="font-weight:600;color:var(--accent2);">No bridges yet</p>
+                <p style="font-size:13px;margin-top:6px;">Create one to relay messages between Pulsar topics.</p>
+                <button class="btn btn-primary" style="margin-top:16px;" @click="openNewBridge()">+ New Bridge</button>
+              </div>
+            </template>
+
+            <!-- Bridge cards -->
+            <template x-for="bridge in bridges.list" :key="bridge.id">
+              <div class="bridge-card" :class="{'bridge-disabled': !bridge.enabled}">
+                <div class="bridge-card-header">
+                  <div class="bridge-status-dot"
+                       :class="{'running': bridge.enabled && bridges.status[bridge.id]?.running,
+                                'disabled': !bridge.enabled}">
+                  </div>
+                  <div class="bridge-card-title">
+                    <span class="bridge-name" x-text="bridge.name"></span>
+                    <template x-if="bridge.description">
+                      <span class="bridge-description" x-text="bridge.description"></span>
+                    </template>
+                  </div>
+                  <div class="bridge-card-actions">
+                    <button class="btn btn-ghost bridge-toggle-btn"
+                            :class="{'btn-success': bridge.enabled}"
+                            @click="toggleBridge(bridge)"
+                            x-text="bridge.enabled ? '⏸ Disable' : '▶ Enable'">
+                    </button>
+                    <button class="btn btn-ghost" style="font-size:12px;" @click="openEditBridge(bridge)">✏ Edit</button>
+                    <button class="btn btn-danger" style="font-size:11px;padding:4px 10px;" @click="deleteBridge(bridge.id)">Delete</button>
+                  </div>
+                </div>
+
+                <div class="bridge-route">
+                  <div class="bridge-topic-block">
+                    <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">SOURCE</div>
+                    <span class="mono bridge-topic" x-text="bridge.source?.topic || '?'"></span>
+                  </div>
+                  <div class="bridge-arrow">
+                    <template x-if="bridge.enabled && bridges.status[bridge.id]?.running">
+                      <span class="bridge-arrow-animated">→</span>
+                    </template>
+                    <template x-if="!(bridge.enabled && bridges.status[bridge.id]?.running)">
+                      <span style="color:var(--muted);">→</span>
+                    </template>
+                  </div>
+                  <div class="bridge-topic-block">
+                    <div style="font-size:10px;color:var(--muted);margin-bottom:3px;"
+                         x-text="bridgeDestTopics(bridge).length > 1 ? 'DESTINATIONS (' + bridgeDestTopics(bridge).length + ')' : 'DESTINATION'"></div>
+                    <template x-for="dt in bridgeDestTopics(bridge)" :key="dt">
+                      <span class="mono bridge-topic" :title="dt" x-text="dt"></span>
+                    </template>
+                    <template x-if="bridgeDestTopics(bridge).length === 0">
+                      <span class="mono bridge-topic">?</span>
+                    </template>
+                  </div>
+                </div>
+
+                <div class="bridge-card-meta">
+                  <span style="font-size:11px;color:var(--muted);">
+                    sub: <span class="mono" x-text="bridge.source?.subscription || ''"></span>
+                    (<span x-text="bridge.source?.subscriptionType || 'Shared'"></span>)
+                  </span>
+                  <div class="bridge-stats">
+                    <template x-if="bridges.status[bridge.id]">
+                      <span class="tag tag-blue" x-text="(bridges.status[bridge.id].messagesForwarded || 0).toLocaleString('en') + ' forwarded'"></span>
+                    </template>
+                    <template x-if="bridges.status[bridge.id]?.errors > 0">
+                      <span class="tag tag-orange" x-text="bridges.status[bridge.id].errors + ' errors'"></span>
+                    </template>
+                    <template x-if="!bridge.enabled">
+                      <span class="tag" style="background:rgba(100,116,139,.15);color:var(--muted);">disabled</span>
+                    </template>
+                    <template x-if="bridge.enabled && !bridges.status[bridge.id]?.running">
+                      <span class="tag" style="background:rgba(234,179,8,.12);color:#ca8a04;">starting…</span>
+                    </template>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+      </div>
+    </template>
+
     <!-- ─ Welcome ─ -->
-    <template x-if="!sel.topic">
+    <template x-if="!bridgesView && !sel.topic">
       <div class="empty" style="margin-top:60px;">
         <img src="/pulsario-icon.svg" style="width:64px;height:64px;border-radius:14px;margin-bottom:12px;">
         <p style="font-size:18px;font-weight:700;color:var(--accent2);margin-bottom:6px;">Pulsário</p>
@@ -206,7 +479,7 @@
     </template>
 
     <!-- ─ Topic view ─ -->
-    <template x-if="sel.topic">
+    <template x-if="!bridgesView && sel.topic">
       <div>
         <div class="tabs">
           <button class="tab" :class="{active:tab==='stats'}"  @click="tab='stats'">📊 Overview</button>
@@ -300,7 +573,7 @@
             <div style="display:flex;align-items:center;gap:12px;">
               <button class="btn btn-primary" @click="sendMessage()" :disabled="!produce.payload || loading.produce">
                 <template x-if="loading.produce"><span class="spinner"></span></template>
-                <template x-if="!loading.produce">📤</template>
+                <template x-if="!loading.produce"><span>📤</span></template>
                 Send
               </button>
               <template x-if="produce.lastId">
@@ -354,16 +627,18 @@
               <div class="form-row">
                 <div class="field">
                   <label>Subscription</label>
-                  <!-- text input with datalist suggestions (not a dropdown) -->
-                  <input type="text"
-                         x-model="backlog.sub"
-                         list="subs-list"
-                         placeholder="type or select subscription…">
-                  <datalist id="subs-list">
-                    <template x-for="s in subscriptions" :key="s">
-                      <option :value="s"></option>
+                  <div class="sub-picker">
+                    <template x-if="subscriptions.length === 0">
+                      <div class="sub-picker-empty">nenhuma subscrição</div>
                     </template>
-                  </datalist>
+                    <template x-for="s in subscriptions" :key="s">
+                      <div class="sub-picker-item"
+                           :class="{ selected: backlog.sub === s }"
+                           @click="backlog.sub = s"
+                           x-text="s"></div>
+                    </template>
+                  </div>
+
                 </div>
                 <div class="field" style="max-width:110px;">
                   <label>Count</label>
