@@ -110,6 +110,7 @@ td .payload { font-family: var(--mono); font-size: 12px; max-width: 320px; word-
 .tag-green { background: rgba(34,197,94,.15); color: var(--success); }
 .tag-blue { background: rgba(99,102,241,.15); color: var(--accent2); }
 .tag-orange { background: rgba(245,158,11,.15); color: var(--warn); }
+.tag-failed { background: rgba(239,68,68,.12); color: var(--danger); }
 .tag-binary { background: rgba(100,116,139,.15); color: var(--muted); }
 
 /* ── Action buttons in table ── */

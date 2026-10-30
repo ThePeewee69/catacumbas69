@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pulsário</title>
 <link rel="icon" type="image/svg+xml" href="/pulsario-icon.svg">
-<link rel="stylesheet" href="/pulsario.css?v=5">
-<script src="/pulsario.js?v=5" defer></script>
+<link rel="stylesheet" href="/pulsario.css?v=6">
+<script src="/pulsario.js?v=6" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
 </head>
 <body x-data="app()" x-init="init()">
@@ -139,14 +139,14 @@
       <div class="field" style="margin-bottom:12px;">
         <label>Topic *</label>
         <div class="topic-picker-selected" :class="{empty: !bridges.form.source.topic}"
-             x-text="bridges.form.source.topic || 'nenhum tópico selecionado'"></div>
-        <input type="text" x-model="bridges.srcFilter" placeholder="filtrar tópicos…" class="topic-picker-filter">
+             x-text="bridges.form.source.topic || 'no topic selected'"></div>
+        <input type="text" x-model="bridges.srcFilter" placeholder="filter topics…" class="topic-picker-filter">
         <div class="sub-picker topic-picker">
           <template x-if="bridges.topicsLoading">
-            <div class="sub-picker-empty"><span class="spinner" style="width:12px;height:12px;"></span> a carregar tópicos…</div>
+            <div class="sub-picker-empty"><span class="spinner" style="width:12px;height:12px;"></span> loading topics…</div>
           </template>
           <template x-if="!bridges.topicsLoading && filteredTopics(bridges.srcFilter, bridges.form.destinations.map(d => d.topic)).length === 0">
-            <div class="sub-picker-empty">nenhum tópico encontrado</div>
+            <div class="sub-picker-empty">no topics found</div>
           </template>
           <template x-for="t in filteredTopics(bridges.srcFilter, bridges.form.destinations.map(d => d.topic))" :key="t">
             <div class="sub-picker-item" :class="{ selected: bridges.form.source.topic === t }"
@@ -173,25 +173,25 @@
       <div class="form-section-label">➡ Destination</div>
       <div class="field" style="margin-bottom:14px;">
         <label>Topics * <span style="text-transform:none;letter-spacing:0;font-weight:400;"
-               x-text="'(' + bridges.form.destinations.length + ' selecionado' + (bridges.form.destinations.length === 1 ? '' : 's') + ')'"></span></label>
+               x-text="'(' + bridges.form.destinations.length + ' selected)'"></span></label>
         <div class="topic-chips" :class="{empty: bridges.form.destinations.length === 0}">
           <template x-if="bridges.form.destinations.length === 0">
-            <span>nenhum tópico selecionado — escolhe um ou mais</span>
+            <span>no topic selected — choose one or more</span>
           </template>
           <template x-for="d in bridges.form.destinations" :key="d.topic">
             <span class="topic-chip" :title="d.topic">
               <span class="topic-chip-name" x-text="d.topic"></span>
-              <button type="button" class="topic-chip-x" @click="toggleDestination(d.topic)" title="Remover">✕</button>
+              <button type="button" class="topic-chip-x" @click="toggleDestination(d.topic)" title="Remove" aria-label="Remove destination">✕</button>
             </span>
           </template>
         </div>
-        <input type="text" x-model="bridges.dstFilter" placeholder="filtrar tópicos…" class="topic-picker-filter">
+        <input type="text" x-model="bridges.dstFilter" placeholder="filter topics…" class="topic-picker-filter">
         <div class="sub-picker topic-picker">
           <template x-if="bridges.topicsLoading">
-            <div class="sub-picker-empty"><span class="spinner" style="width:12px;height:12px;"></span> a carregar tópicos…</div>
+            <div class="sub-picker-empty"><span class="spinner" style="width:12px;height:12px;"></span> loading topics…</div>
           </template>
           <template x-if="!bridges.topicsLoading && filteredTopics(bridges.dstFilter, bridges.form.source.topic).length === 0">
-            <div class="sub-picker-empty">nenhum tópico encontrado</div>
+            <div class="sub-picker-empty">no topics found</div>
           </template>
           <template x-for="t in filteredTopics(bridges.dstFilter, bridges.form.source.topic)" :key="t">
             <div class="sub-picker-item topic-multi-item" :class="{ selected: isDestSelected(t) }"
@@ -214,6 +214,12 @@
         <label class="checkbox-label">
           <input type="checkbox" x-model="bridges.form.enabled"> Enabled on save
         </label>
+        <label class="checkbox-label" title="Keep source order on every destination (needs Exclusive, Failover or Key_Shared)">
+          <input type="checkbox" x-model="bridges.form.ordered" @change="onOrderedChange()"> Keep message order
+        </label>
+      </div>
+      <div class="warn-note" x-show="orderedOnShared()">
+        Ordered bridges need an Exclusive, Failover or Key_Shared subscription — a Shared subscription cannot keep order.
       </div>
 
       <div class="divider"></div>
@@ -447,7 +453,7 @@
                     (<span x-text="bridge.source?.subscriptionType || 'Shared'"></span>)
                   </span>
                   <div class="bridge-stats">
-                    <template x-if="bridges.status[bridge.id]">
+                    <template x-if="bridges.status[bridge.id]?.running">
                       <span class="tag tag-blue" x-text="(bridges.status[bridge.id].messagesForwarded || 0).toLocaleString('en') + ' forwarded'"></span>
                     </template>
                     <template x-if="bridges.status[bridge.id]?.errors > 0">
@@ -456,9 +462,15 @@
                     <template x-if="!bridge.enabled">
                       <span class="tag" style="background:rgba(100,116,139,.15);color:var(--muted);">disabled</span>
                     </template>
-                    <template x-if="bridge.enabled && !bridges.status[bridge.id]?.running">
+                    <template x-if="bridge.enabled && bridges.status[bridge.id]?.state === 'FAILED'">
+                      <span class="tag tag-failed"
+                            :title="'Retry at ' + fmtDate(bridges.status[bridge.id].nextRetryAt)"
+                            x-text="'failed: ' + truncate(bridges.status[bridge.id].lastError, 60)"></span>
+                    </template>
+                    <template x-if="bridge.enabled && !bridges.status[bridge.id]?.running && bridges.status[bridge.id]?.state !== 'FAILED'">
                       <span class="tag" style="background:rgba(234,179,8,.12);color:#ca8a04;">starting…</span>
                     </template>
+                    <span class="tag tag-blue" x-text="bridge.ordered ? 'ordered' : 'unordered'"></span>
                   </div>
                 </div>
               </div>
@@ -629,7 +641,7 @@
                   <label>Subscription</label>
                   <div class="sub-picker">
                     <template x-if="subscriptions.length === 0">
-                      <div class="sub-picker-empty">nenhuma subscrição</div>
+                      <div class="sub-picker-empty">no subscriptions</div>
                     </template>
                     <template x-for="s in subscriptions" :key="s">
                       <div class="sub-picker-item"

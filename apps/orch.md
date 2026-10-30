@@ -228,15 +228,19 @@ is a known gap), Maven, one Spring Boot app per service.
 com.catacumbas69.<service>
 ├── <Service>Application.java
 ├── config/        @Configuration, @ConfigurationProperties, client beans
-├── api/           @RestController + request/response DTOs (records) + @RestControllerAdvice
-├── service/       business logic, orchestration, workers
-├── domain/        Mongo @Document classes and value objects
+├── controller/    @RestController + @RestControllerAdvice (Problem Details)
+├── dto/           request/response records and the mappers to/from the model
+├── service/       business logic, orchestration, workers, domain exceptions
+├── model/         Mongo @Document classes and value objects
 └── repository/    Spring Data repositories
 ```
 
+Every package has a `package-info.java` (DOC-2). Dependencies point downwards only:
+`controller → dto, service → model, repository`. `service` never imports `controller` or `dto`.
+
 - **CODE-1 [MUST]** Controllers are thin: validate input, call one service method, map to a DTO. No
   repository access from controllers.
-- **CODE-2 [MUST]** API request/response types are **records in `api/`**. Mongo documents MUST NOT be
+- **CODE-2 [MUST]** API request/response types are **records in `dto/`**. Mongo documents MUST NOT be
   returned from or bound to controllers (prevents leaking internal fields and makes schema changes safe).
 - **CODE-3 [MUST]** Constructor injection only (`final` fields; Lombok `@RequiredArgsConstructor` is fine).
   No field `@Autowired`.
@@ -494,30 +498,28 @@ The code does not yet follow every rule. Agents fixing a gap remove it here in t
 
 | ID | Service | Gap | Rule |
 |---|---|---|---|
-| G-1 | both | Spring Boot 3.3.4 is out of OSS support | §4 baseline |
-| G-2 | both | Endpoints are under `/api/…`, not `/api/v1/…` | API-1 |
-| G-3 | both | No OpenAPI (springdoc) | API-6 |
-| G-4 | both | No Problem Details / central exception handler; ad-hoc error bodies | API-4 |
-| G-5 | both | No Jakarta Validation on request types | API-5 |
-| G-6 | both | Only placeholder tests; no slice or Testcontainers tests | TEST-1..3 |
-| G-7 | both | Plain-text logs; no Prometheus metrics | OBS-3, OBS-5 |
-| G-8 | both | Pulsar client versions differ (Pulsário 4.0.3, Passário 3.3.1) | PUL-2 |
-| G-9 | Pulsário | UI calls Passário directly from the browser (CORS) instead of a BFF proxy; bridge actions not audited | ARCH-2, OBS-6 |
-| G-10 | Pulsário | UI strings partly in Portuguese (subscription picker, topic pickers) | UI-4 |
+| G-1 | Pulsário | Spring Boot 3.3.4 is out of OSS support | §4 baseline |
+| G-2 | Pulsário | Endpoints are under `/api/…`, not `/api/v1/…` | API-1 |
+| G-3 | Pulsário | No OpenAPI (springdoc) | API-6 |
+| G-4 | Pulsário | No Problem Details / central exception handler; ad-hoc `{error}` bodies | API-4 |
+| G-5 | Pulsário | No Jakarta Validation on request types | API-5 |
+| G-6 | both | No Testcontainers integration tests; Pulsário has only a placeholder test | TEST-1..3 |
+| G-7 | Pulsário | Plain-text logs; no Prometheus metrics | OBS-3, OBS-5 |
+| G-9 | Pulsário | UI calls Passário directly from the browser (CORS allowed from `PASSARIO_CORS_ALLOWED_ORIGINS`) instead of a BFF proxy; bridge actions not audited | ARCH-2, API-7, OBS-6 |
 | G-11 | Pulsário | No UI smoke test | TEST-4 |
-| G-12 | Passário | Controller returns/binds `BridgeDocument` directly | CODE-2 |
-| G-13 | Passário | `@Value` config, timestamps set by hand, no indexes | CFG-1, MONGO-1, MONGO-3 |
-| G-14 | Passário | CORS open to `*` | API-7 |
-| G-15 | Passário | No Actuator, no MDC, counters not exported as metrics | OBS-1, OBS-4, OBS-5 |
-| G-16 | Passário | No Dockerfile or manifests yet | OPS-1..4 |
-| G-17 | both | No `.editorconfig`, Checkstyle, ESLint, Stylelint, html-validate or Prettier | READ-7, JAVA-7, HTML-5, JS-6, CSS-6 |
-| G-18 | both | Missing Javadoc, `package-info.java`, JSDoc and ADRs | DOC-1, DOC-2, DOC-4, JS-4 |
-| G-19 | Passário | Wildcard import `org.apache.pulsar.client.api.*` | JAVA-2 |
+| G-16 | Passário | No Kubernetes manifests yet (Dockerfile exists) | OPS-2..4 |
+| G-17 | Pulsário | No Checkstyle, ESLint, Stylelint, html-validate or Prettier | JAVA-7, HTML-5, JS-6, CSS-6 |
+| G-18 | Pulsário | Missing Javadoc, `package-info.java`, JSDoc and README update | DOC-1, DOC-2, DOC-3, JS-4 |
+| G-20 | Pulsário | Clickable `<div>`s in the sidebar tree and pickers; many inline `style=""`; modals without `role="dialog"`; decorative SVGs without `aria-hidden` | HTML-1, HTML-2, HTML-4 |
 | G-21 | both | No CI pipeline running `mvn verify` and the frontend linters on every push | TEST-5 |
 | G-22 | Pulsário | `Dockerfile` copies `target/pulsar-client-*.jar`, but the artifact is `pulsario-*.jar` | OPS-1 |
-| G-23 | Passário | Worker waits for every send before the next message; no `maxInFlight`, no ordered/unordered mode, no start back-off, no `@Version` | PERF-2..4, RES-5, RES-9 |
-| G-24 | both | Remote calls rely on library default timeouts; no MongoDB server-selection timeout | RES-2 |
-| G-20 | Pulsário | Clickable `<div>`s in the sidebar tree and pickers; many inline `style=""`; modals without `role="dialog"`; decorative SVGs without `aria-hidden` | HTML-1, HTML-2, HTML-4 |
+| G-24 | Pulsário | Remote calls rely on library default timeouts; no MongoDB server-selection timeout | RES-2 |
+
+Closed for Passário (2026-10-30, `mvn verify` green, 46 tests, 0 Checkstyle violations): Boot 3.5, Pulsar
+client 4.0.3, `@ConfigurationProperties`, auditing, indexes, `/api/v1`, DTOs, validation, Problem Details,
+OpenAPI, Actuator probes, Micrometer meters, MDC, async fan-out with ordering modes, start back-off,
+`@Version`, explicit timeouts, Javadoc, `package-info.java`, ADRs 0001–0004, README, Dockerfile (G-8, G-10,
+G-12, G-13, G-14 partly, G-15, G-19, G-23).
 
 ### Remediation plan
 

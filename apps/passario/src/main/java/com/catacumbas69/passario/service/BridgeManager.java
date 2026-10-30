@@ -1,126 +1,228 @@
 package com.catacumbas69.passario.service;
 
-import com.catacumbas69.passario.document.BridgeDocument;
+import com.catacumbas69.passario.config.PassarioProperties;
+import com.catacumbas69.passario.model.BridgeDocument;
 import com.catacumbas69.passario.repository.BridgeRepository;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
-import lombok.RequiredArgsConstructor;
+import java.time.Clock;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.pulsar.client.api.PulsarClient;
-import org.apache.pulsar.client.api.PulsarClientException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
-
 /**
- * Reconciles active {@link BridgeWorker} instances with the bridge configuration
- * stored in MongoDB. Runs every {@code bridge.reconcile.interval} milliseconds.
+ * Keeps running {@link BridgeWorker}s in line with the {@code bridges} collection (ARCH-4).
  *
- * <p>Behaviour:
+ * <p>Every {@code passario.bridge.reconcile-interval}:
  * <ul>
- *   <li>Enabled bridges without a running worker → start one.</li>
- *   <li>Disabled or deleted bridges with a running worker → stop it.</li>
- *   <li>Enabled bridges whose config changed (updatedAt bumped) → restart.</li>
+ *   <li>enabled bridge without a worker → start it, unless it is backing off after a failure (RES-5);</li>
+ *   <li>enabled bridge whose stored version differs from its worker's → stop it; the next tick starts the
+ *   new definition once the old worker has released its subscription;</li>
+ *   <li>disabled or deleted bridge with a worker → stop it.</li>
  * </ul>
+ * Starting and stopping never block the reconcile thread, and a failure in one bridge never affects
+ * another (RES-4). If MongoDB cannot be read, running workers are left alone (RES-6).
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class BridgeManager {
 
     private final BridgeRepository repository;
-    private final PulsarClient pulsarClient;
+    private final BridgeWorkerFactory workerFactory;
+    private final PassarioProperties.Bridge settings;
+    private final Clock clock;
 
-    /** bridgeId → active worker */
-    private final Map<String, BridgeWorker> activeWorkers = new ConcurrentHashMap<>();
+    private final Map<String, BridgeWorker> workers = new ConcurrentHashMap<>();
+    private final Set<String> stopping = ConcurrentHashMap.newKeySet();
+    private final Map<String, StartFailure> failures = new ConcurrentHashMap<>();
+    private final ExecutorService stopExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    private volatile boolean shuttingDown;
 
-    /** bridgeId → updatedAt at the time the worker was started */
-    private final Map<String, Instant> workerStartedWith = new ConcurrentHashMap<>();
+    /**
+     * Creates the manager.
+     *
+     * @param repository bridge definitions
+     * @param workerFactory creates workers
+     * @param properties application properties
+     * @param clock time source
+     * @param meterRegistry registry for the {@code passario.bridges.running} gauge
+     */
+    public BridgeManager(BridgeRepository repository, BridgeWorkerFactory workerFactory,
+                         PassarioProperties properties, Clock clock, MeterRegistry meterRegistry) {
+        this.repository = repository;
+        this.workerFactory = workerFactory;
+        this.settings = properties.bridge();
+        this.clock = clock;
+        Gauge.builder("passario.bridges.running", this, BridgeManager::getRunningCount)
+                .description("Bridges currently relaying messages")
+                .register(meterRegistry);
+    }
 
-    // ── Reconciliation ────────────────────────────────────────────────────────
+    // ── Reconciliation ───────────────────────────────────────────────────────
 
-    @Scheduled(fixedDelayString = "${bridge.reconcile.interval:5000}")
+    /** Applies the desired state from MongoDB. Scheduled; safe to call directly (tests). */
+    @Scheduled(fixedDelayString = "${passario.bridge.reconcile-interval}")
     public void reconcile() {
-        List<BridgeDocument> all;
-        try {
-            all = repository.findAll();
-        } catch (Exception e) {
-            log.error("[Passário] Cannot read bridges from MongoDB: {}", e.getMessage());
+        if (shuttingDown) {
             return;
         }
-
-        Set<String> enabledIds = all.stream()
-                .filter(BridgeDocument::isEnabled)
-                .map(BridgeDocument::getId)
-                .collect(Collectors.toSet());
-
-        // Stop workers for bridges that are disabled or no longer in the collection
-        for (String id : List.copyOf(activeWorkers.keySet())) {
-            if (!enabledIds.contains(id)) {
-                log.info("[Passário] Stopping bridge {}", id);
-                stopWorker(id);
-            }
-        }
-
-        // Start (or restart on config change) enabled bridges
-        for (BridgeDocument bridge : all) {
-            if (!bridge.isEnabled()) continue;
-
-            String id = bridge.getId();
-            BridgeWorker existing = activeWorkers.get(id);
-            Instant lastStarted = workerStartedWith.get(id);
-            boolean configChanged = bridge.getUpdatedAt() != null && !bridge.getUpdatedAt().equals(lastStarted);
-
-            if (existing == null) {
-                startWorker(bridge);
-            } else if (configChanged) {
-                log.info("[Passário] Config changed for bridge '{}', restarting", bridge.getName());
-                stopWorker(id);
-                startWorker(bridge);
-            }
-        }
-    }
-
-    // ── Internal ──────────────────────────────────────────────────────────────
-
-    private void startWorker(BridgeDocument bridge) {
+        List<BridgeDocument> desired;
         try {
-            BridgeWorker worker = new BridgeWorker(bridge, pulsarClient);
-            worker.start();
-            activeWorkers.put(bridge.getId(), worker);
-            workerStartedWith.put(bridge.getId(), bridge.getUpdatedAt());
-        } catch (PulsarClientException e) {
-            log.error("[Passário] Failed to start bridge '{}': {}", bridge.getName(), e.getMessage());
+            desired = repository.findAll();
+        } catch (RuntimeException e) {
+            log.warn("Cannot read bridges, keeping {} worker(s) as they are: {}", workers.size(), e.getMessage());
+            return;
+        }
+        Map<String, BridgeDocument> enabled = desired.stream()
+                .filter(BridgeDocument::isEnabled)
+                .collect(Collectors.toMap(BridgeDocument::getId, Function.identity()));
+
+        List.copyOf(workers.keySet()).stream()
+                .filter(id -> !enabled.containsKey(id))
+                .forEach(this::stopAsync);
+        failures.keySet().removeIf(id -> !enabled.containsKey(id));
+        enabled.values().forEach(this::reconcileBridge);
+    }
+
+    private void reconcileBridge(BridgeDocument bridge) {
+        try {
+            String id = bridge.getId();
+            if (stopping.contains(id)) {
+                return;
+            }
+            BridgeWorker worker = workers.get(id);
+            if (worker == null) {
+                startIfDue(bridge);
+            } else if (!Objects.equals(worker.getConfigVersion(), bridge.getVersion())) {
+                log.info("Bridge '{}' changed (version {} → {}), restarting", bridge.getName(),
+                        worker.getConfigVersion(), bridge.getVersion());
+                failures.remove(id);
+                stopAsync(id);
+            }
+        } catch (RuntimeException e) {
+            log.error("Reconcile failed for bridge '{}'", bridge.getName(), e);
         }
     }
 
-    private void stopWorker(String id) {
-        BridgeWorker worker = activeWorkers.remove(id);
-        workerStartedWith.remove(id);
-        if (worker != null) worker.stop();
+    private void startIfDue(BridgeDocument bridge) {
+        String id = bridge.getId();
+        StartFailure previous = failures.get(id);
+        if (previous != null && !previous.isDue(clock.instant())) {
+            return;
+        }
+        BridgeWorker worker;
+        CompletableFuture<Void> started;
+        try {
+            worker = workerFactory.create(bridge);
+            workers.put(id, worker);
+            started = worker.start();
+        } catch (RuntimeException e) {
+            workers.remove(id);
+            recordStartFailure(bridge, previous, BridgeWorker.rootMessage(e));
+            return;
+        }
+        started.whenComplete((ignored, failure) -> {
+            if (failure == null) {
+                failures.remove(id);
+                return;
+            }
+            workers.remove(id, worker);
+            stopExecutor.execute(() -> worker.stop(settings.shutdownTimeout()));
+            recordStartFailure(bridge, previous, BridgeWorker.rootMessage(failure));
+        });
     }
 
+    private void recordStartFailure(BridgeDocument bridge, StartFailure previous, String error) {
+        StartFailure next = StartFailure.next(previous, bridge, error, clock.instant(),
+                settings.startBackoffInitial(), settings.startBackoffMax());
+        failures.put(bridge.getId(), next);
+        log.warn("Bridge '{}' failed to start (attempt {}), retrying at {}: {}",
+                bridge.getName(), next.attempts(), next.nextAttemptAt(), error);
+    }
+
+    private void stopAsync(String id) {
+        BridgeWorker worker = workers.get(id);
+        if (worker == null || !stopping.add(id)) {
+            return;
+        }
+        stopExecutor.execute(() -> {
+            try {
+                worker.stop(settings.shutdownTimeout());
+            } catch (RuntimeException e) {
+                log.error("Error while stopping bridge {}", id, e);
+            } finally {
+                workers.remove(id, worker);
+                stopping.remove(id);
+            }
+        });
+    }
+
+    /** Stops every worker in parallel, waiting at most the shutdown timeout (RES-7). */
     @PreDestroy
     public void shutdown() {
-        log.info("[Passário] Shutting down {} bridge(s)...", activeWorkers.size());
-        activeWorkers.values().forEach(BridgeWorker::stop);
-        activeWorkers.clear();
+        shuttingDown = true;
+        log.info("Stopping {} bridge(s)", workers.size());
+        List.copyOf(workers.keySet()).forEach(this::stopAsync);
+        stopExecutor.shutdown();
+        try {
+            long waitMillis = settings.shutdownTimeout().plus(Duration.ofSeconds(5)).toMillis();
+            if (!stopExecutor.awaitTermination(waitMillis, TimeUnit.MILLISECONDS)) {
+                log.warn("Some bridges did not stop in time");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
-    // ── Public API ────────────────────────────────────────────────────────────
+    // ── Status ───────────────────────────────────────────────────────────────
 
+    /**
+     * Returns the status of every running, starting or failed bridge.
+     *
+     * @return one status per bridge known to the runtime
+     */
     public List<BridgeWorkerStatus> getStatuses() {
-        return activeWorkers.values().stream()
-                .map(BridgeWorker::getStatus)
-                .toList();
+        List<BridgeWorkerStatus> statuses = new ArrayList<>();
+        workers.values().forEach(worker -> statuses.add(worker.getStatus()));
+        failures.forEach((id, failure) -> {
+            if (!workers.containsKey(id)) {
+                statuses.add(new BridgeWorkerStatus(id, failure.bridgeName(), BridgeState.FAILED, false, 0, 0, 0,
+                        null, failure.sourceTopic(), failure.destinationTopics(), failure.ordered(),
+                        failure.lastError(), failure.nextAttemptAt()));
+            }
+        });
+        return statuses;
     }
 
-    public int getActiveCount() {
-        return activeWorkers.size();
+    /**
+     * Returns how many bridges are relaying messages.
+     *
+     * @return number of workers in state {@link BridgeState#RUNNING}
+     */
+    public int getRunningCount() {
+        return (int) workers.values().stream().filter(worker -> worker.getState() == BridgeState.RUNNING).count();
+    }
+
+    /**
+     * Returns how many enabled bridges are waiting to retry after a failed start.
+     *
+     * @return number of failed bridges
+     */
+    public int getFailedCount() {
+        return (int) failures.keySet().stream().filter(id -> !workers.containsKey(id)).count();
     }
 }

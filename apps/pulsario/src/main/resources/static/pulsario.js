@@ -1,3 +1,18 @@
+/** Base path of the bridge API on Passário. */
+const BRIDGES_API = '/api/v1/bridges';
+
+/**
+ * Extracts a readable message from an error body: RFC 9457 Problem Details (`detail`/`title`),
+ * a legacy `{ error }` / `{ message }` object, or plain text.
+ * @param {object|string} body parsed response body
+ * @param {string} fallback text to use when the body has no message
+ * @returns {string} the message to show
+ */
+function problemMessage(body, fallback) {
+  if (typeof body === 'string') return body || fallback;
+  return body?.detail ?? body?.title ?? body?.error ?? body?.message ?? fallback;
+}
+
 function app() {
   return {
     // ── State ──────────────────────────────────────────────────────────────
@@ -282,7 +297,7 @@ function app() {
     async loadBridges() {
       this.bridges.loading = true;
       try {
-        this.bridges.list = await this.bridgesApi('/api/bridges');
+        this.bridges.list = await this.bridgesApi(BRIDGES_API);
       } catch (e) {
         this.notify('Passário: ' + e.message, 'error');
       } finally {
@@ -292,7 +307,7 @@ function app() {
 
     async loadBridgeStatus() {
       try {
-        const s = await this.bridgesApi('/api/bridges/status');
+        const s = await this.bridgesApi(`${BRIDGES_API}/status`);
         const map = {};
         (s.workers || []).forEach(w => { map[w.bridgeId] = w; });
         this.bridges.status = map;
@@ -302,7 +317,7 @@ function app() {
     async toggleBridge(bridge) {
       const action = bridge.enabled ? 'disable' : 'enable';
       try {
-        await this.bridgesApi(`/api/bridges/${bridge.id}/${action}`, { method: 'POST' });
+        await this.bridgesApi(`${BRIDGES_API}/${bridge.id}/${action}`, { method: 'POST' });
         await this.loadBridges();
         await this.loadBridgeStatus();
         this.notify(`Bridge "${bridge.name}" ${bridge.enabled ? 'disabled' : 'enabled'}`);
@@ -315,7 +330,7 @@ function app() {
       const bridge = this.bridges.list.find(b => b.id === id);
       if (!confirm(`Delete bridge "${bridge?.name ?? id}"?\nThis will stop the relay immediately.`)) return;
       try {
-        await this.bridgesApi(`/api/bridges/${id}`, { method: 'DELETE' });
+        await this.bridgesApi(`${BRIDGES_API}/${id}`, { method: 'DELETE' });
         this.notify('Bridge deleted');
         await this.loadBridges();
         await this.loadBridgeStatus();
@@ -327,7 +342,8 @@ function app() {
     openNewBridge() {
       this.bridges.form = {
         id: null, name: '', description: '', enabled: true,
-        source: { topic: '', subscription: 'passario-bridge', subscriptionType: 'Shared' },
+        source: { topic: '', subscription: 'passario-bridge', subscriptionType: 'Failover' },
+        ordered: true,
         destinations: [],
         preserveKey: true, preserveProperties: true
       };
@@ -362,7 +378,26 @@ function app() {
 
     bridgeFormValid() {
       const f = this.bridges.form;
-      return f && f.name && f.source.topic && f.source.subscription && f.destinations.length > 0;
+      return Boolean(f && f.name && f.source.topic && f.source.subscription && f.destinations.length > 0
+        && !this.orderedOnShared());
+    },
+
+    /**
+     * Ordered bridges cannot use a Shared subscription (Passário rejects it).
+     * @returns {boolean} true when the form combines ordered mode with a Shared subscription
+     */
+    orderedOnShared() {
+      const f = this.bridges.form;
+      return Boolean(f?.ordered && f.source.subscriptionType === 'Shared');
+    },
+
+    /**
+     * Keeps the subscription type consistent when the ordering mode is toggled.
+     */
+    onOrderedChange() {
+      const f = this.bridges.form;
+      if (f.ordered && f.source.subscriptionType === 'Shared') f.source.subscriptionType = 'Failover';
+      if (!f.ordered && f.source.subscriptionType === 'Failover') f.source.subscriptionType = 'Shared';
     },
 
     // Walks tenants → namespaces → topics through Pulsário's own API and
@@ -407,12 +442,13 @@ function app() {
         const payload = {
           name: f.name, description: f.description, enabled: f.enabled,
           source: f.source, destinations: f.destinations,
-          preserveKey: f.preserveKey, preserveProperties: f.preserveProperties
+          preserveKey: f.preserveKey, preserveProperties: f.preserveProperties,
+          ordered: f.ordered, version: f.version ?? null
         };
         if (isNew) {
-          await this.bridgesApi('/api/bridges', { method: 'POST', body: JSON.stringify(payload) });
+          await this.bridgesApi(BRIDGES_API, { method: 'POST', body: JSON.stringify(payload) });
         } else {
-          await this.bridgesApi(`/api/bridges/${f.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+          await this.bridgesApi(`${BRIDGES_API}/${f.id}`, { method: 'PUT', body: JSON.stringify(payload) });
         }
         this.bridges.form = null;
         await this.loadBridges();
@@ -432,7 +468,7 @@ function app() {
       });
       const ct = res.headers.get('content-type') ?? '';
       const body = ct.includes('json') ? await res.json() : await res.text();
-      if (!res.ok) throw new Error(body?.message ?? body ?? res.statusText);
+      if (!res.ok) throw new Error(problemMessage(body, res.statusText));
       return body;
     },
 

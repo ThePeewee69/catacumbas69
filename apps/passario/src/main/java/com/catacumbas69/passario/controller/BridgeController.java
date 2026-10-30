@@ -1,126 +1,151 @@
 package com.catacumbas69.passario.controller;
 
-import com.catacumbas69.passario.document.BridgeDestination;
-import com.catacumbas69.passario.document.BridgeDocument;
-import com.catacumbas69.passario.repository.BridgeRepository;
+import com.catacumbas69.passario.dto.BridgeMapper;
+import com.catacumbas69.passario.dto.BridgeRequest;
+import com.catacumbas69.passario.dto.BridgeResponse;
+import com.catacumbas69.passario.dto.BridgeStatusResponse;
 import com.catacumbas69.passario.service.BridgeManager;
-import com.catacumbas69.passario.service.BridgeWorkerStatus;
-import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-import java.time.Instant;
+import com.catacumbas69.passario.service.BridgeService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import java.net.URI;
 import java.util.List;
-import java.util.Map;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.UriComponentsBuilder;
 
+/**
+ * CRUD and runtime status of bridges. Changes are stored only; the running workers follow within one
+ * reconcile interval (ARCH-4).
+ */
+@Tag(name = "Bridges")
 @RestController
-@RequestMapping("/api/bridges")
-@RequiredArgsConstructor
+@RequestMapping("/api/v1/bridges")
 public class BridgeController {
 
-    private final BridgeRepository repository;
+    private final BridgeService service;
     private final BridgeManager manager;
+    private final BridgeMapper mapper;
 
-    // ── CRUD ──────────────────────────────────────────────────────────────────
+    /**
+     * Creates the controller.
+     *
+     * @param service bridge definitions
+     * @param manager bridge runtime
+     * @param mapper API ↔ model mapping
+     */
+    public BridgeController(BridgeService service, BridgeManager manager, BridgeMapper mapper) {
+        this.service = service;
+        this.manager = manager;
+        this.mapper = mapper;
+    }
 
+    /**
+     * Lists every bridge, sorted by name.
+     *
+     * @return all bridges
+     */
+    @Operation(summary = "List bridges")
     @GetMapping
-    public List<BridgeDocument> list() {
-        return repository.findAll();
+    public List<BridgeResponse> list() {
+        return service.findAll().stream().map(mapper::toResponse).toList();
     }
 
+    /**
+     * Returns one bridge.
+     *
+     * @param id bridge id
+     * @return the bridge
+     */
+    @Operation(summary = "Get a bridge")
     @GetMapping("/{id}")
-    public ResponseEntity<BridgeDocument> get(@PathVariable String id) {
-        return repository.findById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public BridgeResponse get(@PathVariable String id) {
+        return mapper.toResponse(service.get(id));
     }
 
+    /**
+     * Creates a bridge.
+     *
+     * @param request new definition
+     * @param uriBuilder builder for the {@code Location} header
+     * @return {@code 201} with the stored bridge
+     */
+    @Operation(summary = "Create a bridge")
     @PostMapping
-    public ResponseEntity<?> create(@RequestBody BridgeDocument bridge) {
-        String error = validate(bridge);
-        if (error != null) return ResponseEntity.badRequest().body(Map.of("message", error));
-        normalize(bridge);
-        bridge.setId(null);
-        bridge.setCreatedAt(Instant.now());
-        bridge.setUpdatedAt(Instant.now());
-        return ResponseEntity.ok(repository.save(bridge));
+    public ResponseEntity<BridgeResponse> create(@Valid @RequestBody BridgeRequest request,
+                                                 UriComponentsBuilder uriBuilder) {
+        BridgeResponse created = mapper.toResponse(service.create(mapper.toDocument(request)));
+        URI location = uriBuilder.path("/api/v1/bridges/{id}").buildAndExpand(created.id()).toUri();
+        return ResponseEntity.created(location).body(created);
     }
 
+    /**
+     * Replaces a bridge definition. Send the {@code version} you edited to detect concurrent changes.
+     *
+     * @param id bridge id
+     * @param request new definition
+     * @return the stored bridge
+     */
+    @Operation(summary = "Update a bridge")
     @PutMapping("/{id}")
-    public ResponseEntity<?> update(
-            @PathVariable String id,
-            @RequestBody BridgeDocument bridge) {
-        String error = validate(bridge);
-        if (error != null) return ResponseEntity.badRequest().body(Map.of("message", error));
-        return repository.findById(id).<ResponseEntity<?>>map(existing -> {
-            normalize(bridge);
-            bridge.setId(id);
-            bridge.setCreatedAt(existing.getCreatedAt());
-            bridge.setUpdatedAt(Instant.now());
-            return ResponseEntity.ok(repository.save(bridge));
-        }).orElse(ResponseEntity.notFound().build());
+    public BridgeResponse update(@PathVariable String id, @Valid @RequestBody BridgeRequest request) {
+        return mapper.toResponse(service.update(id, mapper.toDocument(request), request.version()));
     }
 
-    // ── Validation ────────────────────────────────────────────────────────────
-
-    private String validate(BridgeDocument b) {
-        if (b.getName() == null || b.getName().isBlank()) return "Name is required";
-        if (b.getSource() == null || b.getSource().getTopic() == null || b.getSource().getTopic().isBlank())
-            return "Source topic is required";
-        if (b.getSource().getSubscription() == null || b.getSource().getSubscription().isBlank())
-            return "Subscription name is required";
-        List<String> dests = b.resolveDestinationTopics();
-        if (dests.isEmpty()) return "At least one destination topic is required";
-        if (dests.contains(b.getSource().getTopic())) return "A destination cannot be the source topic";
-        return null;
-    }
-
-    /** Moves a legacy single {@code destination} into {@code destinations} and de-duplicates. */
-    private void normalize(BridgeDocument b) {
-        List<BridgeDestination> list = b.resolveDestinationTopics().stream().map(t -> {
-            BridgeDestination d = new BridgeDestination();
-            d.setTopic(t);
-            return d;
-        }).toList();
-        b.setDestinations(new java.util.ArrayList<>(list));
-        b.setDestination(null);
-    }
-
+    /**
+     * Deletes a bridge.
+     *
+     * @param id bridge id
+     */
+    @Operation(summary = "Delete a bridge")
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable String id) {
-        if (!repository.existsById(id)) return ResponseEntity.notFound().build();
-        repository.deleteById(id);
-        return ResponseEntity.noContent().build();
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable String id) {
+        service.delete(id);
     }
 
-    // ── Enable / Disable ──────────────────────────────────────────────────────
-
+    /**
+     * Enables a bridge. Idempotent.
+     *
+     * @param id bridge id
+     * @return the bridge
+     */
+    @Operation(summary = "Enable a bridge")
     @PostMapping("/{id}/enable")
-    public ResponseEntity<BridgeDocument> enable(@PathVariable String id) {
-        return repository.findById(id).map(bridge -> {
-            bridge.setEnabled(true);
-            bridge.setUpdatedAt(Instant.now());
-            return ResponseEntity.ok(repository.save(bridge));
-        }).orElse(ResponseEntity.notFound().build());
+    public BridgeResponse enable(@PathVariable String id) {
+        return mapper.toResponse(service.setEnabled(id, true));
     }
 
+    /**
+     * Disables a bridge. Idempotent.
+     *
+     * @param id bridge id
+     * @return the bridge
+     */
+    @Operation(summary = "Disable a bridge")
     @PostMapping("/{id}/disable")
-    public ResponseEntity<BridgeDocument> disable(@PathVariable String id) {
-        return repository.findById(id).map(bridge -> {
-            bridge.setEnabled(false);
-            bridge.setUpdatedAt(Instant.now());
-            return ResponseEntity.ok(repository.save(bridge));
-        }).orElse(ResponseEntity.notFound().build());
+    public BridgeResponse disable(@PathVariable String id) {
+        return mapper.toResponse(service.setEnabled(id, false));
     }
 
-    // ── Status ────────────────────────────────────────────────────────────────
-
+    /**
+     * Returns the runtime status of every running, starting or failed bridge.
+     *
+     * @return runtime status
+     */
+    @Operation(summary = "Runtime status of the bridges")
     @GetMapping("/status")
-    public Map<String, Object> status() {
-        List<BridgeWorkerStatus> workers = manager.getStatuses();
-        return Map.of(
-                "activeCount", manager.getActiveCount(),
-                "workers", workers
-        );
+    public BridgeStatusResponse status() {
+        return new BridgeStatusResponse(manager.getRunningCount(), manager.getStatuses());
     }
 }
