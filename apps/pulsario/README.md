@@ -1,174 +1,101 @@
 # Pulsário
 
-A lightweight, dark-themed admin UI for [Apache Pulsar](https://pulsar.apache.org/) built with Spring Boot and Alpine.js. Pulsário lets you explore your Pulsar cluster, manage topics and subscriptions, produce messages, and peek at backlog — all from a single-page interface with no build step.
+A dark-themed web console for [Apache Pulsar](https://pulsar.apache.org/) built with Spring Boot and
+Alpine.js. Browse tenants, namespaces and topics; manage subscriptions; produce, peek and skip messages;
+and manage **Passário bridges** (topic fan-out) — all from one page with no frontend build step.
 
----
+Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs/adr`](../docs/adr).
 
 ## Features
 
 | Area | What you can do |
 |---|---|
-| **Cluster tree** | Browse tenants → namespaces → topics in a collapsible sidebar |
-| **Stats** | View per-topic statistics: message rate, throughput, storage size, producer/consumer counts |
-| **Subscriptions** | List, create, and delete subscriptions on any topic |
-| **Produce** | Send messages to a topic with an optional message key |
-| **Peek Backlog** | Non-destructively inspect the first N messages in a subscription's backlog, then Skip individual messages or Skip All |
-| **Health check** | Verify connectivity to the Pulsar cluster from the browser via the Spring backend (CORS-safe) |
-
----
+| **Cluster tree** | Browse tenants → namespaces → topics; create and delete topics |
+| **Overview** | Message rates, throughput, backlog, producers, subscriptions, storage |
+| **Subscriptions** | List, create and delete subscriptions |
+| **Produce** | Send a message with an optional key |
+| **Backlog** | Peek up to 100 messages without consuming them; view, edit & re-produce, skip one or all |
+| **Bridges** | Create, edit, enable/disable and delete Passário bridges; see running state, throughput and errors |
+| **Audit** | Every change is recorded in MongoDB (`audit_logs`), asynchronously and best-effort |
 
 ## Architecture
 
 ```
-Browser (Alpine.js SPA)
-        │  REST API calls
-        ▼
-Spring Boot (port 8081)
-  ├── /api/tenants
-  ├── /api/namespaces/{tenant}
-  ├── /api/topics/{tenant}/{ns}
-  ├── /api/topics/{tenant}/{ns}/{topic}/stats
-  ├── /api/topics/{tenant}/{ns}/{topic}/subscriptions
-  ├── /api/topics/{tenant}/{ns}/{topic}/produce
-  ├── /api/topics/{tenant}/{ns}/{topic}/peek/{sub}?count=N
-  └── /api/topics/{tenant}/{ns}/{topic}/subscriptions/{sub}/skip/{n}
-        │  Pulsar Admin HTTP API
-        ▼
-Apache Pulsar cluster (192.168.86.35, NodePort 31080)
+Browser (Alpine.js)
+    │  same-origin REST  /api/v1/**
+    ▼
+Pulsário  :8081  (Spring Boot)
+    ├── /api/v1/tenants, /namespaces, /topics/**  ──► Pulsar admin API (HTTP)  +  Pulsar client (produce)
+    ├── /api/v1/bridges/**  (BFF, ADR 0001)        ──► Passário :8082
+    ├── /api/v1/audit                              ──► MongoDB catacumbas69.audit_logs
+    └── /actuator/**, /swagger-ui.html
 ```
 
-The browser never contacts Pulsar directly — all admin calls are proxied through Spring Boot, which avoids CORS issues and keeps the Pulsar endpoint hidden from the client.
-
----
-
-## Technology Stack
-
-| Layer | Technology |
-|---|---|
-| **Backend** | Java 21 · Spring Boot 3.3.4 · Spring Web (RestTemplate) |
-| **Frontend** | Alpine.js 3.14.8 (CDN, no build step) |
-| **Styling** | Vanilla CSS with CSS custom properties (dark theme) |
-| **Pulsar client** | Pulsar Admin REST API (HTTP, not the Java client library) |
-| **Packaging** | Maven · Spring Boot fat JAR |
-
----
-
-## Project Structure
-
-```
-pulsario/
-├── pom.xml
-└── src/main/
-    ├── java/com/catacumbas69/pulsario/
-    │   ├── PulsarioApplication.java          # Spring Boot entry point
-    │   ├── config/
-    │   │   └── PulsarConfig.java             # RestTemplate bean, base URL config
-    │   ├── controller/
-    │   │   └── PulsarController.java         # REST endpoints exposed to the UI
-    │   └── service/
-    │       └── PulsarAdminService.java       # Calls to Pulsar Admin API
-    └── resources/
-        ├── application.properties            # pulsar.admin.url, server.port
-        └── static/
-            ├── index.html                    # Single-page app shell + Alpine.js component
-            ├── pulsario.js                   # app() function — all reactive state & API logic
-            ├── pulsario.css                  # Full dark-theme stylesheet
-            ├── pulsario-icon.svg             # Brand icon (SVG)
-            └── favicon.png                   # 32×32 PNG favicon for browser tab
-```
-
----
+- The browser never talks to Pulsar or Passário directly: no CORS, and Passário stays internal.
+- Producers are cached per topic and closed after 5 minutes idle (no producer per request).
+- Pulsar, Passário and MongoDB outages only affect the features that need them: the page keeps working
+  and shows a clear error (Problem Details) for the failing call.
 
 ## Configuration
 
-`src/main/resources/application.properties`:
+All settings have in-cluster defaults in `application.properties`; override them with environment variables.
 
-```properties
-server.port=8081
-pulsar.admin.url=http://192.168.86.35:31080
-```
+| Variable | In the cluster | Local (IntelliJ on necromancer) |
+|---|---|---|
+| `PULSAR_SERVICE_URL` | `http://pulsar.pulsar.svc.cluster.local:8080` | `http://192.168.86.35:31080` |
+| `PULSAR_BROKER_URL` | `pulsar://pulsar.pulsar.svc.cluster.local:6650` | `pulsar://192.168.86.35:31650` |
+| `PULSAR_LISTENER_NAME` | *(empty)* | `external` |
+| `PASSARIO_URL` | `http://passario:8082` | `http://localhost:8082` |
+| `SPRING_DATA_MONGODB_URI` | in-cluster ReplicaSet URI (Secret) | NodePort `32017` + `authSource=admin&directConnection=true` |
+| `LOGGING_STRUCTURED_FORMAT_CONSOLE` | `ecs` (JSON logs for Loki) | *(unset)* |
 
-The Pulsar URL can also be overridden at runtime from the Settings panel in the UI (stored in `localStorage`). The **Settings → Health Check** button calls `/api/tenants` through the backend to verify the connection without CORS errors.
+Timeouts, producer cache size and the peek limit are under `pulsario.*` in `application.properties`.
 
----
-
-## Running Locally
-
-### Prerequisites
-
-- Java 21+
-- Maven 3.8+
-- A running Apache Pulsar cluster (standalone or distributed)
-
-### Build & Run
+## Build, test, run
 
 ```bash
-cd apps/pulsario
-mvn package -DskipTests
-java -jar target/pulsario-*.jar
+mvn verify                       # unit + slice tests, then Checkstyle
+mvn spring-boot:run              # or run PulsarioApplication from IntelliJ
 ```
 
-Then open [http://localhost:8081](http://localhost:8081).
+Unit tests need no Docker, MongoDB, Pulsar or Passário. Open <http://localhost:8081>.
 
-### Development
+Static files are versioned (`pulsario.js?v=N`, `pulsario.css?v=N`); bump `N` in `index.html` whenever you
+change them (UI-2). The server sends `Cache-Control: no-cache`.
 
-```bash
-mvn spring-boot:run
-```
+## API
 
-> **Note:** Static resources (`index.html`, `pulsario.js`, `pulsario.css`) are embedded in the JAR at compile time. If you change a static file while running from a compiled JAR, rebuild and restart to pick up the changes. With `spring-boot:run` (dev mode), changes to static files under `src/main/resources/static/` are served live without a restart.
-
----
-
-## UI Overview
-
-### Sidebar — Cluster Tree
-
-The left panel shows the tenant → namespace → topic hierarchy. Click any level to select it. Topics can be deleted inline. New topics are created from the **Stats** tab.
-
-### Main Panel — Tabs
-
-After selecting a topic, four tabs appear:
-
-**Stats** — Key topic metrics (messages in, messages out, rate, size, producer/consumer counts) displayed as stat cards plus a per-subscription backlog breakdown table.
-
-**Subscriptions** — Lists all subscriptions with a Create / Delete inline form.
-
-**Produce** — Free-text message producer with an optional key field. Shows the returned `messageId` on success.
-
-**Peek Backlog** — Pick a subscription from the styled listbox, choose how many messages to fetch (default 10, max 100), then click **Peek**. Messages appear in a table with payload, key, publish time, and producer name. Each row has **View** (formatted JSON modal), **Edit & Re-produce**, and **Skip** buttons. A **Skip All** button at the top skips every fetched message in one call.
-
-### Connection Status
-
-The top-right chip shows the Pulsar host and a coloured dot (green = OK, red = error, amber = checking). Click it to open the Settings drawer where you can change the cluster URL and run a health check.
-
----
-
-## API Endpoints
+Full contract: <http://localhost:8081/swagger-ui.html>. Errors are RFC 9457 Problem Details.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/tenants` | List all tenants |
-| `GET` | `/api/namespaces/{tenant}` | List namespaces for a tenant |
-| `GET` | `/api/topics/{tenant}/{ns}` | List topics in a namespace |
-| `GET` | `/api/topics/{tenant}/{ns}/{topic}/stats` | Topic statistics |
-| `GET` | `/api/topics/{tenant}/{ns}/{topic}/subscriptions` | List subscriptions |
-| `POST` | `/api/topics/{tenant}/{ns}/{topic}/subscriptions/{sub}` | Create subscription |
-| `DELETE` | `/api/topics/{tenant}/{ns}/{topic}/subscriptions/{sub}` | Delete subscription |
-| `POST` | `/api/topics/{tenant}/{ns}/{topic}/produce` | Produce a message `{payload, key}` |
-| `GET` | `/api/topics/{tenant}/{ns}/{topic}/peek/{sub}?count=N` | Peek at backlog messages |
-| `POST` | `/api/topics/{tenant}/{ns}/{topic}/subscriptions/{sub}/skip/{n}` | Skip N messages |
-| `POST` | `/api/topics/{tenant}/{ns}/{topic}` | Create topic |
-| `DELETE` | `/api/topics/{tenant}/{ns}/{topic}` | Delete topic |
+| `GET` | `/api/v1/tenants` | List tenants |
+| `GET` | `/api/v1/namespaces/{tenant}` | List namespaces |
+| `GET` | `/api/v1/topics/{tenant}/{ns}` | List topics |
+| `POST` / `DELETE` | `/api/v1/topics/{tenant}/{ns}/{topic}` | Create (`201`) / delete (`204`) a topic |
+| `GET` | `/api/v1/topics/{tenant}/{ns}/{topic}/stats` | Topic statistics |
+| `GET` | `/api/v1/topics/{tenant}/{ns}/{topic}/subscriptions` | List subscriptions |
+| `POST` / `DELETE` | `/api/v1/topics/{tenant}/{ns}/{topic}/subscriptions/{sub}` | Create (`201`) / delete (`204`) |
+| `POST` | `/api/v1/topics/{tenant}/{ns}/{topic}/produce` | Produce `{payload, key?, properties?}` |
+| `GET` | `/api/v1/topics/{tenant}/{ns}/{topic}/peek/{sub}?count=N` | Peek 1–100 backlog messages |
+| `POST` | `/api/v1/topics/{tenant}/{ns}/{topic}/subscriptions/{sub}/skip/{n}` | Skip `n` messages (`204`) |
+| `*` | `/api/v1/bridges/**` | Bridges, forwarded to Passário (see Passário's API) |
+| `GET` | `/api/v1/audit?page=0&size=50` | Audit log, newest first |
 
----
+| Status | Meaning |
+|---|---|
+| `400` | Invalid name, count or body — `errors` lists each field |
+| `404` / `409` | Pulsar says the resource is missing / already exists |
+| `502` | Pulsar failed or is unreachable |
+| `503` | Passário is unreachable (Bridges panel only) |
 
-## Deployment
+## Operate
 
-The app is packaged as a single fat JAR and can run anywhere Java is available. In the reference environment it runs on a NUC host alongside an Apache Pulsar standalone cluster on MicroShift, with Pulsar exposed on NodePort `31080` (HTTP admin) and `31650` (binary protocol).
+| Endpoint | Use |
+|---|---|
+| `/actuator/health/liveness` | liveness probe |
+| `/actuator/health/readiness` | readiness probe (application state only — dependencies degrade per feature) |
+| `/actuator/health` | details: `pulsar`, `passario`, `mongo` components |
+| `/actuator/prometheus` | HTTP, JVM and Pulsar client metrics |
 
----
-
-## License
-
-MIT
+Container image: `Dockerfile` (multi-stage, layered jar, non-root).

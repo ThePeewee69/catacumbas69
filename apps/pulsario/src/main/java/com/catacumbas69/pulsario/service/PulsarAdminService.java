@@ -1,135 +1,149 @@
 package com.catacumbas69.pulsario.service;
 
-import com.catacumbas69.pulsario.dto.MessageDTO;
+import java.util.List;
 import org.apache.pulsar.client.admin.PulsarAdmin;
-import org.apache.pulsar.client.api.*;
+import org.apache.pulsar.client.admin.PulsarAdminException;
+import org.apache.pulsar.client.api.MessageId;
 import org.apache.pulsar.common.policies.data.TopicStats;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.Base64;
-import java.util.List;
-import java.util.stream.Collectors;
-
+/**
+ * Tenants, namespaces, topics, statistics and subscriptions through the Pulsar admin API.
+ */
 @Service
 public class PulsarAdminService {
 
-    @Autowired
-    private PulsarAdmin admin;
+    private final PulsarAdmin admin;
+    private final ProducerCache producers;
 
-    @Autowired
-    private PulsarClient client;
+    /**
+     * Creates the service.
+     *
+     * @param admin Pulsar admin client
+     * @param producers producer cache, cleared for deleted topics
+     */
+    public PulsarAdminService(PulsarAdmin admin, ProducerCache producers) {
+        this.admin = admin;
+        this.producers = producers;
+    }
 
-    // ─── Tenants & Namespaces ─────────────────────────────────────────────────
-
-    public List<String> listTenants() throws Exception {
+    /**
+     * Lists tenants.
+     *
+     * @return tenant names
+     * @throws PulsarAdminException if Pulsar rejects the request
+     */
+    public List<String> listTenants() throws PulsarAdminException {
         return admin.tenants().getTenants();
     }
 
-    public List<String> listNamespaces(String tenant) throws Exception {
-        List<String> ns = admin.namespaces().getNamespaces(tenant);
-        // Return only the namespace part (strip "tenant/")
-        return ns.stream()
-                .map(n -> n.contains("/") ? n.substring(n.indexOf('/') + 1) : n)
-                .collect(Collectors.toList());
+    /**
+     * Lists the namespaces of a tenant.
+     *
+     * @param tenant tenant name
+     * @return namespace names without the tenant prefix
+     * @throws PulsarAdminException if Pulsar rejects the request
+     */
+    public List<String> listNamespaces(String tenant) throws PulsarAdminException {
+        return admin.namespaces().getNamespaces(tenant).stream()
+                .map(PulsarAdminService::lastSegment)
+                .toList();
     }
 
-    // ─── Topics ───────────────────────────────────────────────────────────────
-
-    public List<String> listTopics(String tenant, String namespace) throws Exception {
-        String ns = tenant + "/" + namespace;
-        List<String> persistent = admin.topics().getList(ns);
-        if (persistent == null) return List.of();
-        // Return only the topic name (strip "persistent://tenant/namespace/")
-        return persistent.stream()
-                .map(t -> {
-                    String[] parts = t.split("/");
-                    return parts[parts.length - 1];
-                })
-                .collect(Collectors.toList());
-    }
-
-    public void createTopic(String fullTopic) throws Exception {
-        admin.topics().createNonPartitionedTopic(fullTopic);
-    }
-
-    public void deleteTopic(String fullTopic) throws Exception {
-        admin.topics().delete(fullTopic, true);
-    }
-
-    // ─── Stats ────────────────────────────────────────────────────────────────
-
-    public TopicStats getTopicStats(String fullTopic) throws Exception {
-        return admin.topics().getStats(fullTopic);
-    }
-
-    // ─── Subscriptions ────────────────────────────────────────────────────────
-
-    public List<String> listSubscriptions(String fullTopic) throws Exception {
-        return admin.topics().getSubscriptions(fullTopic);
-    }
-
-    public void createSubscription(String fullTopic, String subscription) throws Exception {
-        admin.topics().createSubscription(fullTopic, subscription, MessageId.earliest);
-    }
-
-    public void deleteSubscription(String fullTopic, String subscription) throws Exception {
-        admin.topics().deleteSubscription(fullTopic, subscription);
-    }
-
-    // ─── Produce ──────────────────────────────────────────────────────────────
-
-    public String produce(String fullTopic, String payload, String key) throws Exception {
-        try (Producer<byte[]> producer = client.newProducer()
-                .topic(fullTopic)
-                .enableBatching(false)
-                .create()) {
-
-            TypedMessageBuilder<byte[]> msg = producer.newMessage()
-                    .value(payload.getBytes(StandardCharsets.UTF_8));
-
-            if (key != null && !key.isBlank()) {
-                msg.key(key);
-            }
-
-            MessageId msgId = msg.send();
-            return msgId.toString();
+    /**
+     * Lists the persistent topics of a namespace.
+     *
+     * @param tenant tenant name
+     * @param namespace namespace name
+     * @return topic names without the {@code persistent://tenant/namespace/} prefix
+     * @throws PulsarAdminException if Pulsar rejects the request
+     */
+    public List<String> listTopics(String tenant, String namespace) throws PulsarAdminException {
+        List<String> topics = admin.topics().getList(tenant + "/" + namespace);
+        if (topics == null) {
+            return List.of();
         }
+        return topics.stream().map(PulsarAdminService::lastSegment).toList();
     }
 
-    // ─── Peek Messages (backlog) ──────────────────────────────────────────────
+    /**
+     * Creates a non-partitioned topic.
+     *
+     * @param topic fully-qualified topic
+     * @throws PulsarAdminException if Pulsar rejects the request (e.g. it already exists)
+     */
+    public void createTopic(String topic) throws PulsarAdminException {
+        admin.topics().createNonPartitionedTopic(topic);
+    }
 
-    public List<MessageDTO> peekMessages(String fullTopic, String subscription, int count) throws Exception {
-        var messages = admin.topics().peekMessages(fullTopic, subscription, Math.min(count, 100));
-        return messages.stream().map(m -> {
-            byte[] data = m.getData();
-            boolean isBinary = false;
-            String payloadStr;
+    /**
+     * Deletes a topic, even if it has producers or subscriptions.
+     *
+     * @param topic fully-qualified topic
+     * @throws PulsarAdminException if Pulsar rejects the request
+     */
+    public void deleteTopic(String topic) throws PulsarAdminException {
+        producers.remove(topic);
+        admin.topics().delete(topic, true);
+    }
 
-            // Try to decode as UTF-8; fall back to base64
-            try {
-                payloadStr = new String(data, StandardCharsets.UTF_8);
-                // Sanity check: if it contains many replacement chars, it's probably binary
-                long replacements = payloadStr.chars().filter(c -> c == '�').count();
-                if (replacements > data.length * 0.1) {
-                    payloadStr = Base64.getEncoder().encodeToString(data);
-                    isBinary = true;
-                }
-            } catch (Exception e) {
-                payloadStr = Base64.getEncoder().encodeToString(data);
-                isBinary = true;
-            }
+    /**
+     * Returns topic statistics.
+     *
+     * @param topic fully-qualified topic
+     * @return the statistics
+     * @throws PulsarAdminException if Pulsar rejects the request
+     */
+    public TopicStats getTopicStats(String topic) throws PulsarAdminException {
+        return admin.topics().getStats(topic);
+    }
 
-            return new MessageDTO(
-                    m.getMessageId().toString(),
-                    payloadStr,
-                    m.getKey(),
-                    m.getPublishTime(),
-                    m.getProperties(),
-                    isBinary
-            );
-        }).collect(Collectors.toList());
+    /**
+     * Lists the subscriptions of a topic.
+     *
+     * @param topic fully-qualified topic
+     * @return subscription names
+     * @throws PulsarAdminException if Pulsar rejects the request
+     */
+    public List<String> listSubscriptions(String topic) throws PulsarAdminException {
+        return admin.topics().getSubscriptions(topic);
+    }
+
+    /**
+     * Creates a subscription positioned at the earliest message.
+     *
+     * @param topic fully-qualified topic
+     * @param subscription subscription name
+     * @throws PulsarAdminException if Pulsar rejects the request
+     */
+    public void createSubscription(String topic, String subscription) throws PulsarAdminException {
+        admin.topics().createSubscription(topic, subscription, MessageId.earliest);
+    }
+
+    /**
+     * Deletes a subscription.
+     *
+     * @param topic fully-qualified topic
+     * @param subscription subscription name
+     * @throws PulsarAdminException if Pulsar rejects the request
+     */
+    public void deleteSubscription(String topic, String subscription) throws PulsarAdminException {
+        admin.topics().deleteSubscription(topic, subscription);
+    }
+
+    /**
+     * Builds the fully-qualified name of a persistent topic.
+     *
+     * @param tenant tenant name
+     * @param namespace namespace name
+     * @param topic topic name
+     * @return {@code persistent://tenant/namespace/topic}
+     */
+    public static String persistentTopic(String tenant, String namespace, String topic) {
+        return "persistent://" + tenant + "/" + namespace + "/" + topic;
+    }
+
+    private static String lastSegment(String name) {
+        return name.substring(name.lastIndexOf('/') + 1);
     }
 }

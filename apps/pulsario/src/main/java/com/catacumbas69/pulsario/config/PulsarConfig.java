@@ -1,50 +1,60 @@
 package com.catacumbas69.pulsario.config;
 
+import java.util.concurrent.TimeUnit;
 import org.apache.pulsar.client.admin.PulsarAdmin;
 import org.apache.pulsar.client.api.ClientBuilder;
 import org.apache.pulsar.client.api.PulsarClient;
-import org.springframework.beans.factory.annotation.Value;
+import org.apache.pulsar.client.api.PulsarClientException;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.util.StringUtils;
 
-import java.util.concurrent.TimeUnit;
-
+/**
+ * Creates the shared {@link PulsarAdmin} and {@link PulsarClient} (PUL-1, PERF-6). Neither connects
+ * when built, so the application starts even when Pulsar is down (RES-1).
+ */
 @Configuration
 public class PulsarConfig {
 
-    @Value("${pulsar.service-url}")
-    private String serviceUrl;
-
-    @Value("${pulsar.broker-url}")
-    private String brokerUrl;
-
-    /** Listener a usar no lookup do broker.
-     *  Vazio (padrão) → acesso interno no cluster (pod IP routable).
-     *  "external"     → acesso externo via NodePort 31650 (Mac/IntelliJ). */
-    @Value("${pulsar.listener-name:}")
-    private String listenerName;
-
-    @Bean
-    public PulsarAdmin pulsarAdmin() throws Exception {
+    /**
+     * Admin client for the Pulsar HTTP API.
+     *
+     * @param properties application properties
+     * @return the admin client, closed on shutdown
+     * @throws PulsarClientException if the configuration is invalid
+     */
+    @Bean(destroyMethod = "close")
+    public PulsarAdmin pulsarAdmin(PulsarioProperties properties) throws PulsarClientException {
+        PulsarioProperties.Pulsar pulsar = properties.pulsar();
         return PulsarAdmin.builder()
-                .serviceHttpUrl(serviceUrl)
-                .connectionTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(60, TimeUnit.SECONDS)
-                .requestTimeout(60, TimeUnit.SECONDS)
+                .serviceHttpUrl(pulsar.serviceUrl())
+                .connectionTimeout(toInt(pulsar.adminConnectTimeout().toMillis()), TimeUnit.MILLISECONDS)
+                .readTimeout(toInt(pulsar.adminReadTimeout().toMillis()), TimeUnit.MILLISECONDS)
+                .requestTimeout(toInt(pulsar.adminRequestTimeout().toMillis()), TimeUnit.MILLISECONDS)
                 .build();
     }
 
+    /**
+     * Binary-protocol client used to produce messages.
+     *
+     * @param properties application properties
+     * @return the client, closed on shutdown
+     * @throws PulsarClientException if the configuration is invalid
+     */
     @Bean(destroyMethod = "close")
-    public PulsarClient pulsarClient() throws Exception {
+    public PulsarClient pulsarClient(PulsarioProperties properties) throws PulsarClientException {
+        PulsarioProperties.Pulsar pulsar = properties.pulsar();
         ClientBuilder builder = PulsarClient.builder()
-                .serviceUrl(brokerUrl)
-                .operationTimeout(30, TimeUnit.SECONDS)
-                .connectionTimeout(30, TimeUnit.SECONDS);
-
-        if (listenerName != null && !listenerName.isBlank()) {
-            builder.listenerName(listenerName);
+                .serviceUrl(pulsar.brokerUrl())
+                .connectionTimeout(toInt(pulsar.connectionTimeout().toMillis()), TimeUnit.MILLISECONDS)
+                .operationTimeout(toInt(pulsar.operationTimeout().toMillis()), TimeUnit.MILLISECONDS);
+        if (StringUtils.hasText(pulsar.listenerName())) {
+            builder.listenerName(pulsar.listenerName());
         }
-
         return builder.build();
+    }
+
+    private static int toInt(long millis) {
+        return (int) Math.min(Integer.MAX_VALUE, millis);
     }
 }

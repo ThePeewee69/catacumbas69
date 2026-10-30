@@ -498,45 +498,31 @@ The code does not yet follow every rule. Agents fixing a gap remove it here in t
 
 | ID | Service | Gap | Rule |
 |---|---|---|---|
-| G-1 | Pulsário | Spring Boot 3.3.4 is out of OSS support | §4 baseline |
-| G-2 | Pulsário | Endpoints are under `/api/…`, not `/api/v1/…` | API-1 |
-| G-3 | Pulsário | No OpenAPI (springdoc) | API-6 |
-| G-4 | Pulsário | No Problem Details / central exception handler; ad-hoc `{error}` bodies | API-4 |
-| G-5 | Pulsário | No Jakarta Validation on request types | API-5 |
-| G-6 | both | No Testcontainers integration tests; Pulsário has only a placeholder test | TEST-1..3 |
-| G-7 | Pulsário | Plain-text logs; no Prometheus metrics | OBS-3, OBS-5 |
-| G-9 | Pulsário | UI calls Passário directly from the browser (CORS allowed from `PASSARIO_CORS_ALLOWED_ORIGINS`) instead of a BFF proxy; bridge actions not audited | ARCH-2, API-7, OBS-6 |
-| G-11 | Pulsário | No UI smoke test | TEST-4 |
-| G-16 | Passário | No Kubernetes manifests yet (Dockerfile exists) | OPS-2..4 |
-| G-17 | Pulsário | No Checkstyle, ESLint, Stylelint, html-validate or Prettier | JAVA-7, HTML-5, JS-6, CSS-6 |
-| G-18 | Pulsário | Missing Javadoc, `package-info.java`, JSDoc and README update | DOC-1, DOC-2, DOC-3, JS-4 |
+| G-6 | both | No Testcontainers integration tests (unit and slice tests exist) | TEST-3 |
+| G-11 | Pulsário | No Playwright UI smoke test in the build | TEST-4 |
+| G-16 | both | No Kubernetes manifests in the GitOps repo yet (Dockerfiles exist) | OPS-2..4 |
+| G-17 | Pulsário | No ESLint, Stylelint, html-validate or Prettier for the static UI | HTML-5, JS-6, CSS-6 |
+| G-18 | Pulsário | JSDoc missing on most `pulsario.js` methods | JS-4 |
 | G-20 | Pulsário | Clickable `<div>`s in the sidebar tree and pickers; many inline `style=""`; modals without `role="dialog"`; decorative SVGs without `aria-hidden` | HTML-1, HTML-2, HTML-4 |
 | G-21 | both | No CI pipeline running `mvn verify` and the frontend linters on every push | TEST-5 |
-| G-22 | Pulsário | `Dockerfile` copies `target/pulsar-client-*.jar`, but the artifact is `pulsario-*.jar` | OPS-1 |
-| G-24 | Pulsário | Remote calls rely on library default timeouts; no MongoDB server-selection timeout | RES-2 |
 
-Closed for Passário (2026-10-30, `mvn verify` green, 46 tests, 0 Checkstyle violations): Boot 3.5, Pulsar
-client 4.0.3, `@ConfigurationProperties`, auditing, indexes, `/api/v1`, DTOs, validation, Problem Details,
-OpenAPI, Actuator probes, Micrometer meters, MDC, async fan-out with ordering modes, start back-off,
-`@Version`, explicit timeouts, Javadoc, `package-info.java`, ADRs 0001–0004, README, Dockerfile (G-8, G-10,
-G-12, G-13, G-14 partly, G-15, G-19, G-23).
+Closed on 2026-10-30:
+
+- **Passário** (`mvn verify` green, 46 tests, 0 Checkstyle violations): Boot 3.5, Pulsar client 4.0.3,
+  `@ConfigurationProperties`, auditing, indexes, `/api/v1`, DTOs, validation, Problem Details, OpenAPI,
+  Actuator probes, Micrometer meters, MDC, async fan-out with ordering modes, start back-off, `@Version`,
+  explicit timeouts, Javadoc, `package-info.java`, README, Dockerfile, CORS closed.
+- **Pulsário**: Boot 3.5, `@ConfigurationProperties`, explicit timeouts, `/api/v1`, DTOs, validation with
+  `@PulsarName`, Problem Details (Pulsar 4xx kept, 5xx → 502, Passário down → 503), OpenAPI, bridge BFF with
+  audit, asynchronous best-effort audit, audit indexes, producer cache, skip endpoint (was missing),
+  `binary` flag fix, health indicators, Prometheus, Javadoc, `package-info.java`, Checkstyle, README,
+  Dockerfile fix, English UI strings.
+- **Shared**: ADRs 0001–0004, `.editorconfig`, `build/checkstyle.xml`.
 
 ### Remediation plan
 
-Applied in this order; each phase ends with `mvn verify` green and the app running locally.
-
-1. **Foundations** — G-1, G-8, G-13, G-14, G-17, G-24: Boot upgrade, aligned Pulsar client,
-   `@ConfigurationProperties`, Mongo auditing and indexes, CORS from config, and the formatter/linter
-   tooling — so every later phase is checked automatically.
-2. **API contract** — G-2, G-3, G-4, G-5, G-12: `/api/v1`, DTO records, validation, Problem Details,
-   springdoc.
-3. **BFF** — G-9: Pulsário proxies `/api/v1/bridges/**` to Passário and audits mutations; UI switches to
-   same-origin calls; Passário CORS disabled.
-4. **Performance & resilience** — G-23: async pipelined fan-out, ordering modes, back-off, optimistic
-   locking, graceful shutdown.
-5. **Observability** — G-7, G-15: Actuator probes, JSON logs, MDC, Micrometer meters.
-6. **Tests** — G-6, G-11: unit, slice, Testcontainers, Playwright smoke.
-7. **UI conventions** — G-10, G-20: English strings, semantic and accessible markup, inline styles moved
-   to CSS.
-8. **Documentation** — G-18, G-19: Javadoc, `package-info.java`, JSDoc, ADRs, README per service.
-9. **Deploy** — G-16, G-21, G-22: Passário Dockerfile and manifests for ArgoCD.
+1. **UI conventions** — G-17, G-18, G-20: frontend lint tooling, JSDoc, semantic and accessible markup,
+   inline styles moved to CSS.
+2. **Tests** — G-6, G-11: Testcontainers integration tests (MongoDB, Pulsar), Playwright smoke test.
+3. **Delivery** — G-16, G-21: manifests for ArgoCD (Passário `replicas: 1`, probes, Secrets) and a CI
+   pipeline.

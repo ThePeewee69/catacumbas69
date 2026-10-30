@@ -17,5 +17,5 @@ service with CORS disabled.
 
 - One origin, one place for authentication and audit.
 - Pulsário must map Passário failures to `502`/`503` Problem Details and keep the rest of the UI working.
-- Until the proxy exists, Passário allows CORS from the Pulsário origin configured in
-  `PASSARIO_CORS_ALLOWED_ORIGINS` (known gap G-9).
+- Passário's CORS is closed by default; `PASSARIO_CORS_ALLOWED_ORIGINS` exists only for local experiments.
+- Pulsário needs `PASSARIO_URL` (in the cluster: `http://passario:8082`).

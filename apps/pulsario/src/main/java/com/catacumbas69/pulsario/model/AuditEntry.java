@@ -1,23 +1,13 @@
 package com.catacumbas69.pulsario.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
-import org.springframework.data.mongodb.core.mapping.Document;
-
 import java.time.Instant;
 import java.util.Map;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 /**
- * Registo de auditoria — gravado na collection "audit_logs" da base de dados "catacumbas69".
- *
- * Campos:
- *  - timestamp      : quando ocorreu a acção
- *  - user           : IP do cliente HTTP (sem autenticação na app)
- *  - action         : acção realizada (PRODUCE, CREATE_TOPIC, DELETE_TOPIC, etc.)
- *  - topic          : tópico Pulsar no formato persistent://tenant/namespace/topic
- *  - messagePayload : conteúdo da mensagem (apenas em PRODUCE/PEEK)
- *  - messageKey     : chave da mensagem Pulsar (pode ser null)
- *  - topicProperties: propriedades adicionais do tópico (subscrição, contagem, etc.)
+ * One audited user action, stored in the {@code audit_logs} collection of the {@code catacumbas69}
+ * database. Indexes are created by {@code AuditIndexes}.
  */
 @Document(collection = "audit_logs")
 public class AuditEntry {
@@ -25,30 +15,45 @@ public class AuditEntry {
     @Id
     private String id;
 
-    @Indexed
+    /** When the action happened. */
     private Instant timestamp;
 
-    @Indexed
+    /** Client IP address (the application has no authentication yet). */
     private String user;
 
-    @Indexed
+    /** {@code AuditAction} name, e.g. {@code PRODUCE} or {@code CREATE_BRIDGE}. */
     private String action;
 
-    @Indexed
+    /** Fully-qualified topic the action applied to, or {@code null}. */
     private String topic;
 
+    /** Message payload for produce actions, or {@code null}. */
     private String messagePayload;
+
+    /** Message key for produce actions, or {@code null}. */
     private String messageKey;
+
+    /** Extra details: subscription, count, bridge id, … */
     private Map<String, Object> topicProperties;
 
-    // ─── Constructor ──────────────────────────────────────────────────────────
+    /** Creates an empty entry (used by Spring Data). */
+    public AuditEntry() {
+    }
 
-    public AuditEntry() {}
-
-    public AuditEntry(String user, String action, String topic,
-                      String messagePayload, String messageKey,
-                      Map<String, Object> topicProperties) {
-        this.timestamp = Instant.now();
+    /**
+     * Creates an entry.
+     *
+     * @param timestamp when the action happened
+     * @param user client IP address
+     * @param action action name
+     * @param topic topic, or {@code null}
+     * @param messagePayload payload, or {@code null}
+     * @param messageKey key, or {@code null}
+     * @param topicProperties extra details, or {@code null}
+     */
+    public AuditEntry(Instant timestamp, String user, String action, String topic,
+                      String messagePayload, String messageKey, Map<String, Object> topicProperties) {
+        this.timestamp = timestamp;
         this.user = user;
         this.action = action;
         this.topic = topic;
@@ -57,14 +62,35 @@ public class AuditEntry {
         this.topicProperties = topicProperties;
     }
 
-    // ─── Getters ──────────────────────────────────────────────────────────────
+    public String getId() {
+        return id;
+    }
 
-    public String getId() { return id; }
-    public Instant getTimestamp() { return timestamp; }
-    public String getUser() { return user; }
-    public String getAction() { return action; }
-    public String getTopic() { return topic; }
-    public String getMessagePayload() { return messagePayload; }
-    public String getMessageKey() { return messageKey; }
-    public Map<String, Object> getTopicProperties() { return topicProperties; }
+    public Instant getTimestamp() {
+        return timestamp;
+    }
+
+    public String getUser() {
+        return user;
+    }
+
+    public String getAction() {
+        return action;
+    }
+
+    public String getTopic() {
+        return topic;
+    }
+
+    public String getMessagePayload() {
+        return messagePayload;
+    }
+
+    public String getMessageKey() {
+        return messageKey;
+    }
+
+    public Map<String, Object> getTopicProperties() {
+        return topicProperties;
+    }
 }

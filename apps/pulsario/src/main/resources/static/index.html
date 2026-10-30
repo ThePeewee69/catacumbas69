@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pulsário</title>
 <link rel="icon" type="image/svg+xml" href="/pulsario-icon.svg">
-<link rel="stylesheet" href="/pulsario.css?v=6">
-<script src="/pulsario.js?v=6" defer></script>
+<link rel="stylesheet" href="/pulsario.css?v=7">
+<script src="/pulsario.js?v=7" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
 </head>
 <body x-data="app()" x-init="init()">
@@ -43,15 +43,6 @@
 
       <div class="divider"></div>
 
-      <div class="field" style="margin-bottom:12px;">
-        <label>Passário URL</label>
-        <input type="text" x-model="passario.url"
-               placeholder="http://localhost:8082"
-               @keydown.enter="saveSettings()">
-        <div style="font-size:11px;color:var(--muted);margin-top:4px;">Bridge microservice endpoint</div>
-      </div>
-
-      <div class="divider"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
         <button class="btn btn-secondary" @click="settings.open=false">Cancel</button>
         <button class="btn btn-primary" @click="saveSettings()">Save</button>
@@ -365,7 +356,7 @@
             </svg>
             <div>
               <div style="font-size:16px;font-weight:700;color:var(--accent2);">Passário Bridges</div>
-              <div style="font-size:11px;color:var(--muted);" x-text="passario.url"></div>
+              <div style="font-size:11px;color:var(--muted);">via Pulsário → Passário</div>
             </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">

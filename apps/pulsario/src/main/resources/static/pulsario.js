@@ -1,4 +1,4 @@
-/** Base path of the bridge API on Passário. */
+/** Bridge API, served by Pulsário and forwarded to Passário (ADR 0001). */
 const BRIDGES_API = '/api/v1/bridges';
 
 /**
@@ -38,9 +38,6 @@ function app() {
     modal: { type: null, message: null, editPayload: '', editKey: '', saving: false },
 
     // ── Passário / Bridges ─────────────────────────────────────────────────
-    passario: {
-      url: localStorage.getItem('passarioUrl') || 'http://localhost:8082',
-    },
     bridgesView: false,
     bridges: {
       list: [],
@@ -69,7 +66,6 @@ function app() {
     // ── Settings ───────────────────────────────────────────────────────────
     saveSettings() {
       localStorage.setItem('pulsarUrl', this.settings.pulsarUrl);
-      localStorage.setItem('passarioUrl', this.passario.url);
       this.settings.open = false;
       this.notify('Settings saved');
     },
@@ -78,7 +74,7 @@ function app() {
       this.settings.healthState = 'checking';
       this.settings.healthMsg = '';
       try {
-        const tenants = await this.api('/api/tenants');
+        const tenants = await this.api('/api/v1/tenants');
         this.settings.healthState = 'ok';
         this.settings.healthMsg = tenants.length + ' tenant(s): ' + tenants.slice(0, 3).join(', ') + (tenants.length > 3 ? '…' : '');
       } catch (e) {
@@ -109,7 +105,7 @@ function app() {
       this.modal.saving = true;
       try {
         const res = await this.api(
-          `/api/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/produce`,
+          `/api/v1/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/produce`,
           { method: 'POST', body: JSON.stringify({ payload: this.modal.editPayload, key: this.modal.editKey || null }) }
         );
         this.notify('Re-produced → ' + res.messageId);
@@ -126,7 +122,7 @@ function app() {
       if (!confirm(`Skip ${n} message(s) from subscription "${this.backlog.sub}"?\nThis is irreversible.`)) return;
       try {
         await this.api(
-          `/api/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/subscriptions/${encodeURIComponent(this.backlog.sub)}/skip/${n}`,
+          `/api/v1/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/subscriptions/${encodeURIComponent(this.backlog.sub)}/skip/${n}`,
           { method: 'POST' }
         );
         this.notify(`Skipped ${n} message(s) from "${this.backlog.sub}"`);
@@ -147,7 +143,7 @@ function app() {
       });
       const ct = res.headers.get('content-type') ?? '';
       const body = ct.includes('json') ? await res.json() : await res.text();
-      if (!res.ok) throw new Error(body?.error ?? body ?? res.statusText);
+      if (!res.ok) throw new Error(problemMessage(body, res.statusText));
       return body;
     },
 
@@ -159,7 +155,7 @@ function app() {
     // ── Tenants / Namespaces / Topics ──────────────────────────────────────
     async loadTenants() {
       this.loading.tenants = true;
-      try { this.tenants = await this.api('/api/tenants'); }
+      try { this.tenants = await this.api('/api/v1/tenants'); }
       catch (e) { this.notify('Error loading tenants: ' + e.message, 'error'); }
       finally { this.loading.tenants = false; }
     },
@@ -169,7 +165,7 @@ function app() {
       this.namespaces = []; this.topics = [];
       this.stats = null; this.subscriptions = [];
       this.loading.namespaces = true;
-      try { this.namespaces = await this.api(`/api/namespaces/${t}`); }
+      try { this.namespaces = await this.api(`/api/v1/namespaces/${t}`); }
       catch (e) { this.notify('Error loading namespaces: ' + e.message, 'error'); }
       finally { this.loading.namespaces = false; }
     },
@@ -178,7 +174,7 @@ function app() {
       this.sel = { ...this.sel, namespace: ns, topic: null };
       this.topics = []; this.stats = null; this.subscriptions = [];
       this.loading.topics = true;
-      try { this.topics = await this.api(`/api/topics/${this.sel.tenant}/${ns}`); }
+      try { this.topics = await this.api(`/api/v1/topics/${this.sel.tenant}/${ns}`); }
       catch (e) { this.notify('Error loading topics: ' + e.message, 'error'); }
       finally { this.loading.topics = false; }
     },
@@ -196,7 +192,7 @@ function app() {
     async createTopic() {
       if (!this.newTopic.trim()) return;
       try {
-        await this.api(`/api/topics/${this.sel.tenant}/${this.sel.namespace}/${this.newTopic}`, { method: 'POST' });
+        await this.api(`/api/v1/topics/${this.sel.tenant}/${this.sel.namespace}/${this.newTopic}`, { method: 'POST' });
         this.notify(`Topic "${this.newTopic}" created`);
         this.newTopic = '';
         await this.selectNamespace(this.sel.namespace);
@@ -206,7 +202,7 @@ function app() {
     async deleteTopic(t) {
       if (!confirm(`Delete topic "${t}"?\nAll messages and subscriptions will be removed.`)) return;
       try {
-        await this.api(`/api/topics/${this.sel.tenant}/${this.sel.namespace}/${t}`, { method: 'DELETE' });
+        await this.api(`/api/v1/topics/${this.sel.tenant}/${this.sel.namespace}/${t}`, { method: 'DELETE' });
         this.notify(`Topic "${t}" deleted`);
         if (this.sel.topic === t) this.sel.topic = null;
         await this.selectNamespace(this.sel.namespace);
@@ -217,7 +213,7 @@ function app() {
     async loadStats() {
       this.loading.stats = true; this.stats = null;
       try {
-        this.stats = await this.api(`/api/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/stats`);
+        this.stats = await this.api(`/api/v1/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/stats`);
       } catch (e) { this.notify('Error loading stats: ' + e.message, 'error'); }
       finally { this.loading.stats = false; }
     },
@@ -227,7 +223,7 @@ function app() {
       if (!this.sel.topic) return;
       this.loading.subs = true;
       try {
-        this.subscriptions = await this.api(`/api/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/subscriptions`);
+        this.subscriptions = await this.api(`/api/v1/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/subscriptions`);
       } catch (e) { this.subscriptions = []; }
       finally { this.loading.subs = false; }
     },
@@ -236,7 +232,7 @@ function app() {
       if (!this.newSub.trim()) return;
       this.loading.newSub = true;
       try {
-        await this.api(`/api/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/subscriptions/${this.newSub}`, { method: 'POST' });
+        await this.api(`/api/v1/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/subscriptions/${this.newSub}`, { method: 'POST' });
         this.notify(`Subscription "${this.newSub}" created`);
         this.newSub = '';
         await this.loadSubs();
@@ -247,7 +243,7 @@ function app() {
     async deleteSub(sub) {
       if (!confirm(`Delete subscription "${sub}"?`)) return;
       try {
-        await this.api(`/api/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/subscriptions/${sub}`, { method: 'DELETE' });
+        await this.api(`/api/v1/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/subscriptions/${sub}`, { method: 'DELETE' });
         this.notify(`Subscription "${sub}" deleted`);
         await this.loadSubs();
       } catch (e) { this.notify('Error: ' + e.message, 'error'); }
@@ -258,7 +254,7 @@ function app() {
       if (!this.produce.payload.trim()) return;
       this.loading.produce = true; this.produce.lastId = null;
       try {
-        const res = await this.api(`/api/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/produce`, {
+        const res = await this.api(`/api/v1/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/produce`, {
           method: 'POST',
           body: JSON.stringify({ payload: this.produce.payload, key: this.produce.key })
         });
@@ -275,7 +271,7 @@ function app() {
       this.loading.backlog = true; this.backlog.messages = []; this.backlog.queried = false;
       try {
         this.backlog.messages = await this.api(
-          `/api/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/peek/${this.backlog.sub}?count=${this.backlog.count}`
+          `/api/v1/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/peek/${this.backlog.sub}?count=${this.backlog.count}`
         );
         this.backlog.queried = true;
       } catch (e) { this.notify('Peek error: ' + e.message, 'error'); }
@@ -405,12 +401,12 @@ function app() {
     async loadAllTopics() {
       this.bridges.topicsLoading = true;
       try {
-        const tenants = await this.api('/api/tenants');
+        const tenants = await this.api('/api/v1/tenants');
         const perNs = await Promise.all(tenants.map(async t => {
-          const nss = await this.api(`/api/namespaces/${t}`).catch(() => []);
+          const nss = await this.api(`/api/v1/namespaces/${t}`).catch(() => []);
           return Promise.all(nss.map(async nsRaw => {
             const ns = nsRaw.includes('/') ? nsRaw.split('/').pop() : nsRaw;
-            const topics = await this.api(`/api/topics/${t}/${ns}`).catch(() => []);
+            const topics = await this.api(`/api/v1/topics/${t}/${ns}`).catch(() => []);
             return topics.map(tp => tp.includes('://') ? tp : `persistent://${t}/${ns}/${tp}`);
           }));
         }));
@@ -461,15 +457,14 @@ function app() {
       }
     },
 
-    async bridgesApi(path, options = {}) {
-      const res = await fetch(this.passario.url + path, {
-        headers: { 'Content-Type': 'application/json' },
-        ...options
-      });
-      const ct = res.headers.get('content-type') ?? '';
-      const body = ct.includes('json') ? await res.json() : await res.text();
-      if (!res.ok) throw new Error(problemMessage(body, res.statusText));
-      return body;
+    /**
+     * Calls the bridge API (same origin; Pulsário forwards it to Passário).
+     * @param {string} path API path, e.g. BRIDGES_API + '/status'
+     * @param {RequestInit} [options] fetch options
+     * @returns {Promise<any>} parsed JSON body, or text for non-JSON responses
+     */
+    bridgesApi(path, options = {}) {
+      return this.api(path, options);
     },
 
     // ── Formatters ─────────────────────────────────────────────────────────

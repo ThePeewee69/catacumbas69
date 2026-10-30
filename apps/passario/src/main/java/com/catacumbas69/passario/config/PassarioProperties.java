@@ -96,12 +96,13 @@ public record PassarioProperties(
     public record Cors(List<String> allowedOrigins) {
 
         /**
-         * Normalises a missing list to an empty one.
+         * Normalises a missing list to an empty one and drops blank entries.
          *
          * @param allowedOrigins configured origins, may be {@code null}
          */
         public Cors {
-            allowedOrigins = allowedOrigins == null ? List.of() : List.copyOf(allowedOrigins);
+            allowedOrigins = allowedOrigins == null ? List.of()
+                    : allowedOrigins.stream().filter(origin -> !origin.isBlank()).toList();
         }
     }
 }
