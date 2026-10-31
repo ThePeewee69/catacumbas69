@@ -74,12 +74,12 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); font
 .form-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
 .field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 160px; }
 .field label { font-size: 12px; color: var(--muted); font-weight: 500; }
-input[type=text], input[type=number], textarea, select {
+input[type=text], input[type=url], input[type=number], textarea, select {
   background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
   color: var(--text); padding: 8px 10px; font-size: 13px; font-family: var(--font);
   width: 100%; transition: border-color .15s; outline: none;
 }
-input[type=text]:focus, input[type=number]:focus, textarea:focus, select:focus { border-color: var(--accent); }
+input[type=text]:focus, input[type=url]:focus, input[type=number]:focus, textarea:focus, select:focus { border-color: var(--accent); }
 textarea { resize: vertical; min-height: 80px; font-family: var(--mono); }
 
 /* ── Buttons ── */
@@ -248,7 +248,21 @@ td .payload { font-family: var(--mono); font-size: 12px; max-width: 320px; word-
 .topic-chip-x:hover { color: var(--danger); background: rgba(239,68,68,.12); }
 
 /* bridge card: multiple destinations stack */
-.bridge-topic-block .bridge-topic + .bridge-topic { margin-top: 2px; }
+.bridge-topic-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.bridge-topic-row + .bridge-topic-row { margin-top: 2px; }
+.bridge-count { font-size: 11px; color: var(--accent2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.btn-xs { font-size: 11px; padding: 3px 9px; }
+
+/* Passário URL (Bridges header) */
+.passario-url { display: inline-flex; align-items: center; gap: 6px; padding: 2px 0; background: none; border: 0;
+  color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
+.passario-url:hover, .passario-url:focus-visible { color: var(--text); }
+.passario-url .tag { font-size: 10px; padding: 1px 6px; }
+.settings-hint { font-size: 11px; color: var(--muted); margin: 0 0 4px; line-height: 1.5; }
+.link-btn { background: none; border: 0; padding: 0 0 0 6px; color: var(--accent2); font: inherit; cursor: pointer;
+  text-decoration: underline; }
+.link-btn:disabled { opacity: .5; cursor: not-allowed; }
+.cell-actions { text-align: right; white-space: nowrap; }
 
 /* scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }

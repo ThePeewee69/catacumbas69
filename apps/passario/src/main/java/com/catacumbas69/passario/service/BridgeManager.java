@@ -36,6 +36,9 @@ import org.springframework.stereotype.Service;
  * </ul>
  * Starting and stopping never block the reconcile thread, and a failure in one bridge never affects
  * another (RES-4). If MongoDB cannot be read, running workers are left alone (RES-6).
+ *
+ * <p>Enabled bridges that form a message loop (ADR 0005) are never started — the API refuses such
+ * changes, but MongoDB can be edited directly — and are reported as {@link BridgeState#BLOCKED}.
  */
 @Slf4j
 @Service
@@ -49,6 +52,7 @@ public class BridgeManager {
     private final Map<String, BridgeWorker> workers = new ConcurrentHashMap<>();
     private final Set<String> stopping = ConcurrentHashMap.newKeySet();
     private final Map<String, StartFailure> failures = new ConcurrentHashMap<>();
+    private final Map<String, BridgeDocument> blocked = new ConcurrentHashMap<>();
     private final ExecutorService stopExecutor = Executors.newVirtualThreadPerTaskExecutor();
     private volatile boolean shuttingDown;
 
@@ -90,12 +94,26 @@ public class BridgeManager {
         Map<String, BridgeDocument> enabled = desired.stream()
                 .filter(BridgeDocument::isEnabled)
                 .collect(Collectors.toMap(BridgeDocument::getId, Function.identity()));
+        updateBlocked(enabled);
 
         List.copyOf(workers.keySet()).stream()
-                .filter(id -> !enabled.containsKey(id))
+                .filter(id -> !enabled.containsKey(id) || blocked.containsKey(id))
                 .forEach(this::stopAsync);
-        failures.keySet().removeIf(id -> !enabled.containsKey(id));
-        enabled.values().forEach(this::reconcileBridge);
+        failures.keySet().removeIf(id -> !enabled.containsKey(id) || blocked.containsKey(id));
+        enabled.values().stream()
+                .filter(bridge -> !blocked.containsKey(bridge.getId()))
+                .forEach(this::reconcileBridge);
+    }
+
+    private void updateBlocked(Map<String, BridgeDocument> enabled) {
+        Set<String> looping = BridgeTopology.bridgesInLoops(enabled.values());
+        looping.forEach(id -> {
+            if (blocked.put(id, enabled.get(id)) == null) {
+                log.warn("Bridge '{}' is part of a message loop and will not run until the loop is removed",
+                        enabled.get(id).getName());
+            }
+        });
+        blocked.keySet().removeIf(id -> !looping.contains(id));
     }
 
     private void reconcileBridge(BridgeDocument bridge) {
@@ -198,8 +216,12 @@ public class BridgeManager {
     public List<BridgeWorkerStatus> getStatuses() {
         List<BridgeWorkerStatus> statuses = new ArrayList<>();
         workers.values().forEach(worker -> statuses.add(worker.getStatus()));
+        blocked.values().forEach(bridge -> statuses.add(new BridgeWorkerStatus(bridge.getId(), bridge.getName(),
+                BridgeState.BLOCKED, false, 0, 0, 0, null, bridge.getSource().getTopic(),
+                bridge.resolveDestinationTopics(), bridge.isOrderedEffective(),
+                "Part of a message loop; change the bridges so that no topic feeds back into itself", null)));
         failures.forEach((id, failure) -> {
-            if (!workers.containsKey(id)) {
+            if (!workers.containsKey(id) && !blocked.containsKey(id)) {
                 statuses.add(new BridgeWorkerStatus(id, failure.bridgeName(), BridgeState.FAILED, false, 0, 0, 0,
                         null, failure.sourceTopic(), failure.destinationTopics(), failure.ordered(),
                         failure.lastError(), failure.nextAttemptAt()));
@@ -215,6 +237,15 @@ public class BridgeManager {
      */
     public int getRunningCount() {
         return (int) workers.values().stream().filter(worker -> worker.getState() == BridgeState.RUNNING).count();
+    }
+
+    /**
+     * Returns how many enabled bridges are not started because they form a message loop.
+     *
+     * @return number of blocked bridges
+     */
+    public int getBlockedCount() {
+        return blocked.size();
     }
 
     /**

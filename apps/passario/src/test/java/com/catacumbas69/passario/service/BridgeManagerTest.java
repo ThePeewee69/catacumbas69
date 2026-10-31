@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 
 import com.catacumbas69.passario.TestBridges;
 import com.catacumbas69.passario.TestProperties;
+import com.catacumbas69.passario.model.BridgeDestination;
 import com.catacumbas69.passario.model.BridgeDocument;
 import com.catacumbas69.passario.repository.BridgeRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -157,6 +158,39 @@ class BridgeManagerTest {
         manager.reconcile();
 
         verify(worker).start();
+    }
+
+    @Test
+    void blocksBridgesInALoop_writtenDirectlyToMongo() {
+        BridgeDocument forward = TestBridges.unordered("1", DEST_A);
+        BridgeDocument back = TestBridges.bridge("2", "Shared");
+        back.getSource().setTopic(DEST_A);
+        back.setDestinations(new java.util.ArrayList<>(List.of(new BridgeDestination(TestBridges.SOURCE))));
+        when(repository.findAll()).thenReturn(List.of(forward, back));
+
+        manager.reconcile();
+
+        verify(factory, never()).create(any());
+        assertThat(manager.getBlockedCount()).isEqualTo(2);
+        assertThat(manager.getStatuses()).extracting(BridgeWorkerStatus::state)
+                .containsOnly(BridgeState.BLOCKED);
+    }
+
+    @Test
+    void stopsRunningWorker_whenAnotherBridgeClosesALoop() {
+        BridgeDocument forward = TestBridges.unordered("1", DEST_A);
+        BridgeWorker worker = startingWorker(forward, CompletableFuture.completedFuture(null));
+        when(repository.findAll()).thenReturn(List.of(forward));
+        manager.reconcile();
+        BridgeDocument back = TestBridges.bridge("2", "Shared");
+        back.getSource().setTopic(DEST_A);
+        back.setDestinations(new java.util.ArrayList<>(List.of(new BridgeDestination(TestBridges.SOURCE))));
+        when(repository.findAll()).thenReturn(List.of(forward, back));
+
+        manager.reconcile();
+
+        await().atMost(Duration.ofSeconds(3)).untilAsserted(() -> verify(worker).stop(any()));
+        assertThat(manager.getBlockedCount()).isEqualTo(2);
     }
 
     @Test

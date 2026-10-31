@@ -39,8 +39,8 @@ edit only the original.
 
 | Component | Responsibility | Owns (data) | Talks to |
 |---|---|---|---|
-| **Pulsário** | Web UI for Pulsar (tenants, namespaces, topics, subscriptions, backlog, produce); UI for bridges; audit of user actions | Mongo collection for audit entries | Pulsar Admin API, Pulsar binary (produce/peek), Passário REST, MongoDB |
-| **Passário** | Runs bridges: consumes a source topic and fans each message out to 1..n destination topics; CRUD API for bridge config | Mongo collection `bridges` | Pulsar binary, MongoDB |
+| **Pulsário** | Web UI for Pulsar (tenants, namespaces, topics, subscriptions, backlog, produce); UI for bridges; runtime settings (Passário URL); audit of its changes | `audit_logs` (owner, reads + indexes), `pulsario_settings` | Pulsar Admin API, Pulsar binary (produce/peek), Passário REST, MongoDB |
+| **Passário** | Runs bridges: consumes a source topic and fans each message out to 1..n destination topics; CRUD API for bridge config; per-topic traffic counts; loop blocking; audit of bridge changes | `bridges`, `bridge_traffic_minutes`, `bridge_traffic_totals`; inserts into `audit_logs` | Pulsar binary, MongoDB |
 
 Runtime: MicroShift on `meloes` (NUC, `192.168.86.35`), deployed with ArgoCD. Local development runs
 from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
@@ -50,11 +50,13 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 ## 2. Architecture rules
 
 - **ARCH-1 [MUST]** Each service owns its MongoDB collections. A service MUST NOT read or write another
-  service's collection. Cross-service data goes through the owner's REST API.
+  service's collection. Cross-service data goes through the owner's REST API. **One exception:**
+  `audit_logs` is a shared append-only log — both services insert, only Pulsário reads (ADR 0006).
 - **ARCH-2 [MUST]** The browser talks only to Pulsário. Pulsário exposes the bridge API to its UI as a
   **backend-for-frontend (BFF)** proxy (`/api/v1/bridges/**` → Passário). Passário is not exposed outside
   the cluster except for local development.
-  *Why:* one origin (no CORS), Passário stays internal, and every bridge change can be audited in one place.
+  *Why:* one origin (no CORS) and Passário stays internal. Pulsário forwards the browser's address as
+  `X-Forwarded-For` so Passário's audit entries name the user (ADR 0006).
 - **ARCH-3 [MUST]** Passário is the only component that consumes or produces on behalf of a bridge.
   Pulsário MUST NOT implement relay logic.
 - **ARCH-4 [MUST]** Bridge configuration in MongoDB is the desired state; Passário reconciles running
@@ -82,6 +84,10 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 | `PULSAR_LISTENER_NAME` | both | *(empty)* | `external` |
 | `SPRING_DATA_MONGODB_URI` | both | in-cluster ReplicaSet URI from Secret | NodePort `32017` + `authSource=admin&directConnection=true` |
 | `PASSARIO_URL` | Pulsário | `http://passario.<ns>.svc.cluster.local:8082` | `http://localhost:8082` |
+
+`PASSARIO_URL` is the default; it can be changed at runtime from Pulsário's Connection Settings
+(`PUT /api/v1/settings/passario`), which stores it in `pulsario_settings` and audits the change.
+Deleting the setting goes back to the env var.
 
 - **CFG-1 [MUST]** Bind config with `@ConfigurationProperties` records (validated with `@Validated`), not
   scattered `@Value` fields.
@@ -281,6 +287,10 @@ Every package has a `package-info.java` (DOC-2). Dependencies point downwards on
   `spring.data.mongodb.auto-index-creation=true`; `bridges.name` is unique.
 - **MONGO-4 [MUST]** Local connections to the ReplicaSet use `directConnection=true` against the
   NodePort; in-cluster connections use the replica-set URI.
+- **MONGO-5 [MUST]** Counters are written with `$inc` bulk upserts on a unique key, never read-modify-write:
+  `bridge_traffic_minutes` (`bridgeId`, `role`, `topic`, `minute`) and `bridge_traffic_totals`
+  (`bridgeId`, `role`, `topic`). Both are kept forever (no TTL); queries over minutes are bounded to
+  7 days (PERF-5).
 
 ---
 
@@ -319,7 +329,7 @@ Stack: plain HTML + Alpine.js 3 (from cdnjs, pinned version), one `index.html`, 
 - **UI-3 [MUST]** All HTTP calls go through one helper (`api()`), which turns Problem Details into toast
   messages. No `fetch` scattered in templates.
 - **UI-4 [MUST]** The UI language is **English** — labels, placeholders, empty states, toasts.
-- **UI-5 [MUST]** Destructive actions (delete topic/subscription/bridge, skip messages) ask for
+- **UI-5 [MUST]** Destructive actions (delete topic/subscription/bridge, skip messages, clear backlog) ask for
   confirmation and name the target.
 - **UI-6 [SHOULD]** Group state and methods by feature (`bridges.*`, `backlog.*`) in `pulsario.js`;
   keep expressions in HTML to simple reads and single calls.
@@ -357,6 +367,11 @@ Targets are measured on `meloes` (NUC, MicroShift) with the broker on the same n
   downstream; never create them per request.
 - **PERF-7 [SHOULD]** Hot paths avoid per-message allocations that can be hoisted (e.g. build the
   property map once per message, not once per destination), and avoid logging per message at INFO.
+- **PERF-8 [MUST]** Traffic counting costs no I/O per message: workers increment in-memory atomics per
+  (bridge, role, topic, minute); `TrafficRecorder` flushes them in two bulk writes every
+  `passario.traffic.flush-interval` (5 s) and once more on shutdown. `SOURCE` counts a message when every
+  destination accepted it; `DESTINATION` counts each accepted send. Redeliveries are counted again
+  (at-least-once, ARCH-6).
 
 ---
 
@@ -389,7 +404,12 @@ other service is slow or down.
 - **RES-10 [MUST]** Write endpoints are idempotent where HTTP says so (`PUT`, `DELETE`,
   `POST …/enable|disable`). Deleting a missing bridge returns `404`, never `500`.
 - **RES-11 [MUST]** Audit writes are best-effort and never fail the user's action: an audit failure is
-  logged at WARN and the operation result is returned.
+  logged (with the full entry in Passário) and the operation result is returned.
+- **RES-13 [MUST]** No message loops between bridges (ADR 0005): a create, update or enable that would
+  close a cycle among enabled bridges is rejected with `400`; the reconciler never runs a bridge on a
+  cycle (state `BLOCKED`), even when the documents were written to MongoDB directly.
+- **RES-14 [MUST]** Traffic counts that cannot be written to MongoDB stay in memory and are retried on the
+  next flush; a write failure never affects relaying.
 - **RES-12 [MUST]** The UI degrades per feature: if Passário is down, the Bridges panel shows the error
   and the rest of Pulsário keeps working; every request shows a clear toast on failure.
 
@@ -439,8 +459,14 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 - **OBS-5 [MUST]** Passário exposes Micrometer metrics per bridge, tagged `bridge`:
   `passario_messages_forwarded_total`, `passario_forward_errors_total`, `passario_bridges_running`.
   The `/api/v1/bridges/status` counters read from the same meters.
-- **OBS-6 [SHOULD]** Pulsário records an audit entry for every mutating action, including bridge
-  create/update/delete/enable/disable passed through the BFF.
+- **OBS-6 [MUST]** Every configuration change is recorded in `audit_logs` (ADR 0006), whichever client
+  made it: Pulsário records topic, subscription, backlog, produce and settings changes
+  (`CHANGE_SETTING` with `from`/`to`); Passário records every bridge change with the definition `before`
+  and `after` (`CREATE/UPDATE/DELETE/ENABLE/DISABLE/MIGRATE_BRIDGE`). A new configurable thing is not
+  done until its changes are audited.
+- **OBS-7 [MUST]** Passário stores per-topic message and byte counts per bridge: all-time totals and
+  per-minute history, served at `GET /api/v1/bridges/traffic`, `/{id}/traffic` and
+  `/{id}/traffic/minutes?from&to`.
 
 ---
 
@@ -456,6 +482,9 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 - **SEC-5 [MUST]** Containers run as non-root with a read-only root filesystem where possible
   (MicroShift `restricted-v2` SCC compatible: no fixed UID).
 
+- **SEC-6 [MUST]** Settings that make the server call a URL (the Passário URL) accept only absolute
+  `http`/`https` URLs without credentials, query or fragment, and every change is audited. Anyone who can
+  open Pulsário can point it at another host, which is one more reason for SEC-2's authentication.
 ---
 
 ## 12. Build and deploy
@@ -512,12 +541,15 @@ Closed on 2026-10-30:
   `@ConfigurationProperties`, auditing, indexes, `/api/v1`, DTOs, validation, Problem Details, OpenAPI,
   Actuator probes, Micrometer meters, MDC, async fan-out with ordering modes, start back-off, `@Version`,
   explicit timeouts, Javadoc, `package-info.java`, README, Dockerfile, CORS closed.
-- **Pulsário**: Boot 3.5, `@ConfigurationProperties`, explicit timeouts, `/api/v1`, DTOs, validation with
+- **Pulsário** (`mvn verify` green, 31 tests, 0 Checkstyle violations): Boot 3.5, `@ConfigurationProperties`, explicit timeouts, `/api/v1`, DTOs, validation with
   `@PulsarName`, Problem Details (Pulsar 4xx kept, 5xx → 502, Passário down → 503), OpenAPI, bridge BFF with
   audit, asynchronous best-effort audit, audit indexes, producer cache, skip endpoint (was missing),
   `binary` flag fix, health indicators, Prometheus, Javadoc, `package-info.java`, Checkstyle, README,
   Dockerfile fix, English UI strings.
 - **Shared**: ADRs 0001–0004, `.editorconfig`, `build/checkstyle.xml`.
+- **Later the same day** (pending `mvn verify`): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
+  MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
+  ADR 0006), runtime-editable Passário URL, clear backlog per subscription in Overview.
 
 ### Remediation plan
 

@@ -18,7 +18,8 @@ public class PassarioClientConfig {
      * Client for calls to Passário.
      *
      * @param properties application properties
-     * @return a client with base URL and timeouts set
+     * @return a client with timeouts set; the URL is taken per call from {@code PassarioEndpoint}, because
+     *         it can be changed at runtime
      */
     @Bean
     public RestClient passarioRestClient(PulsarioProperties properties) {
@@ -27,7 +28,6 @@ public class PassarioClientConfig {
         requestFactory.setConnectTimeout(passario.connectTimeout());
         requestFactory.setReadTimeout(passario.readTimeout());
         return RestClient.builder()
-                .baseUrl(passario.url())
                 .requestFactory(requestFactory)
                 .build();
     }

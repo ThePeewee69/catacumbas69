@@ -109,6 +109,21 @@ class PulsarControllerTest {
     }
 
     @Test
+    void clearBacklog_returns204_andAudits() throws Exception {
+        mvc.perform(post("/api/v1/topics/home/media/events/subscriptions/sub/clear-backlog"))
+                .andExpect(status().isNoContent());
+        verify(messages).clearBacklog(TOPIC, "sub");
+        verify(audit).record(any(), eq(AuditAction.CLEAR_BACKLOG), eq(TOPIC), eq(Map.of("subscription", "sub")));
+    }
+
+    @Test
+    void clearBacklog_rejectsInvalidSubscriptionName() throws Exception {
+        mvc.perform(post("/api/v1/topics/home/media/events/subscriptions/bad name/clear-backlog"))
+                .andExpect(status().isBadRequest());
+        verify(messages, never()).clearBacklog(any(), any());
+    }
+
+    @Test
     void mapsPulsarNotFound_to404() throws Exception {
         when(admin.getTopicStats(TOPIC)).thenThrow(mock(PulsarAdminException.NotFoundException.class));
 

@@ -18,11 +18,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.catacumbas69.passario.TestBridges;
 import com.catacumbas69.passario.dto.BridgeMapper;
 import com.catacumbas69.passario.model.BridgeDocument;
+import com.catacumbas69.passario.model.BridgeTrafficTotal;
+import com.catacumbas69.passario.model.TrafficRole;
 import com.catacumbas69.passario.service.BridgeConflictException;
 import com.catacumbas69.passario.service.BridgeManager;
 import com.catacumbas69.passario.service.BridgeNotFoundException;
 import com.catacumbas69.passario.service.BridgeService;
 import com.catacumbas69.passario.service.BridgeValidationException;
+import com.catacumbas69.passario.service.TrafficService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -53,10 +56,41 @@ class BridgeControllerTest {
     @MockitoBean
     private BridgeManager manager;
 
+    @MockitoBean
+    private TrafficService traffic;
+
+    @Test
+    void traffic_returnsTotalsPerTopic() throws Exception {
+        BridgeTrafficTotal total = new BridgeTrafficTotal();
+        total.setBridgeId("abc");
+        total.setBridgeName("orders-fanout");
+        total.setRole(TrafficRole.SOURCE);
+        total.setTopic(TestBridges.SOURCE);
+        total.setMessages(42);
+        total.setBytes(420);
+        when(traffic.totals("abc")).thenReturn(List.of(total));
+
+        mvc.perform(get("/api/v1/bridges/abc/traffic"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].role").value("SOURCE"))
+                .andExpect(jsonPath("$[0].messages").value(42));
+    }
+
+    @Test
+    void trafficMinutes_returns400_whenRangeIsInvalid() throws Exception {
+        when(traffic.minutes(eq("abc"), any(), any()))
+                .thenThrow(new BridgeValidationException("from", "must be before 'to'"));
+
+        mvc.perform(get("/api/v1/bridges/abc/traffic/minutes")
+                        .param("from", "2026-10-30T10:00:00Z").param("to", "2026-10-30T09:00:00Z"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("from"));
+    }
+
     @Test
     void create_returns201WithLocation() throws Exception {
         BridgeDocument stored = TestBridges.ordered("abc", DEST_A);
-        when(service.create(any())).thenReturn(stored);
+        when(service.create(any(), any())).thenReturn(stored);
 
         mvc.perform(post("/api/v1/bridges").contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
                 .andExpect(status().isCreated())
@@ -83,7 +117,8 @@ class BridgeControllerTest {
 
     @Test
     void create_returns400_whenCrossFieldRuleFails() throws Exception {
-        when(service.create(any())).thenThrow(new BridgeValidationException("ordered", "Ordered needs Failover"));
+        when(service.create(any(), any()))
+                .thenThrow(new BridgeValidationException("ordered", "Ordered needs Failover"));
 
         mvc.perform(post("/api/v1/bridges").contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
                 .andExpect(status().isBadRequest())
@@ -103,7 +138,7 @@ class BridgeControllerTest {
 
     @Test
     void update_returns409_onStaleVersion() throws Exception {
-        when(service.update(eq("abc"), any(), isNull())).thenThrow(new BridgeConflictException("stale"));
+        when(service.update(eq("abc"), any(), isNull(), any())).thenThrow(new BridgeConflictException("stale"));
 
         mvc.perform(put("/api/v1/bridges/abc").contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
                 .andExpect(status().isConflict())
@@ -112,7 +147,7 @@ class BridgeControllerTest {
 
     @Test
     void enable_returnsBridge() throws Exception {
-        when(service.setEnabled(eq("abc"), anyBoolean())).thenReturn(TestBridges.unordered("abc", DEST_A));
+        when(service.setEnabled(eq("abc"), anyBoolean(), any())).thenReturn(TestBridges.unordered("abc", DEST_A));
 
         mvc.perform(post("/api/v1/bridges/abc/enable"))
                 .andExpect(status().isOk())

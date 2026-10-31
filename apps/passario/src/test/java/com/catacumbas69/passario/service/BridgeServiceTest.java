@@ -6,14 +6,18 @@ import static com.catacumbas69.passario.TestBridges.SOURCE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.catacumbas69.passario.TestBridges;
+import com.catacumbas69.passario.model.BridgeDestination;
 import com.catacumbas69.passario.model.BridgeDocument;
 import com.catacumbas69.passario.repository.BridgeRepository;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,8 +26,11 @@ import org.springframework.dao.OptimisticLockingFailureException;
 
 class BridgeServiceTest {
 
+    private static final String USER = "10.0.0.1";
+
     private final BridgeRepository repository = mock(BridgeRepository.class);
-    private final BridgeService service = new BridgeService(repository);
+    private final AuditLog audit = mock(AuditLog.class);
+    private final BridgeService service = new BridgeService(repository, audit);
 
     @BeforeEach
     void saveReturnsArgument() {
@@ -35,7 +42,7 @@ class BridgeServiceTest {
         BridgeDocument draft = TestBridges.unordered("client-id", DEST_A, DEST_B, DEST_A);
         draft.setVersion(42L);
 
-        BridgeDocument saved = service.create(draft);
+        BridgeDocument saved = service.create(draft, USER);
 
         assertThat(saved.getId()).isNull();
         assertThat(saved.getVersion()).isNull();
@@ -46,10 +53,11 @@ class BridgeServiceTest {
     void create_rejectsSourceAsDestination() {
         BridgeDocument draft = TestBridges.unordered("1", DEST_A, SOURCE);
 
-        assertThatThrownBy(() -> service.create(draft))
+        assertThatThrownBy(() -> service.create(draft, USER))
                 .isInstanceOf(BridgeValidationException.class)
                 .extracting("field").isEqualTo("destinations");
         verify(repository, never()).save(any());
+        verify(audit, never()).bridgeChanged(any(), any(), any(), any());
     }
 
     @Test
@@ -57,23 +65,63 @@ class BridgeServiceTest {
         BridgeDocument draft = TestBridges.unordered("1", DEST_A);
         draft.setOrdered(true);
 
-        assertThatThrownBy(() -> service.create(draft))
+        assertThatThrownBy(() -> service.create(draft, USER))
                 .isInstanceOf(BridgeValidationException.class)
                 .extracting("field").isEqualTo("ordered");
+    }
+
+    @Test
+    void create_rejectsBridgeThatClosesALoop() {
+        BridgeDocument back = TestBridges.bridge("2", "Shared");
+        back.getSource().setTopic(DEST_A);
+        back.setDestinations(new java.util.ArrayList<>(List.of(new BridgeDestination(SOURCE))));
+        when(repository.findAll()).thenReturn(List.of(back));
+
+        assertThatThrownBy(() -> service.create(TestBridges.unordered("1", DEST_A), USER))
+                .isInstanceOf(BridgeValidationException.class)
+                .hasMessageContaining("message loop")
+                .hasMessageContaining("bridge-2");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void create_allowsDisabledBridgeThatWouldCloseALoop() {
+        BridgeDocument back = TestBridges.bridge("2", "Shared");
+        back.getSource().setTopic(DEST_A);
+        back.setDestinations(new java.util.ArrayList<>(List.of(new BridgeDestination(SOURCE))));
+        when(repository.findAll()).thenReturn(List.of(back));
+        BridgeDocument draft = TestBridges.unordered("1", DEST_A);
+        draft.setEnabled(false);
+
+        assertThat(service.create(draft, USER).isEnabled()).isFalse();
+    }
+
+    @Test
+    void enable_rejectsBridgeThatClosesALoop() {
+        BridgeDocument forward = TestBridges.unordered("1", DEST_A);
+        forward.setEnabled(false);
+        BridgeDocument back = TestBridges.bridge("2", "Shared");
+        back.getSource().setTopic(DEST_A);
+        back.setDestinations(new java.util.ArrayList<>(List.of(new BridgeDestination(SOURCE))));
+        when(repository.findById("1")).thenReturn(Optional.of(forward));
+        when(repository.findAll()).thenReturn(List.of(forward, back));
+
+        assertThatThrownBy(() -> service.setEnabled("1", true, USER)).isInstanceOf(BridgeValidationException.class);
+        verify(repository, never()).save(any());
     }
 
     @Test
     void create_rejectsBridgeWithoutDestinations() {
         BridgeDocument draft = TestBridges.unordered("1");
 
-        assertThatThrownBy(() -> service.create(draft)).isInstanceOf(BridgeValidationException.class);
+        assertThatThrownBy(() -> service.create(draft, USER)).isInstanceOf(BridgeValidationException.class);
     }
 
     @Test
     void create_rejectsDuplicateName() {
         when(repository.existsByName("bridge-1")).thenReturn(true);
 
-        assertThatThrownBy(() -> service.create(TestBridges.unordered("1", DEST_A)))
+        assertThatThrownBy(() -> service.create(TestBridges.unordered("1", DEST_A), USER))
                 .isInstanceOf(BridgeConflictException.class);
     }
 
@@ -81,7 +129,7 @@ class BridgeServiceTest {
     void create_mapsUniqueIndexViolation_toConflict() {
         when(repository.save(any(BridgeDocument.class))).thenThrow(new DuplicateKeyException("dup"));
 
-        assertThatThrownBy(() -> service.create(TestBridges.unordered("1", DEST_A)))
+        assertThatThrownBy(() -> service.create(TestBridges.unordered("1", DEST_A), USER))
                 .isInstanceOf(BridgeConflictException.class);
     }
 
@@ -91,7 +139,7 @@ class BridgeServiceTest {
         stored.setVersion(3L);
         when(repository.findById("1")).thenReturn(Optional.of(stored));
 
-        assertThatThrownBy(() -> service.update("1", TestBridges.unordered("1", DEST_B), 2L))
+        assertThatThrownBy(() -> service.update("1", TestBridges.unordered("1", DEST_B), 2L, USER))
                 .isInstanceOf(BridgeConflictException.class);
         verify(repository, never()).save(any());
     }
@@ -101,7 +149,7 @@ class BridgeServiceTest {
         when(repository.findById("1")).thenReturn(Optional.of(TestBridges.unordered("1", DEST_A)));
         when(repository.save(any(BridgeDocument.class))).thenThrow(new OptimisticLockingFailureException("race"));
 
-        assertThatThrownBy(() -> service.update("1", TestBridges.unordered("1", DEST_B), null))
+        assertThatThrownBy(() -> service.update("1", TestBridges.unordered("1", DEST_B), null, USER))
                 .isInstanceOf(BridgeConflictException.class);
     }
 
@@ -111,7 +159,7 @@ class BridgeServiceTest {
         when(repository.findById("1")).thenReturn(Optional.of(stored));
         BridgeDocument changes = TestBridges.ordered("ignored", DEST_B);
 
-        BridgeDocument saved = service.update("1", changes, 1L);
+        BridgeDocument saved = service.update("1", changes, 1L, USER);
 
         assertThat(saved.getId()).isEqualTo("1");
         assertThat(saved.resolveDestinationTopics()).containsExactly(DEST_B);
@@ -122,7 +170,7 @@ class BridgeServiceTest {
     void update_failsForUnknownBridge() {
         when(repository.findById("x")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.update("x", TestBridges.unordered("x", DEST_A), null))
+        assertThatThrownBy(() -> service.update("x", TestBridges.unordered("x", DEST_A), null, USER))
                 .isInstanceOf(BridgeNotFoundException.class);
     }
 
@@ -131,7 +179,7 @@ class BridgeServiceTest {
         BridgeDocument stored = TestBridges.unordered("1", DEST_A);
         when(repository.findById("1")).thenReturn(Optional.of(stored));
 
-        service.setEnabled("1", true);
+        service.setEnabled("1", true, USER);
 
         verify(repository, never()).save(any());
     }
@@ -141,17 +189,57 @@ class BridgeServiceTest {
         BridgeDocument stored = TestBridges.unordered("1", DEST_A);
         when(repository.findById("1")).thenReturn(Optional.of(stored));
 
-        BridgeDocument saved = service.setEnabled("1", false);
+        BridgeDocument saved = service.setEnabled("1", false, USER);
 
         assertThat(saved.isEnabled()).isFalse();
         verify(repository).save(stored);
     }
 
     @Test
-    void delete_failsForUnknownBridge() {
-        when(repository.existsById("x")).thenReturn(false);
+    void create_auditsTheStoredBridge() {
+        BridgeDocument saved = service.create(TestBridges.unordered("1", DEST_A), USER);
 
-        assertThatThrownBy(() -> service.delete("x")).isInstanceOf(BridgeNotFoundException.class);
+        verify(audit).bridgeChanged(USER, AuditAction.CREATE_BRIDGE, null, saved);
+    }
+
+    @Test
+    void update_auditsDefinitionBeforeAndAfter() {
+        when(repository.findById("1")).thenReturn(Optional.of(TestBridges.unordered("1", DEST_A)));
+
+        service.update("1", TestBridges.unordered("1", DEST_B), null, USER);
+
+        verify(audit).bridgeChanged(eq(USER), eq(AuditAction.UPDATE_BRIDGE),
+                argThat(before -> before.resolveDestinationTopics().equals(List.of(DEST_A))),
+                argThat(after -> after.resolveDestinationTopics().equals(List.of(DEST_B))));
+    }
+
+    @Test
+    void setEnabled_auditsDisable_butNotANoOp() {
+        when(repository.findById("1")).thenReturn(Optional.of(TestBridges.unordered("1", DEST_A)));
+
+        service.setEnabled("1", true, USER);
+        service.setEnabled("1", false, USER);
+
+        verify(audit).bridgeChanged(eq(USER), eq(AuditAction.DISABLE_BRIDGE), any(), any());
+        verify(audit, never()).bridgeChanged(any(), eq(AuditAction.ENABLE_BRIDGE), any(), any());
+    }
+
+    @Test
+    void delete_removesAndAuditsTheOldDefinition() {
+        BridgeDocument stored = TestBridges.unordered("1", DEST_A);
+        when(repository.findById("1")).thenReturn(Optional.of(stored));
+
+        service.delete("1", USER);
+
+        verify(repository).deleteById("1");
+        verify(audit).bridgeChanged(USER, AuditAction.DELETE_BRIDGE, stored, null);
+    }
+
+    @Test
+    void delete_failsForUnknownBridge() {
+        when(repository.findById("x")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.delete("x", USER)).isInstanceOf(BridgeNotFoundException.class);
         verify(repository, never()).deleteById(any());
     }
 }

@@ -5,6 +5,7 @@ import com.catacumbas69.pulsario.service.BridgeProxyService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import java.time.Instant;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -59,6 +61,45 @@ public class BridgeProxyController {
     }
 
     /**
+     * Returns the all-time message counts of every bridge, per topic.
+     *
+     * @return Passário's response
+     */
+    @Operation(summary = "All-time message counts of every bridge, per topic")
+    @GetMapping("/traffic")
+    public ResponseEntity<byte[]> traffic() {
+        return bridges.traffic();
+    }
+
+    /**
+     * Returns the all-time message counts of one bridge, per topic.
+     *
+     * @param id bridge id
+     * @return Passário's response
+     */
+    @Operation(summary = "All-time message counts of a bridge, per topic")
+    @GetMapping("/{id}/traffic")
+    public ResponseEntity<byte[]> traffic(@PathVariable @PulsarName String id) {
+        return bridges.traffic(id);
+    }
+
+    /**
+     * Returns the per-minute message counts of one bridge (default: last hour; at most 7 days).
+     *
+     * @param id bridge id
+     * @param from first minute (ISO-8601), optional
+     * @param to end of the range (ISO-8601, exclusive), optional
+     * @return Passário's response
+     */
+    @Operation(summary = "Per-minute message counts of a bridge")
+    @GetMapping("/{id}/traffic/minutes")
+    public ResponseEntity<byte[]> trafficMinutes(@PathVariable @PulsarName String id,
+                                                 @RequestParam(required = false) Instant from,
+                                                 @RequestParam(required = false) Instant to) {
+        return bridges.trafficMinutes(id, from, to);
+    }
+
+    /**
      * Returns one bridge.
      *
      * @param id bridge id
@@ -74,7 +115,7 @@ public class BridgeProxyController {
      * Creates a bridge.
      *
      * @param body bridge definition (JSON)
-     * @param request current request, for the audit log
+     * @param request current request; its client address is sent to Passário for the audit log
      * @return Passário's response
      */
     @Operation(summary = "Create a bridge")
@@ -88,7 +129,7 @@ public class BridgeProxyController {
      *
      * @param id bridge id
      * @param body bridge definition (JSON)
-     * @param request current request, for the audit log
+     * @param request current request; its client address is sent to Passário for the audit log
      * @return Passário's response
      */
     @Operation(summary = "Update a bridge")
@@ -102,7 +143,7 @@ public class BridgeProxyController {
      * Deletes a bridge.
      *
      * @param id bridge id
-     * @param request current request, for the audit log
+     * @param request current request; its client address is sent to Passário for the audit log
      * @return Passário's response
      */
     @Operation(summary = "Delete a bridge")
@@ -115,7 +156,7 @@ public class BridgeProxyController {
      * Enables a bridge.
      *
      * @param id bridge id
-     * @param request current request, for the audit log
+     * @param request current request; its client address is sent to Passário for the audit log
      * @return Passário's response
      */
     @Operation(summary = "Enable a bridge")
@@ -128,7 +169,7 @@ public class BridgeProxyController {
      * Disables a bridge.
      *
      * @param id bridge id
-     * @param request current request, for the audit log
+     * @param request current request; its client address is sent to Passário for the audit log
      * @return Passário's response
      */
     @Operation(summary = "Disable a bridge")

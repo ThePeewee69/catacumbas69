@@ -16,6 +16,16 @@ Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs
 - **Ordered** bridges (default unless the subscription is `Shared`) replay unacknowledged messages in order
   after a failure; **unordered** bridges negatively acknowledge single messages. Delivery is
   at-least-once in both modes — consumers of the destinations must tolerate duplicates.
+- **Loops are refused** (ADR 0005): a create, update or enable that would close a cycle between enabled
+  bridges (A→B→A, A→B→C→A, partitions count as their topic) returns `400` naming the loop. Bridges on a
+  cycle written straight to MongoDB are not started (state `BLOCKED`).
+- **Traffic counts**: messages and bytes per bridge, topic and minute are counted in memory and written to
+  MongoDB every 5 s with `$inc` bulk upserts — `bridge_traffic_minutes` (history) and
+  `bridge_traffic_totals` (all time), both kept forever. `SOURCE` counts messages delivered to every
+  destination; `DESTINATION` counts each accepted send. If MongoDB is down the counts wait in memory.
+- **Audit**: every bridge change is inserted into `audit_logs` with the definition before and after and
+  the client address (`X-Forwarded-For` from Pulsário), see ADR 0006. Schema migrations are recorded
+  too (`MIGRATE_BRIDGE`, user `passario`).
 - Run **one replica** only (see ADR 0002).
 
 ## Run locally (IntelliJ on necromancer)
@@ -41,8 +51,17 @@ Unit tests need no Docker, MongoDB or Pulsar.
 
 ## API
 
-`/api/v1/bridges` — list, create (`POST`), get/update/delete (`/{id}`), `POST /{id}/enable|disable`,
-`GET /status`. Errors are RFC 9457 Problem Details. Full contract: `http://localhost:8082/swagger-ui.html`.
+| Method | Path | Description |
+|---|---|---|
+| `GET` / `POST` | `/api/v1/bridges` | List / create (`201` + `Location`) |
+| `GET` / `PUT` / `DELETE` | `/api/v1/bridges/{id}` | Get / replace (send `version`) / delete (`204`) |
+| `POST` | `/api/v1/bridges/{id}/enable`, `/disable` | Idempotent |
+| `GET` | `/api/v1/bridges/status` | Runtime state per bridge: `RUNNING`, `STARTING`, `FAILED`, `BLOCKED` |
+| `GET` | `/api/v1/bridges/traffic` | All-time messages/bytes of every bridge, per role and topic |
+| `GET` | `/api/v1/bridges/{id}/traffic` | All-time counts of one bridge |
+| `GET` | `/api/v1/bridges/{id}/traffic/minutes?from=…&to=…` | Per-minute counts (ISO-8601; default last hour, max 7 days) |
+
+Errors are RFC 9457 Problem Details. Full contract: `http://localhost:8082/swagger-ui.html`.
 
 Example:
 

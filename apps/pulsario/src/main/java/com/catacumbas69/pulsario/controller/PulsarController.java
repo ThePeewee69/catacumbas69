@@ -319,4 +319,29 @@ public class PulsarController {
         audit.record(ClientAddress.of(request), AuditAction.SKIP_MESSAGES, fullTopic,
                 Map.of("subscription", subscription, "count", count));
     }
+
+    /**
+     * Clears a subscription's backlog: every unacknowledged message is skipped. Irreversible.
+     *
+     * @param tenant tenant name
+     * @param namespace namespace name
+     * @param topic topic name
+     * @param subscription subscription name
+     * @param request current request, for the audit log
+     * @throws PulsarAdminException if Pulsar rejects the request
+     */
+    @Operation(summary = "Clear the whole backlog of a subscription")
+    @PostMapping(SUBSCRIPTION_PATH + "/clear-backlog")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void clearBacklog(
+            @PathVariable @PulsarName String tenant,
+            @PathVariable @PulsarName String namespace,
+            @PathVariable @PulsarName String topic,
+            @PathVariable @PulsarName String subscription,
+            HttpServletRequest request) throws PulsarAdminException {
+        String fullTopic = persistentTopic(tenant, namespace, topic);
+        messages.clearBacklog(fullTopic, subscription);
+        audit.record(ClientAddress.of(request), AuditAction.CLEAR_BACKLOG, fullTopic,
+                Map.of("subscription", subscription));
+    }
 }

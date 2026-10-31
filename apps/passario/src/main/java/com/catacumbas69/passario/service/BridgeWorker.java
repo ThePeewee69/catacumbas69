@@ -2,6 +2,7 @@ package com.catacumbas69.passario.service;
 
 import com.catacumbas69.passario.config.PassarioProperties;
 import com.catacumbas69.passario.model.BridgeDocument;
+import com.catacumbas69.passario.model.TrafficRole;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -55,6 +56,8 @@ public class BridgeWorker {
     private final PulsarClient client;
     private final PassarioProperties.Bridge settings;
     private final BridgeMetrics metrics;
+    private final TopicTraffic sourceTraffic;
+    private final List<TopicTraffic> destinationTraffic;
     private final List<String> destinationTopics;
     private final boolean ordered;
     private final int maxInFlight;
@@ -76,9 +79,10 @@ public class BridgeWorker {
      * @param client shared Pulsar client
      * @param settings runtime tuning
      * @param metrics meters for this bridge
+     * @param traffic per-topic message counts stored in MongoDB
      */
     public BridgeWorker(BridgeDocument config, PulsarClient client, PassarioProperties.Bridge settings,
-                        BridgeMetrics metrics) {
+                        BridgeMetrics metrics, TrafficRecorder traffic) {
         this.config = config;
         this.client = client;
         this.settings = settings;
@@ -88,6 +92,11 @@ public class BridgeWorker {
         this.maxInFlight = config.getMaxInFlight() != null ? config.getMaxInFlight() : settings.defaultMaxInFlight();
         this.inFlight = new Semaphore(maxInFlight);
         metrics.registerInFlight(this::inFlightCount);
+        this.sourceTraffic = traffic.series(config.getId(), config.getName(), TrafficRole.SOURCE,
+                config.getSource().getTopic());
+        this.destinationTraffic = destinationTopics.stream()
+                .map(topic -> traffic.series(config.getId(), config.getName(), TrafficRole.DESTINATION, topic))
+                .toList();
     }
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -221,11 +230,14 @@ public class BridgeWorker {
      * exactly once, in {@link #onForwardComplete}.
      */
     private void forward(Message<byte[]> message) {
+        long size = payloadSize(message);
         CompletableFuture<Void> allSent;
         try {
             List<CompletableFuture<MessageId>> sends = new ArrayList<>(producers.size());
-            for (Producer<byte[]> producer : producers) {
-                CompletableFuture<MessageId> send = buildMessage(producer, message).sendAsync();
+            for (int i = 0; i < producers.size(); i++) {
+                TopicTraffic delivered = destinationTraffic.get(i);
+                CompletableFuture<MessageId> send = buildMessage(producers.get(i), message).sendAsync();
+                send.thenRun(() -> delivered.add(size));
                 if (ordered) {
                     // Pause as soon as any destination fails, not when the slowest one answers.
                     send.exceptionally(failure -> {
@@ -239,10 +251,10 @@ public class BridgeWorker {
         } catch (RuntimeException e) {
             allSent = CompletableFuture.failedFuture(e);
         }
-        allSent.whenComplete((ignored, failure) -> onForwardComplete(message, failure));
+        allSent.whenComplete((ignored, failure) -> onForwardComplete(message, size, failure));
     }
 
-    private void onForwardComplete(Message<byte[]> message, Throwable failure) {
+    private void onForwardComplete(Message<byte[]> message, long size, Throwable failure) {
         try {
             if (failure != null) {
                 onForwardFailure(message, failure);
@@ -256,6 +268,7 @@ public class BridgeWorker {
                             return null;
                         });
                 metrics.forwarded();
+                sourceTraffic.add(size);
             }
         } finally {
             inFlight.release();
@@ -288,6 +301,11 @@ public class BridgeWorker {
             inFlight.release(maxInFlight);
         }
         Thread.sleep(settings.negativeAckRedeliveryDelay().toMillis());
+    }
+
+    private static long payloadSize(Message<byte[]> message) {
+        byte[] data = message.getData();
+        return data == null ? 0 : data.length;
     }
 
     private TypedMessageBuilder<byte[]> buildMessage(Producer<byte[]> producer, Message<byte[]> message) {

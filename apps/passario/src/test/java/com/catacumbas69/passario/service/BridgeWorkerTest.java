@@ -3,6 +3,7 @@ package com.catacumbas69.passario.service;
 import static com.catacumbas69.passario.TestBridges.DEST_A;
 import static com.catacumbas69.passario.TestBridges.DEST_B;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -19,7 +20,10 @@ import com.catacumbas69.passario.TestBridges;
 import com.catacumbas69.passario.TestProperties;
 import com.catacumbas69.passario.model.BridgeDocument;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.Clock;
 import java.time.Duration;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -35,6 +39,7 @@ import org.apache.pulsar.client.api.TypedMessageBuilder;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 @SuppressWarnings("unchecked")
 class BridgeWorkerTest {
@@ -48,6 +53,9 @@ class BridgeWorkerTest {
     private final TypedMessageBuilder<byte[]> messageA = mock(TypedMessageBuilder.class, RETURNS_SELF);
     private final TypedMessageBuilder<byte[]> messageB = mock(TypedMessageBuilder.class, RETURNS_SELF);
     private final ConsumerBuilder<byte[]> consumerBuilder = mock(ConsumerBuilder.class, RETURNS_SELF);
+
+    private final TrafficWriter trafficWriter = mock(TrafficWriter.class);
+    private final TrafficRecorder traffic = new TrafficRecorder(trafficWriter, Clock.systemUTC());
 
     private BridgeWorker worker;
 
@@ -98,6 +106,49 @@ class BridgeWorkerTest {
         verify(messageA, times(2)).sendAsync();
         verify(messageB, times(2)).sendAsync();
         assertThat(worker.getStatus().running()).isTrue();
+    }
+
+    @Test
+    void countsMessagesAndBytes_perSourceAndDestinationTopic() throws Exception {
+        Message<byte[]> m1 = message("abc");
+        Message<byte[]> m2 = message("de");
+        when(consumer.receive(anyInt(), any(TimeUnit.class))).thenReturn(m1, m2, (Message<byte[]>) null);
+        sendsSucceed(messageA);
+        sendsSucceed(messageB);
+
+        worker = start(TestBridges.unordered("1", DEST_A, DEST_B));
+        await().atMost(WAIT).untilAsserted(() -> assertThat(worker.getStatus().messagesForwarded()).isEqualTo(2));
+        traffic.flush();
+
+        ArgumentCaptor<Collection<TopicTraffic.Drained>> written = ArgumentCaptor.forClass(Collection.class);
+        verify(trafficWriter).write(written.capture());
+        Map<String, Long> messages = new HashMap<>();
+        Map<String, Long> bytes = new HashMap<>();
+        written.getValue().forEach(entry -> {
+            String key = entry.series().role() + " " + entry.series().topic();
+            messages.merge(key, entry.messages(), Long::sum);
+            bytes.merge(key, entry.bytes(), Long::sum);
+        });
+        assertThat(messages).containsOnly(
+                entry("SOURCE " + TestBridges.SOURCE, 2L), entry("DESTINATION " + DEST_A, 2L),
+                entry("DESTINATION " + DEST_B, 2L));
+        assertThat(bytes).containsEntry("SOURCE " + TestBridges.SOURCE, 5L);
+    }
+
+    @Test
+    void doesNotCountSource_whenADestinationFails() throws Exception {
+        Message<byte[]> m1 = message("m1");
+        when(consumer.receive(anyInt(), any(TimeUnit.class))).thenReturn(m1, (Message<byte[]>) null);
+        sendsSucceed(messageA);
+        when(messageB.sendAsync()).thenReturn(CompletableFuture.failedFuture(new IllegalStateException("down")));
+
+        worker = start(TestBridges.unordered("1", DEST_A, DEST_B));
+        await().atMost(WAIT).untilAsserted(() -> verify(consumer).negativeAcknowledge(m1));
+        traffic.flush();
+
+        ArgumentCaptor<Collection<TopicTraffic.Drained>> written = ArgumentCaptor.forClass(Collection.class);
+        verify(trafficWriter).write(written.capture());
+        assertThat(written.getValue()).extracting(entry -> entry.series().topic()).containsExactly(DEST_A);
     }
 
     @Test
@@ -165,7 +216,7 @@ class BridgeWorkerTest {
         when(consumerBuilder.subscribeAsync())
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("no subscription")));
         worker = new BridgeWorker(TestBridges.unordered("1", DEST_A, DEST_B), client,
-                TestProperties.bridge(10), new BridgeMetrics(new SimpleMeterRegistry(), "b"));
+                TestProperties.bridge(10), new BridgeMetrics(new SimpleMeterRegistry(), "b"), traffic);
 
         CompletableFuture<Void> started = worker.start();
 
@@ -189,7 +240,7 @@ class BridgeWorkerTest {
 
     private BridgeWorker start(BridgeDocument bridge) throws Exception {
         BridgeWorker started = new BridgeWorker(bridge, client, TestProperties.bridge(10),
-                new BridgeMetrics(new SimpleMeterRegistry(), bridge.getName()));
+                new BridgeMetrics(new SimpleMeterRegistry(), bridge.getName()), traffic);
         started.start().get(1, TimeUnit.SECONDS);
         return started;
     }

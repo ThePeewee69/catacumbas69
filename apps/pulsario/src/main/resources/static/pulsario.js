@@ -42,6 +42,8 @@ function app() {
     bridges: {
       list: [],
       status: {},
+      traffic: {},  // bridgeId → { 'SOURCE topic' | 'DESTINATION topic' → all-time totals }
+      settings: { url: '', defaultUrl: '', custom: false, draft: '', saving: false, healthState: null, healthMsg: '' },
       loading: false,
       formSaving: false,
       form: null,   // null=closed; object=creating/editing
@@ -64,10 +66,37 @@ function app() {
     },
 
     // ── Settings ───────────────────────────────────────────────────────────
-    saveSettings() {
+    async openSettings() {
+      this.settings.open = true;
+      this.bridges.settings.healthState = null;
+      await this.loadPassarioSettings();
+      this.bridges.settings.draft = this.bridges.settings.url;
+    },
+
+    /** Saves the Pulsar label (this browser) and, if it changed, the Passário URL (server, audited). */
+    async saveSettings() {
       localStorage.setItem('pulsarUrl', this.settings.pulsarUrl);
+      const s = this.bridges.settings;
+      if (s.draft && s.draft !== s.url) {
+        if (!await this.changePassarioUrl('PUT', { url: s.draft })) return;
+      } else {
+        this.notify('Settings saved');
+      }
       this.settings.open = false;
-      this.notify('Settings saved');
+    },
+
+    /** Calls Passário through Pulsário at the URL in use (save first to test a new one). */
+    async checkPassario() {
+      const s = this.bridges.settings;
+      s.healthState = 'checking'; s.healthMsg = '';
+      try {
+        const status = await this.bridgesApi(`${BRIDGES_API}/status`);
+        s.healthState = 'ok';
+        s.healthMsg = `${s.url} · ${status.running ?? 0} bridge(s) running`;
+      } catch (e) {
+        s.healthState = 'error';
+        s.healthMsg = e.message;
+      }
     },
 
     async checkHealth() {
@@ -133,6 +162,24 @@ function app() {
     async skipAll() {
       const n = this.backlog.messages.length;
       await this.skipMessages(n);
+    },
+
+    /**
+     * Skips every message in a subscription's backlog (Overview → Subscription Details).
+     * @param {string} sub subscription name
+     * @param {number} backlog current backlog size, shown in the confirmation
+     */
+    async clearBacklog(sub, backlog) {
+      if (!confirm(`Clear the whole backlog of subscription "${sub}" (${this.fmtNum(backlog)} message(s))?\n`
+        + 'The messages will never be delivered to this subscription. This is irreversible.')) return;
+      try {
+        await this.api(
+          `/api/v1/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/subscriptions/${encodeURIComponent(sub)}/clear-backlog`,
+          { method: 'POST' }
+        );
+        this.notify(`Backlog of "${sub}" cleared`);
+        await this.loadStats();
+      } catch (e) { this.notify('Clear backlog failed: ' + e.message, 'error'); }
     },
 
     // ── API helper ─────────────────────────────────────────────────────────
@@ -281,8 +328,53 @@ function app() {
     // ── Bridges ────────────────────────────────────────────────────────────
     openBridges() {
       this.bridgesView = true;
+      this.loadPassarioSettings();
       this.loadBridges();
       this.loadBridgeStatus();
+    },
+
+    /** @returns {number} bridges whose worker is relaying messages right now */
+    runningBridges() {
+      return Object.values(this.bridges.status).filter(s => s.running).length;
+    },
+
+    // ── Passário URL (stored in MongoDB, audited) ──────────────────────────
+    async loadPassarioSettings() {
+      try {
+        Object.assign(this.bridges.settings, await this.api('/api/v1/settings/passario'));
+      } catch (e) { this.notify('Settings: ' + e.message, 'error'); }
+    },
+
+    async resetPassarioUrl() {
+      if (!confirm(`Go back to the default Passário URL ${this.bridges.settings.defaultUrl}?`)) return;
+      if (await this.changePassarioUrl('DELETE')) this.bridges.settings.draft = this.bridges.settings.url;
+    },
+
+    /**
+     * Saves or resets the Passário URL, then reloads the bridges from the new address.
+     * @param {'PUT'|'DELETE'} method PUT saves `body.url`, DELETE goes back to the default
+     * @param {{url: string}} [body] new URL
+     * @returns {Promise<boolean>} whether the change was saved
+     */
+    async changePassarioUrl(method, body) {
+      const s = this.bridges.settings;
+      s.saving = true;
+      try {
+        const options = { method };
+        if (body) options.body = JSON.stringify(body);
+        Object.assign(s, await this.api('/api/v1/settings/passario', options));
+        s.healthState = null;
+        this.notify(`Passário URL set to ${s.url}`);
+        this.bridges.status = {};
+        this.bridges.traffic = {};
+        if (this.bridgesView) await Promise.all([this.loadBridges(), this.loadBridgeStatus()]);
+        return true;
+      } catch (e) {
+        this.notify('Passário URL not saved: ' + e.message, 'error');
+        return false;
+      } finally {
+        s.saving = false;
+      }
     },
 
     closeBridges() {
@@ -301,13 +393,53 @@ function app() {
       }
     },
 
+    /** Loads runtime status and all-time traffic counts; failures are ignored (Passário may be down). */
     async loadBridgeStatus() {
+      await Promise.all([this.loadWorkerStatus(), this.loadBridgeTraffic()]);
+    },
+
+    async loadWorkerStatus() {
       try {
         const s = await this.bridgesApi(`${BRIDGES_API}/status`);
         const map = {};
         (s.workers || []).forEach(w => { map[w.bridgeId] = w; });
         this.bridges.status = map;
       } catch { /* ignore — Passário may not be running */ }
+    },
+
+    async loadBridgeTraffic() {
+      try {
+        const totals = await this.bridgesApi(`${BRIDGES_API}/traffic`);
+        const map = {};
+        (totals || []).forEach(t => { (map[t.bridgeId] ??= {})[`${t.role} ${t.topic}`] = t; });
+        this.bridges.traffic = map;
+      } catch { /* ignore — counts are optional */ }
+    },
+
+    /**
+     * All-time message count stored by Passário for one topic of a bridge.
+     * @param {string} bridgeId bridge id
+     * @param {'SOURCE'|'DESTINATION'} role topic role in the bridge
+     * @param {string} topic fully-qualified topic
+     * @returns {string} e.g. "1,234 msgs", or '' when nothing was counted yet
+     */
+    trafficLabel(bridgeId, role, topic) {
+      const t = this.bridges.traffic[bridgeId]?.[`${role} ${topic}`];
+      return t ? `${this.fmtNum(t.messages)} msgs` : '';
+    },
+
+    /**
+     * Tooltip with the totals of one topic of a bridge.
+     * @param {string} bridgeId bridge id
+     * @param {'SOURCE'|'DESTINATION'} role topic role in the bridge
+     * @param {string} topic fully-qualified topic
+     * @returns {string} tooltip text
+     */
+    trafficTitle(bridgeId, role, topic) {
+      const t = this.bridges.traffic[bridgeId]?.[`${role} ${topic}`];
+      if (!t) return topic;
+      return `${topic}\n${this.fmtNum(t.messages)} messages, ${this.fmtBytes(t.bytes)}`
+        + `\nfirst ${this.fmtDate(t.firstAt)} · last ${this.fmtDate(t.lastAt)}`;
     },
 
     async toggleBridge(bridge) {

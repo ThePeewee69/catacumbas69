@@ -11,6 +11,10 @@ public final class TestProperties {
     private TestProperties() {
     }
 
+    public static PulsarioProperties properties() {
+        return properties(10, 100);
+    }
+
     public static PulsarioProperties properties(int maxCachedProducers, int maxPeekCount) {
         return new PulsarioProperties(
                 new PulsarioProperties.Pulsar("http://localhost:8080", "pulsar://localhost:6650", "",

@@ -13,7 +13,8 @@ import org.springframework.stereotype.Service;
 
 /**
  * Creates, changes and deletes bridge definitions. Only the stored definition changes here; the
- * {@link BridgeManager} applies it to the running workers (ARCH-4).
+ * {@link BridgeManager} applies it to the running workers (ARCH-4). Every change is recorded in
+ * {@code audit_logs} by {@link AuditLog}.
  */
 @Service
 public class BridgeService {
@@ -21,14 +22,19 @@ public class BridgeService {
     private static final String SHARED = "Shared";
 
     private final BridgeRepository repository;
+    private final AuditLog audit;
+    /** Serialises changes that can alter the bridge graph, so two requests cannot close a loop together. */
+    private final Object topologyLock = new Object();
 
     /**
      * Creates the service.
      *
      * @param repository bridge definitions
+     * @param audit audit log for configuration changes
      */
-    public BridgeService(BridgeRepository repository) {
+    public BridgeService(BridgeRepository repository, AuditLog audit) {
         this.repository = repository;
+        this.audit = audit;
     }
 
     /**
@@ -55,11 +61,12 @@ public class BridgeService {
      * Validates and stores a new bridge.
      *
      * @param draft the new definition; id, version and timestamps are ignored
+     * @param user client IP address, for the audit log
      * @return the stored bridge
-     * @throws BridgeValidationException if a cross-field rule is broken
+     * @throws BridgeValidationException if a cross-field rule is broken or the bridge would close a loop
      * @throws BridgeConflictException if the name is taken
      */
-    public BridgeDocument create(BridgeDocument draft) {
+    public BridgeDocument create(BridgeDocument draft, String user) {
         normalize(draft);
         validate(draft);
         if (repository.existsByName(draft.getName())) {
@@ -69,7 +76,12 @@ public class BridgeService {
         draft.setVersion(null);
         draft.setCreatedAt(null);
         draft.setUpdatedAt(null);
-        return save(draft);
+        synchronized (topologyLock) {
+            rejectLoops(draft);
+            BridgeDocument saved = save(draft);
+            audit.bridgeChanged(user, AuditAction.CREATE_BRIDGE, null, saved);
+            return saved;
+        }
     }
 
     /**
@@ -78,12 +90,13 @@ public class BridgeService {
      * @param id bridge id
      * @param changes the new definition
      * @param expectedVersion version the client edited; {@code null} skips the check
+     * @param user client IP address, for the audit log
      * @return the stored bridge
      * @throws BridgeNotFoundException if it does not exist
      * @throws BridgeConflictException if the version is stale or the name is taken
-     * @throws BridgeValidationException if a cross-field rule is broken
+     * @throws BridgeValidationException if a cross-field rule is broken or the bridge would close a loop
      */
-    public BridgeDocument update(String id, BridgeDocument changes, Long expectedVersion) {
+    public BridgeDocument update(String id, BridgeDocument changes, Long expectedVersion, String user) {
         BridgeDocument existing = get(id);
         if (expectedVersion != null && !expectedVersion.equals(existing.getVersion())) {
             throw staleVersion();
@@ -93,21 +106,27 @@ public class BridgeService {
         if (repository.existsByNameAndIdNot(changes.getName(), id)) {
             throw duplicateName(changes.getName());
         }
+        BridgeDocument before = copyOf(existing);
         existing.copyDefinitionFrom(changes);
-        return save(existing);
+        synchronized (topologyLock) {
+            rejectLoops(existing);
+            BridgeDocument saved = save(existing);
+            audit.bridgeChanged(user, AuditAction.UPDATE_BRIDGE, before, saved);
+            return saved;
+        }
     }
 
     /**
      * Deletes a bridge; its worker is stopped by the next reconciliation.
      *
      * @param id bridge id
+     * @param user client IP address, for the audit log
      * @throws BridgeNotFoundException if it does not exist
      */
-    public void delete(String id) {
-        if (!repository.existsById(id)) {
-            throw new BridgeNotFoundException(id);
-        }
+    public void delete(String id, String user) {
+        BridgeDocument existing = get(id);
         repository.deleteById(id);
+        audit.bridgeChanged(user, AuditAction.DELETE_BRIDGE, existing, null);
     }
 
     /**
@@ -115,16 +134,33 @@ public class BridgeService {
      *
      * @param id bridge id
      * @param enabled desired state
+     * @param user client IP address, for the audit log
      * @return the bridge
      * @throws BridgeNotFoundException if it does not exist
+     * @throws BridgeValidationException if enabling it would close a loop
      */
-    public BridgeDocument setEnabled(String id, boolean enabled) {
+    public BridgeDocument setEnabled(String id, boolean enabled, String user) {
         BridgeDocument bridge = get(id);
         if (bridge.isEnabled() == enabled) {
             return bridge;
         }
+        BridgeDocument before = copyOf(bridge);
         bridge.setEnabled(enabled);
-        return save(bridge);
+        synchronized (topologyLock) {
+            rejectLoops(bridge);
+            BridgeDocument saved = save(bridge);
+            audit.bridgeChanged(user, enabled ? AuditAction.ENABLE_BRIDGE : AuditAction.DISABLE_BRIDGE, before, saved);
+            return saved;
+        }
+    }
+
+    /** Detached copy of the definition and identity, for the "before" side of the audit entry. */
+    private static BridgeDocument copyOf(BridgeDocument bridge) {
+        BridgeDocument copy = new BridgeDocument();
+        copy.copyDefinitionFrom(bridge);
+        copy.setId(bridge.getId());
+        copy.setVersion(bridge.getVersion());
+        return copy;
     }
 
     /** Collapses legacy and duplicate destinations into the {@code destinations} list (MONGO-2). */
@@ -152,6 +188,16 @@ public class BridgeService {
             throw new BridgeValidationException("ordered",
                     "Ordered bridges need an Exclusive, Failover or Key_Shared subscription");
         }
+    }
+
+    /** Refuses an enabled bridge that would relay messages in a circle (ADR 0005). */
+    private void rejectLoops(BridgeDocument bridge) {
+        if (!bridge.isEnabled()) {
+            return;
+        }
+        BridgeTopology.loopThrough(bridge, repository.findAll()).ifPresent(loop -> {
+            throw new BridgeValidationException("destinations", "This bridge would create a message loop: " + loop);
+        });
     }
 
     private BridgeDocument save(BridgeDocument bridge) {

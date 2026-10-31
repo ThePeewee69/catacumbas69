@@ -24,6 +24,12 @@ public class AuditEntry {
     /** {@code AuditAction} name, e.g. {@code PRODUCE} or {@code CREATE_BRIDGE}. */
     private String action;
 
+    /**
+     * Application that wrote the entry: {@code pulsario} or {@code passario} (bridge changes). Entries
+     * written before this field existed are Pulsário's, hence the default.
+     */
+    private String application = "pulsario";
+
     /** Fully-qualified topic the action applied to, or {@code null}. */
     private String topic;
 
@@ -92,5 +98,14 @@ public class AuditEntry {
 
     public Map<String, Object> getTopicProperties() {
         return topicProperties;
+    }
+
+    /**
+     * Returns the application that wrote the entry.
+     *
+     * @return {@code pulsario} or {@code passario}
+     */
+    public String getApplication() {
+        return application;
     }
 }

@@ -16,6 +16,7 @@ public class BridgeWorkerFactory {
     private final PulsarClient client;
     private final PassarioProperties properties;
     private final MeterRegistry meterRegistry;
+    private final TrafficRecorder traffic;
 
     /**
      * Creates the factory.
@@ -23,11 +24,14 @@ public class BridgeWorkerFactory {
      * @param client shared Pulsar client
      * @param properties application properties
      * @param meterRegistry registry for per-bridge meters
+     * @param traffic per-topic message counts stored in MongoDB
      */
-    public BridgeWorkerFactory(PulsarClient client, PassarioProperties properties, MeterRegistry meterRegistry) {
+    public BridgeWorkerFactory(PulsarClient client, PassarioProperties properties, MeterRegistry meterRegistry,
+                               TrafficRecorder traffic) {
         this.client = client;
         this.properties = properties;
         this.meterRegistry = meterRegistry;
+        this.traffic = traffic;
     }
 
     /**
@@ -38,6 +42,6 @@ public class BridgeWorkerFactory {
      */
     public BridgeWorker create(BridgeDocument bridge) {
         return new BridgeWorker(bridge, client, properties.bridge(),
-                new BridgeMetrics(meterRegistry, bridge.getName()));
+                new BridgeMetrics(meterRegistry, bridge.getName()), traffic);
     }
 }

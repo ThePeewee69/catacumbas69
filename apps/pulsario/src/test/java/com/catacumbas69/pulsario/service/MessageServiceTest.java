@@ -94,6 +94,13 @@ class MessageServiceTest {
         verify(topics).skipMessages(TOPIC, "sub", 3);
     }
 
+    @Test
+    void clearBacklog_delegatesToPulsar() throws PulsarAdminException {
+        service.clearBacklog(TOPIC, "sub");
+
+        verify(topics).skipAllMessages(TOPIC, "sub");
+    }
+
     private static Message<byte[]> message(byte[] data) {
         Message<byte[]> message = mock(Message.class);
         when(message.getData()).thenReturn(data);

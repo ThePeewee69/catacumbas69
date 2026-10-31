@@ -15,7 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 /**
- * Produces, peeks and skips messages.
+ * Produces, peeks and skips messages, and clears subscription backlogs.
  */
 @Service
 public class MessageService {
@@ -86,6 +86,17 @@ public class MessageService {
      */
     public void skip(String topic, String subscription, long count) throws PulsarAdminException {
         admin.topics().skipMessages(topic, subscription, count);
+    }
+
+    /**
+     * Skips every message in a subscription's backlog: the cursor moves to the end of the topic.
+     *
+     * @param topic fully-qualified topic
+     * @param subscription subscription name
+     * @throws PulsarAdminException if Pulsar rejects the request
+     */
+    public void clearBacklog(String topic, String subscription) throws PulsarAdminException {
+        admin.topics().skipAllMessages(topic, subscription);
     }
 
     private static MessageDTO toDto(Message<byte[]> message) {

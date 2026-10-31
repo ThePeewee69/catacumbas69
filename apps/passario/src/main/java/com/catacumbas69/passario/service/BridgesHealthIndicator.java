@@ -29,6 +29,7 @@ public class BridgesHealthIndicator implements HealthIndicator {
         return Health.up()
                 .withDetail("running", manager.getRunningCount())
                 .withDetail("failed", manager.getFailedCount())
+                .withDetail("blocked", manager.getBlockedCount())
                 .build();
     }
 }

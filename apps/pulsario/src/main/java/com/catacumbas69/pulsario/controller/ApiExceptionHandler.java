@@ -1,5 +1,6 @@
 package com.catacumbas69.pulsario.controller;
 
+import com.catacumbas69.pulsario.service.InvalidSettingException;
 import com.catacumbas69.pulsario.service.PassarioUnavailableException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -14,12 +15,14 @@ import org.apache.pulsar.client.api.PulsarClientException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSourceResolvable;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.lang.NonNull;
+import org.springframework.validation.FieldError;
 import org.springframework.validation.method.ParameterValidationResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -72,6 +75,9 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static String fieldOf(ParameterValidationResult result, MessageSourceResolvable error,
                                   String parameter) {
+        if (error instanceof FieldError fieldError) {
+            return fieldError.getField();
+        }
         try {
             ConstraintViolation<?> violation = result.unwrap(error, ConstraintViolation.class);
             String path = propertyPathAfterParameter(violation.getPropertyPath());
@@ -150,6 +156,32 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     public ProblemDetail handlePassarioUnavailable(PassarioUnavailableException ex) {
         LOG.warn(ex.getMessage());
         return problem(HttpStatus.SERVICE_UNAVAILABLE, "Passário unavailable", ex.getMessage());
+    }
+
+    /**
+     * A setting value was rejected.
+     *
+     * @param ex the exception
+     * @return {@code 400} with the offending field
+     */
+    @ExceptionHandler(InvalidSettingException.class)
+    public ProblemDetail handleInvalidSetting(InvalidSettingException ex) {
+        ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "Invalid request",
+                ex.getField() + " " + ex.getMessage());
+        problem.setProperty(ERRORS, List.of(new FieldViolation(ex.getField(), ex.getMessage())));
+        return problem;
+    }
+
+    /**
+     * MongoDB cannot be reached while saving a setting (RES-1): answer quickly instead of failing with 500.
+     *
+     * @param ex the exception
+     * @return {@code 503}
+     */
+    @ExceptionHandler(DataAccessResourceFailureException.class)
+    public ProblemDetail handleDatabaseUnavailable(DataAccessResourceFailureException ex) {
+        LOG.warn("MongoDB unavailable: {}", ex.getMessage());
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "Database unavailable", "MongoDB cannot be reached");
     }
 
     private ResponseEntity<Object> invalid(ProblemDetail problem, List<FieldViolation> violations, Exception ex,

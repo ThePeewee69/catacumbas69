@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pulsário</title>
 <link rel="icon" type="image/svg+xml" href="/pulsario-icon.svg">
-<link rel="stylesheet" href="/pulsario.css?v=7">
-<script src="/pulsario.js?v=7" defer></script>
+<link rel="stylesheet" href="/pulsario.css?v=8">
+<script src="/pulsario.js?v=8" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
 </head>
 <body x-data="app()" x-init="init()">
@@ -41,11 +41,42 @@
         </template>
       </div>
 
+      <p class="settings-hint">Shown in the top bar of this browser; the server connects to <span class="mono">PULSAR_SERVICE_URL</span>.</p>
+
+      <div class="divider"></div>
+
+      <div class="field" style="margin-bottom:6px;">
+        <label for="passario-url">Passário URL</label>
+        <input id="passario-url" type="url" x-model.trim="bridges.settings.draft"
+               placeholder="http://passario:8082" autocomplete="off" @keydown.enter="saveSettings()">
+      </div>
+      <p class="settings-hint">
+        Default (<span class="mono">PASSARIO_URL</span>): <span class="mono" x-text="bridges.settings.defaultUrl"></span>
+        <template x-if="bridges.settings.custom">
+          <button type="button" class="link-btn" :disabled="bridges.settings.saving"
+                  @click="resetPassarioUrl()">use default</button>
+        </template>
+        <br>Applies to every user immediately, is saved in MongoDB and recorded in the audit log.
+      </p>
+      <div class="health-row">
+        <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px;" @click="checkPassario()">
+          <template x-if="bridges.settings.healthState==='checking'"><span class="spinner" style="width:12px;height:12px;"></span></template>
+          <template x-if="bridges.settings.healthState!=='checking'"><span>🩺</span></template>
+          Check Passário
+        </button>
+        <template x-if="bridges.settings.healthState==='ok'">
+          <span class="health-msg ok">✓ <span x-text="bridges.settings.healthMsg"></span></span>
+        </template>
+        <template x-if="bridges.settings.healthState==='error'">
+          <span class="health-msg error">✕ <span x-text="bridges.settings.healthMsg"></span></span>
+        </template>
+      </div>
+
       <div class="divider"></div>
 
       <div style="display:flex;gap:8px;justify-content:flex-end;">
         <button class="btn btn-secondary" @click="settings.open=false">Cancel</button>
-        <button class="btn btn-primary" @click="saveSettings()">Save</button>
+        <button class="btn btn-primary" :disabled="bridges.settings.saving" @click="saveSettings()">Save</button>
       </div>
     </div>
   </div>
@@ -307,7 +338,7 @@
     </div>
 
     <!-- Connection status pill -->
-    <div class="conn-status" @click="settings.open=true" :title="settings.pulsarUrl">
+    <div class="conn-status" @click="openSettings()" :title="settings.pulsarUrl">
       <div class="conn-dot" :class="{'ok': settings.healthState==='ok', 'error': settings.healthState==='error', 'checking': settings.healthState==='checking'}"></div>
       <span x-text="connLabel()"></span>
     </div>
@@ -327,7 +358,7 @@
       </svg>
       Bridges
     </button>
-    <button class="btn btn-ghost" style="font-size:13px;padding:7px 10px;" @click="settings.open=true" title="Settings">⚙️</button>
+    <button class="btn btn-ghost" style="font-size:13px;padding:7px 10px;" @click="openSettings()" title="Settings">⚙️</button>
   </div>
 
   <div id="content">
@@ -356,13 +387,18 @@
             </svg>
             <div>
               <div style="font-size:16px;font-weight:700;color:var(--accent2);">Passário Bridges</div>
-              <div style="font-size:11px;color:var(--muted);">via Pulsário → Passário</div>
+              <button class="passario-url" @click="openSettings()" title="Change the Passário URL">
+                <span>Passário:</span>
+                <span class="mono" x-text="bridges.settings.url || '…'"></span>
+                <template x-if="bridges.settings.custom"><span class="tag tag-blue">custom</span></template>
+                <span aria-hidden="true">✎</span>
+              </button>
             </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
-            <span style="font-size:12px;color:var(--muted);" x-show="Object.keys(bridges.status).length > 0">
+            <span style="font-size:12px;color:var(--muted);" x-show="runningBridges() > 0">
               <span class="bridge-status-dot running" style="display:inline-block;"></span>
-              <span x-text="Object.keys(bridges.status).length + ' running'"></span>
+              <span x-text="runningBridges() + ' running'"></span>
             </span>
             <button class="btn btn-ghost" style="font-size:12px;"
                     @click="loadBridges();loadBridgeStatus()" title="Refresh">↺</button>
@@ -416,7 +452,11 @@
                 <div class="bridge-route">
                   <div class="bridge-topic-block">
                     <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">SOURCE</div>
-                    <span class="mono bridge-topic" x-text="bridge.source?.topic || '?'"></span>
+                    <div class="bridge-topic-row">
+                      <span class="mono bridge-topic" :title="trafficTitle(bridge.id, 'SOURCE', bridge.source?.topic)"
+                            x-text="bridge.source?.topic || '?'"></span>
+                      <span class="bridge-count" x-text="trafficLabel(bridge.id, 'SOURCE', bridge.source?.topic)"></span>
+                    </div>
                   </div>
                   <div class="bridge-arrow">
                     <template x-if="bridge.enabled && bridges.status[bridge.id]?.running">
@@ -430,7 +470,10 @@
                     <div style="font-size:10px;color:var(--muted);margin-bottom:3px;"
                          x-text="bridgeDestTopics(bridge).length > 1 ? 'DESTINATIONS (' + bridgeDestTopics(bridge).length + ')' : 'DESTINATION'"></div>
                     <template x-for="dt in bridgeDestTopics(bridge)" :key="dt">
-                      <span class="mono bridge-topic" :title="dt" x-text="dt"></span>
+                      <div class="bridge-topic-row">
+                        <span class="mono bridge-topic" :title="trafficTitle(bridge.id, 'DESTINATION', dt)" x-text="dt"></span>
+                        <span class="bridge-count" x-text="trafficLabel(bridge.id, 'DESTINATION', dt)"></span>
+                      </div>
                     </template>
                     <template x-if="bridgeDestTopics(bridge).length === 0">
                       <span class="mono bridge-topic">?</span>
@@ -458,7 +501,10 @@
                             :title="'Retry at ' + fmtDate(bridges.status[bridge.id].nextRetryAt)"
                             x-text="'failed: ' + truncate(bridges.status[bridge.id].lastError, 60)"></span>
                     </template>
-                    <template x-if="bridge.enabled && !bridges.status[bridge.id]?.running && bridges.status[bridge.id]?.state !== 'FAILED'">
+                    <template x-if="bridge.enabled && bridges.status[bridge.id]?.state === 'BLOCKED'">
+                      <span class="tag tag-failed" :title="bridges.status[bridge.id].lastError">blocked: message loop</span>
+                    </template>
+                    <template x-if="bridge.enabled && !bridges.status[bridge.id]?.running && !['FAILED', 'BLOCKED'].includes(bridges.status[bridge.id]?.state)">
                       <span class="tag" style="background:rgba(234,179,8,.12);color:#ca8a04;">starting…</span>
                     </template>
                     <span class="tag tag-blue" x-text="bridge.ordered ? 'ordered' : 'unordered'"></span>
@@ -536,7 +582,7 @@
                       <table>
                         <thead>
                           <tr>
-                            <th>Name</th><th>Type</th><th>Backlog</th><th>Msg/s</th><th>Consumers</th>
+                            <th>Name</th><th>Type</th><th>Backlog</th><th>Msg/s</th><th>Consumers</th><th></th>
                           </tr>
                         </thead>
                         <tbody>
@@ -547,6 +593,12 @@
                               <td><span class="mono" x-text="fmtNum(sub.msgBacklog ?? 0)"></span></td>
                               <td x-text="fmt(sub.msgRateOut ?? 0)"></td>
                               <td x-text="(sub.consumers ?? []).length"></td>
+                              <td class="cell-actions">
+                                <button class="btn btn-danger btn-xs"
+                                        :disabled="!(sub.msgBacklog > 0)"
+                                        :title="sub.msgBacklog > 0 ? 'Skip all ' + fmtNum(sub.msgBacklog) + ' backlog message(s)' : 'Backlog is empty'"
+                                        @click="clearBacklog(name, sub.msgBacklog)">Clear backlog</button>
+                              </td>
                             </tr>
                           </template>
                         </tbody>

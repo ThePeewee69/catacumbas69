@@ -18,7 +18,11 @@ public enum AuditAction {
     PEEK_MESSAGES,
     /** Messages were skipped on a subscription. */
     SKIP_MESSAGES,
-    /** A bridge was created. */
+    /** The whole backlog of a subscription was skipped. */
+    CLEAR_BACKLOG,
+    /** A runtime setting was changed (details: setting, from, to). */
+    CHANGE_SETTING,
+    /** A bridge was created. Recorded by Passário since 2026-10-30 (details: bridgeId, after). */
     CREATE_BRIDGE,
     /** A bridge was changed. */
     UPDATE_BRIDGE,

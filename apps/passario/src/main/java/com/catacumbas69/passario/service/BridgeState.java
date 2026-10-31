@@ -13,5 +13,7 @@ public enum BridgeState {
     /** Fully stopped. */
     STOPPED,
     /** Could not start; the manager retries with back-off. */
-    FAILED
+    FAILED,
+    /** Not started because it is part of a message loop (ADR 0005). */
+    BLOCKED
 }

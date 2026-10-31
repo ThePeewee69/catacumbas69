@@ -14,9 +14,11 @@ Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs
 | **Overview** | Message rates, throughput, backlog, producers, subscriptions, storage |
 | **Subscriptions** | List, create and delete subscriptions |
 | **Produce** | Send a message with an optional key |
+| **Subscription details** | Backlog per subscription in Overview, with **Clear backlog** (skips every message) |
 | **Backlog** | Peek up to 100 messages without consuming them; view, edit & re-produce, skip one or all |
-| **Bridges** | Create, edit, enable/disable and delete Passário bridges; see running state, throughput and errors |
-| **Audit** | Every change is recorded in MongoDB (`audit_logs`), asynchronously and best-effort |
+| **Bridges** | Create, edit, enable/disable and delete Passário bridges; running state, errors, loop blocks and all-time message counts per topic |
+| **Settings** | ⚙️ Connection Settings: change the Passário URL at runtime (saved in MongoDB, audited) |
+| **Audit** | Every configuration change is recorded in MongoDB (`audit_logs`); bridge changes by Passário (ADR 0006) |
 
 ## Architecture
 
@@ -26,7 +28,8 @@ Browser (Alpine.js)
     ▼
 Pulsário  :8081  (Spring Boot)
     ├── /api/v1/tenants, /namespaces, /topics/**  ──► Pulsar admin API (HTTP)  +  Pulsar client (produce)
-    ├── /api/v1/bridges/**  (BFF, ADR 0001)        ──► Passário :8082
+    ├── /api/v1/bridges/**  (BFF, ADR 0001)        ──► Passário (URL from settings, default PASSARIO_URL)
+    ├── /api/v1/settings/passario                  ──► MongoDB catacumbas69.pulsario_settings
     ├── /api/v1/audit                              ──► MongoDB catacumbas69.audit_logs
     └── /actuator/**, /swagger-ui.html
 ```
@@ -50,6 +53,10 @@ All settings have in-cluster defaults in `application.properties`; override them
 | `LOGGING_STRUCTURED_FORMAT_CONSOLE` | `ecs` (JSON logs for Loki) | *(unset)* |
 
 Timeouts, producer cache size and the peek limit are under `pulsario.*` in `application.properties`.
+
+`PASSARIO_URL` is only the default: the Passário URL can be changed in ⚙️ Connection Settings. The new
+URL applies immediately for every user, is stored in `pulsario_settings`, loaded again on start-up and
+recorded in the audit log (`CHANGE_SETTING`). "Use default" deletes it and goes back to `PASSARIO_URL`.
 
 ## Build, test, run
 
@@ -79,7 +86,9 @@ Full contract: <http://localhost:8081/swagger-ui.html>. Errors are RFC 9457 Prob
 | `POST` | `/api/v1/topics/{tenant}/{ns}/{topic}/produce` | Produce `{payload, key?, properties?}` |
 | `GET` | `/api/v1/topics/{tenant}/{ns}/{topic}/peek/{sub}?count=N` | Peek 1–100 backlog messages |
 | `POST` | `/api/v1/topics/{tenant}/{ns}/{topic}/subscriptions/{sub}/skip/{n}` | Skip `n` messages (`204`) |
-| `*` | `/api/v1/bridges/**` | Bridges, forwarded to Passário (see Passário's API) |
+| `POST` | `/api/v1/topics/{tenant}/{ns}/{topic}/subscriptions/{sub}/clear-backlog` | Skip the whole backlog (`204`) |
+| `*` | `/api/v1/bridges/**` | Bridges and their traffic counts, forwarded to Passário (see Passário's API) |
+| `GET` / `PUT` / `DELETE` | `/api/v1/settings/passario` | Passário URL in use / change `{url}` / back to default |
 | `GET` | `/api/v1/audit?page=0&size=50` | Audit log, newest first |
 
 | Status | Meaning |
@@ -87,7 +96,7 @@ Full contract: <http://localhost:8081/swagger-ui.html>. Errors are RFC 9457 Prob
 | `400` | Invalid name, count or body — `errors` lists each field |
 | `404` / `409` | Pulsar says the resource is missing / already exists |
 | `502` | Pulsar failed or is unreachable |
-| `503` | Passário is unreachable (Bridges panel only) |
+| `503` | Passário is unreachable (Bridges panel only), or MongoDB is down while saving a setting |
 
 ## Operate
 
