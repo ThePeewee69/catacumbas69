@@ -24,7 +24,7 @@ Loops are refused before they exist:
 ## Consequences
 
 - No message carries extra properties; destination consumers see messages unchanged.
-- Loops that pass through something outside Passário (another relay, Pulsar geo-replication, a consumer
+- Loops that pass through something outside Cataponte (another relay, Pulsar geo-replication, a consumer
   that re-publishes) are not detected.
 - A blocked bridge is visible in `/api/v1/bridges/status`, in the health details (`blocked`) and in the
-  Pulsário UI ("blocked: message loop").
+  Catapulsar UI ("blocked: message loop").

@@ -10,7 +10,7 @@ handlers would create two code paths and lose changes made outside the API.
 ## Decision
 
 The `bridges` collection is the desired state. API calls only change documents. `BridgeManager` reads the
-collection every `passario.bridge.reconcile-interval` (5 s) and starts, stops or restarts workers; a change
+collection every `cataponte.bridge.reconcile-interval` (5 s) and starts, stops or restarts workers; a change
 is detected through the document `version`.
 
 ## Consequences

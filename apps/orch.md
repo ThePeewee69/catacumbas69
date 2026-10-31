@@ -1,6 +1,7 @@
 # orch.md — Engineering rules for `catacumbas69/apps`
 
-This file is the single source of truth for **how Pulsário and Passário are built, changed and run**.
+This file is the single source of truth for **how Catapulsar, Cataponte and Catametricas are built, changed and
+run**.
 It is written for two readers:
 
 - **Humans** — read it top to bottom once; use the checklists when reviewing.
@@ -13,8 +14,8 @@ Rule strength follows RFC 2119: **MUST** / **MUST NOT** are mandatory, **SHOULD*
 there is a written reason, **MAY** is optional. Each rule has an ID (e.g. `ARCH-3`) so reviews and commits
 can cite it.
 
-This file lives at `apps/orch.md`. `apps/pulsario/orch.md` and `apps/passario/orch.md` are symlinks to it —
-edit only the original.
+This file lives at `apps/orch.md`. `apps/catapulsar/orch.md`, `apps/cataponte/orch.md` and
+`apps/catametricas/orch.md` are symlinks to it — edit only the original.
 
 ---
 
@@ -22,16 +23,16 @@ edit only the original.
 
 ```
                     ┌──────────────────────────────┐
-  Browser ─────────▶│  Pulsário  (:8081)           │──── Admin REST ───▶ Pulsar broker
+  Browser ─────────▶│  Catapulsar  (:8081)           │──── Admin REST ───▶ Pulsar broker
   (Alpine.js UI)    │  UI + BFF API + audit        │                     (HTTP :8080 / NodePort 31080)
                     └──────┬───────────────┬───────┘
                            │ REST /api/v1  │ audit
                            ▼               ▼
-                    ┌──────────────┐   ┌──────────────────────────┐
-                    │ Passário     │──▶│ MongoDB  catacumbas69    │
-                    │ (:8082)      │   │ (ReplicaSet, 3 members)  │
-                    │ bridge engine│   └──────────────────────────┘
-                    └──────┬───────┘
+                    ┌──────────────┐   ┌──────────────────────────┐   ┌──────────────┐
+                    │ Cataponte     │──▶│ MongoDB  catacumbas69    │◀──│ Catametricas     │── Admin REST ──▶ Pulsar
+                    │ (:8082)      │   │ (ReplicaSet, 3 members)  │   │ (:8083)      │   (topic stats,
+                    │ bridge engine│   └──────────────────────────┘   │ statistics   │    every 60 s)
+                    └──────┬───────┘     ▲ Catapulsar reads contario_*  └──────────────┘
                            │ binary protocol (consume → produce, fan-out)
                            ▼
                      Pulsar broker (:6650 / NodePort 31650)
@@ -39,8 +40,17 @@ edit only the original.
 
 | Component | Responsibility | Owns (data) | Talks to |
 |---|---|---|---|
-| **Pulsário** | Web UI for Pulsar (tenants, namespaces, topics, subscriptions, backlog, produce); UI for bridges; runtime settings (Passário URL); audit of its changes | `audit_logs` (owner, reads + indexes), `pulsario_settings` | Pulsar Admin API, Pulsar binary (produce/peek), Passário REST, MongoDB |
-| **Passário** | Runs bridges: consumes a source topic and fans each message out to 1..n destination topics; CRUD API for bridge config; per-topic traffic counts; loop blocking; audit of bridge changes | `bridges`, `bridge_traffic_minutes`, `bridge_traffic_totals`; inserts into `audit_logs` | Pulsar binary, MongoDB |
+| **Catapulsar** | Web UI for Pulsar (tenants, namespaces, topics, subscriptions, backlog, produce); UI for bridges; runtime settings (Cataponte URL); audit of its changes | `audit_logs` (owner, reads + indexes), `pulsario_settings` | Pulsar Admin API, Pulsar binary (produce/peek), Cataponte REST, MongoDB |
+| **Cataponte** | Runs bridges: consumes a source topic and fans each message out to 1..n destination topics; CRUD API for bridge config; per-topic traffic counts; loop blocking; audit of bridge changes | `bridges`, `bridge_traffic_minutes`, `bridge_traffic_totals`; inserts into `audit_logs` | Pulsar binary, MongoDB |
+| **Catametricas** | Collects every topic's statistics from Pulsar on an interval and stores traffic (messages/bytes in and out) and backlog per topic: latest snapshot, per minute (30 days), per hour and all-time (ADR 0007). No business API | `contario_topic_snapshots`, `contario_topic_minutes`, `contario_topic_hours`, `contario_topic_totals`, `contario_status`, `contario_locks`; reads one document of `pulsario_settings` | Pulsar Admin API, MongoDB |
+
+**Names.** The apps were renamed on 2026-10-31: Pulsário → **Catapulsar**, Passário → **Cataponte**,
+Contário → **Catametricas** (folders, Maven artifacts, packages, classes, properties, environment variables,
+metrics, images and docs). **MongoDB identifiers kept the old names** so no data had to be migrated: the
+collections `pulsario_settings` and `contario_*`, the setting ids `passario.url` and
+`contario.collect-interval-seconds`, and the audit `application` values `pulsario` / `passario`. New code
+MUST keep using these exact names (they are constants in `Setting`, `CatametricasSchema`/`Schema`,
+`AuditEntry` and `AuditRecord`).
 
 Runtime: MicroShift on `meloes` (NUC, `192.168.86.35`), deployed with ArgoCD. Local development runs
 from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
@@ -50,26 +60,30 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 ## 2. Architecture rules
 
 - **ARCH-1 [MUST]** Each service owns its MongoDB collections. A service MUST NOT read or write another
-  service's collection. Cross-service data goes through the owner's REST API. **One exception:**
-  `audit_logs` is a shared append-only log — both services insert, only Pulsário reads (ADR 0006).
-- **ARCH-2 [MUST]** The browser talks only to Pulsário. Pulsário exposes the bridge API to its UI as a
-  **backend-for-frontend (BFF)** proxy (`/api/v1/bridges/**` → Passário). Passário is not exposed outside
+  service's collection. Cross-service data goes through the owner's REST API. **Exceptions**, each with
+  its ADR: `audit_logs` is a shared append-only log — Catapulsar and Cataponte insert, only Catapulsar reads
+  (ADR 0006); Catapulsar **reads** Catametricas' `contario_*` collections for the overviews and Catametricas
+  **reads** the `contario.collect-interval-seconds` document of `pulsario_settings` (ADR 0007). The shared
+  field names live in `catametricas/.../model/Schema.java` and its mirror `catapulsar/.../model/CatametricasSchema.java`;
+  change both together.
+- **ARCH-2 [MUST]** The browser talks only to Catapulsar. Catapulsar exposes the bridge API to its UI as a
+  **backend-for-frontend (BFF)** proxy (`/api/v1/bridges/**` → Cataponte). Cataponte is not exposed outside
   the cluster except for local development.
-  *Why:* one origin (no CORS) and Passário stays internal. Pulsário forwards the browser's address as
-  `X-Forwarded-For` so Passário's audit entries name the user (ADR 0006).
-- **ARCH-3 [MUST]** Passário is the only component that consumes or produces on behalf of a bridge.
-  Pulsário MUST NOT implement relay logic.
-- **ARCH-4 [MUST]** Bridge configuration in MongoDB is the desired state; Passário reconciles running
+  *Why:* one origin (no CORS) and Cataponte stays internal. Catapulsar forwards the browser's address as
+  `X-Forwarded-For` so Cataponte's audit entries name the user (ADR 0006).
+- **ARCH-3 [MUST]** Cataponte is the only component that consumes or produces on behalf of a bridge.
+  Catapulsar MUST NOT implement relay logic.
+- **ARCH-4 [MUST]** Bridge configuration in MongoDB is the desired state; Cataponte reconciles running
   workers to it on a fixed interval (`bridge.reconcile.interval`). API calls change the document only;
   they MUST NOT start or stop workers directly. This keeps one code path for start/stop/restart.
-- **ARCH-5 [MUST]** Passário runs with **exactly one replica** until leader election or bridge sharding
+- **ARCH-5 [MUST]** Cataponte runs with **exactly one replica** until leader election or bridge sharding
   exists. With 2+ replicas every replica runs every bridge: `Exclusive`/`Failover` subscriptions fail and
   `Shared` ones split traffic unpredictably. Encode this in the Deployment (`replicas: 1`,
   `strategy: Recreate`).
 - **ARCH-6 [MUST]** Bridge delivery is **at-least-once**: the source message is acknowledged only after
   every destination accepted it; any failure → negative ack → redelivery. Consumers of destination topics
   MUST tolerate duplicates. Do not add "exactly-once" claims anywhere without Pulsar transactions.
-- **ARCH-7 [SHOULD]** Keep services stateless apart from MongoDB and Pulsar. In-memory state (e.g. Passário's
+- **ARCH-7 [SHOULD]** Keep services stateless apart from MongoDB and Pulsar. In-memory state (e.g. Cataponte's
   worker map and counters) is a cache of runtime facts, never configuration.
 - **ARCH-8 [MUST]** Configuration follows 12-factor: every environment-specific value is an env var with a
   cluster-internal default in `application.properties`. No profile-specific property files with hosts or
@@ -79,15 +93,16 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 
 | Env var | Service | Default (in-cluster) | Local (necromancer) |
 |---|---|---|---|
-| `PULSAR_SERVICE_URL` | Pulsário | `http://pulsar.pulsar.svc.cluster.local:8080` | `http://192.168.86.35:31080` |
-| `PULSAR_BROKER_URL` | both | `pulsar://pulsar.pulsar.svc.cluster.local:6650` | `pulsar://192.168.86.35:31650` |
-| `PULSAR_LISTENER_NAME` | both | *(empty)* | `external` |
-| `SPRING_DATA_MONGODB_URI` | both | in-cluster ReplicaSet URI from Secret | NodePort `32017` + `authSource=admin&directConnection=true` |
-| `PASSARIO_URL` | Pulsário | `http://passario.<ns>.svc.cluster.local:8082` | `http://localhost:8082` |
-| `PULSARIO_REFRESH_INTERVAL_SECONDS` | Pulsário | `10` | `10` |
+| `PULSAR_SERVICE_URL` | Catapulsar, Catametricas | `http://pulsar.pulsar.svc.cluster.local:8080` | `http://192.168.86.35:31080` |
+| `PULSAR_BROKER_URL` | Catapulsar, Cataponte | `pulsar://pulsar.pulsar.svc.cluster.local:6650` | `pulsar://192.168.86.35:31650` |
+| `PULSAR_LISTENER_NAME` | Catapulsar, Cataponte | *(empty)* | `external` |
+| `SPRING_DATA_MONGODB_URI` | all | in-cluster ReplicaSet URI from Secret | NodePort `32017` + `authSource=admin&directConnection=true` |
+| `CATAPONTE_URL` | Catapulsar | `http://cataponte.<ns>.svc.cluster.local:8082` | `http://localhost:8082` |
+| `CATAPULSAR_REFRESH_INTERVAL_SECONDS` | Catapulsar | `10` | `10` |
+| `CATAMETRICAS_COLLECT_INTERVAL_SECONDS` | Catapulsar, Catametricas (same value) | `60` | `60` |
 
-`PASSARIO_URL` is the default; it can be changed at runtime from Pulsário's Connection Settings
-(`PUT /api/v1/settings/passario`), which stores it in `pulsario_settings` and audits the change.
+`CATAPONTE_URL` is the default; it can be changed at runtime from Catapulsar's Connection Settings
+(`PUT /api/v1/settings/cataponte`), which stores it in `pulsario_settings` and audits the change.
 Deleting the setting goes back to the env var.
 
 - **CFG-1 [MUST]** Bind config with `@ConfigurationProperties` records (validated with `@Validated`), not
@@ -119,7 +134,7 @@ conventions, and those conventions are **enforced by tools in the build**, not b
   final newline, trimmed trailing whitespace; 4 spaces for Java/XML, 2 spaces for HTML/JS/CSS/YAML/JSON;
   max line length 120).
 - **READ-8 [MUST]** SOLID at class/module level: single responsibility, depend on abstractions at
-  boundaries (e.g. a `BridgeClient` interface in Pulsário for calls to Passário), no circular
+  boundaries (e.g. a `BridgeClient` interface in Catapulsar for calls to Cataponte), no circular
   dependencies between packages.
 
 ### 3.2 Java
@@ -157,7 +172,7 @@ Standard: **WHATWG HTML Living Standard**, **WCAG 2.2 level AA** for accessibili
 - **HTML-3 [MUST]** Lowercase element and attribute names, double-quoted attribute values, 2-space
   indent, one top-level section per feature with a comment banner (`<!-- ══ Bridges ══ -->`).
 - **HTML-4 [MUST]** No inline `style=""` except for one-off values computed by Alpine bindings; styling
-  goes in `pulsario.css` classes. No inline `<script>` blocks.
+  goes in `catapulsar.css` classes. No inline `<script>` blocks.
 - **HTML-5 [MUST]** Enforced with **html-validate** (`html-validate:recommended` +
   `html-validate:a11y`), configured to allow Alpine attributes (`x-*`, `@*`, `:*`).
 
@@ -205,7 +220,7 @@ Standard: **W3C CSS** specs, **stylelint-config-standard**, Prettier formatting.
   how to test, API link (`/swagger-ui.html`), and operational notes.
 - **DOC-4 [MUST]** Architecture decisions are recorded as **ADRs** (Michael Nygard format: Context,
   Decision, Consequences) in `apps/docs/adr/NNNN-title.md`. Existing decisions to record first:
-  BFF for bridges (ARCH-2), single-replica Passário (ARCH-5), at-least-once fan-out (ARCH-6),
+  BFF for bridges (ARCH-2), single-replica Cataponte (ARCH-5), at-least-once fan-out (ARCH-6),
   config-as-desired-state reconciliation (ARCH-4).
 - **DOC-5 [SHOULD]** Diagrams as text (Mermaid or ASCII) in Markdown, so they are versioned with the code.
 
@@ -214,12 +229,12 @@ Standard: **W3C CSS** specs, **stylelint-config-standard**, Prettier formatting.
 | Language | Formatter | Linter | Runs in |
 |---|---|---|---|
 | Java | IntelliJ default style + `.editorconfig` | Checkstyle | `mvn verify` |
-| HTML | Prettier | html-validate | `npm run lint` in `apps/pulsario` |
-| JS | Prettier | ESLint | `npm run lint` in `apps/pulsario` |
-| CSS | Prettier | Stylelint | `npm run lint` in `apps/pulsario` |
+| HTML | Prettier | html-validate | `npm run lint` in `apps/catapulsar` |
+| JS | Prettier | ESLint | `npm run lint` in `apps/catapulsar` |
+| CSS | Prettier | Stylelint | `npm run lint` in `apps/catapulsar` |
 
-The frontend lint tools are dev-only (`apps/pulsario/package.json`, `devDependencies`); they never ship
-in the jar. `mvn verify` in Pulsário runs `npm run lint` through `frontend-maven-plugin` so one command
+The frontend lint tools are dev-only (`apps/catapulsar/package.json`, `devDependencies`); they never ship
+in the jar. `mvn verify` in Catapulsar runs `npm run lint` through `frontend-maven-plugin` so one command
 checks everything.
 
 ---
@@ -272,7 +287,7 @@ Every package has a `package-info.java` (DOC-2). Dependencies point downwards on
 - **PUL-2 [MUST]** Both services use the **same Pulsar client version**, from the broker's LTS line.
 - **PUL-3 [MUST]** Topics are always stored and passed as fully-qualified names
   (`persistent://tenant/namespace/topic`).
-- **PUL-4 [SHOULD]** Bridge subscriptions are named `passario-<bridge-name>` unless the user sets one;
+- **PUL-4 [SHOULD]** Bridge subscriptions are named `cataponte-<bridge-name>` unless the user sets one;
   never reuse an application's own subscription.
 - **PUL-5 [MUST]** Producers/consumers are closed when a worker stops, including when `start()` fails
   halfway.
@@ -291,7 +306,11 @@ Every package has a `package-info.java` (DOC-2). Dependencies point downwards on
 - **MONGO-5 [MUST]** Counters are written with `$inc` bulk upserts on a unique key, never read-modify-write:
   `bridge_traffic_minutes` (`bridgeId`, `role`, `topic`, `minute`) and `bridge_traffic_totals`
   (`bridgeId`, `role`, `topic`). Both are kept forever (no TTL); queries over minutes are bounded to
-  7 days (PERF-5).
+  7 days (PERF-5). Catametricas uses the same pattern: `contario_topic_minutes` (`topic`, `minute`, TTL 30 days),
+  `contario_topic_hours` (`topic`, `hour`, forever) and `contario_topic_totals` (`_id` = topic, forever).
+- **MONGO-6 [MUST]** Cumulative counters read from Pulsar are stored as deltas: the last raw value is kept
+  per topic (`contario_topic_snapshots`); a lower value than before is a reset (count the new value); the
+  very first collection only sets the baseline. History of deleted topics is kept (`active=false`).
 
 ---
 
@@ -302,7 +321,7 @@ Every package has a `package-info.java` (DOC-2). Dependencies point downwards on
   `GET/PUT/DELETE /api/v1/bridges/{id}`. State changes that are not CRUD are sub-resources with POST:
   `POST /api/v1/bridges/{id}/enable`.
 - **API-3 [MUST]** Status codes: `200` read/update, `201` + `Location` on create, `204` on delete,
-  `400` validation, `404` missing, `409` conflict (e.g. duplicate name), `502` upstream (Pulsar/Passário)
+  `400` validation, `404` missing, `409` conflict (e.g. duplicate name), `502` upstream (Pulsar/Cataponte)
   failure.
 - **API-4 [MUST]** Errors are RFC 9457 **Problem Details** (`application/problem+json`) produced by one
   `@RestControllerAdvice` per service (`spring.mvc.problemdetails.enabled=true`). Field errors go in an
@@ -319,20 +338,20 @@ Every package has a `package-info.java` (DOC-2). Dependencies point downwards on
 
 ---
 
-## 6. Frontend (Pulsário static UI)
+## 6. Frontend (Catapulsar static UI)
 
-Stack: plain HTML + Alpine.js 3 (from cdnjs, pinned version), one `index.html`, `pulsario.js`, `pulsario.css`.
+Stack: plain HTML + Alpine.js 3 (from cdnjs, pinned version), one `index.html`, `catapulsar.js`, `catapulsar.css`.
 
 - **UI-1 [MUST]** Every `<template x-if>` / `<template x-for>` contains **exactly one element root**.
   Text-only content (`<template x-if="…">📤</template>`) breaks Alpine — wrap it in a `<span>`.
 - **UI-2 [MUST]** Static assets are cache-busted: links carry `?v=<N>`, and `N` is bumped in the same
-  change that edits `pulsario.js` or `pulsario.css`. The server sends `Cache-Control: no-cache`.
+  change that edits `catapulsar.js` or `catapulsar.css`. The server sends `Cache-Control: no-cache`.
 - **UI-3 [MUST]** All HTTP calls go through one helper (`api()`), which turns Problem Details into toast
   messages. No `fetch` scattered in templates.
 - **UI-4 [MUST]** The UI language is **English** — labels, placeholders, empty states, toasts.
 - **UI-5 [MUST]** Destructive actions (delete topic/subscription/bridge, skip messages, clear backlog) ask for
   confirmation and name the target.
-- **UI-6 [SHOULD]** Group state and methods by feature (`bridges.*`, `backlog.*`) in `pulsario.js`;
+- **UI-6 [SHOULD]** Group state and methods by feature (`bridges.*`, `backlog.*`) in `catapulsar.js`;
   keep expressions in HTML to simple reads and single calls.
 - **UI-7 [MUST]** Pickers and lists have bounded height (scroll inside), consistent with `.sub-picker`
   styles; no unbounded growth of the page.
@@ -350,9 +369,9 @@ Stack: plain HTML + Alpine.js 3 (from cdnjs, pinned version), one `index.html`, 
 
 Targets are measured on `meloes` (NUC, MicroShift) with the broker on the same node.
 
-- **PERF-1 [MUST]** Each Passário bridge sustains **≥ 1,000 msg/s** (1 KiB payloads, up to 3 destinations)
-  with p99 forward latency **< 100 ms**. Pulsário read endpoints answer p95 **< 300 ms**.
-- **PERF-2 [MUST]** No blocking round-trip per message in Passário. Sends are asynchronous
+- **PERF-1 [MUST]** Each Cataponte bridge sustains **≥ 1,000 msg/s** (1 KiB payloads, up to 3 destinations)
+  with p99 forward latency **< 100 ms**. Catapulsar read endpoints answer p95 **< 300 ms**.
+- **PERF-2 [MUST]** No blocking round-trip per message in Cataponte. Sends are asynchronous
   (`sendAsync`) and pipelined; the number of unacknowledged messages per bridge is bounded by
   `maxInFlight` (default 1,000) with a semaphore, so memory stays flat under back-pressure.
 - **PERF-3 [MUST]** Producers use batching (`batchingMaxPublishDelay` 1 ms, `batchingMaxMessages` 1,000)
@@ -366,7 +385,7 @@ Targets are measured on `meloes` (NUC, MicroShift) with the broker on the same n
     rejected by validation.
   - **unordered** — failures are negative-acked individually and redelivered later; any subscription type
     is allowed. Highest throughput.
-- **PERF-5 [MUST]** Pulsário never loads unbounded data into memory: peek counts are capped (≤ 100),
+- **PERF-5 [MUST]** Catapulsar never loads unbounded data into memory: peek counts are capped (≤ 100),
   lists are paginated (API-8), and the topic list for the bridge form is fetched with bounded
   concurrency.
 - **PERF-6 [SHOULD]** Reuse clients: one `PulsarClient`, one `PulsarAdmin`, one HTTP client per
@@ -375,7 +394,7 @@ Targets are measured on `meloes` (NUC, MicroShift) with the broker on the same n
   property map once per message, not once per destination), and avoid logging per message at INFO.
 - **PERF-8 [MUST]** Traffic counting costs no I/O per message: workers increment in-memory atomics per
   (bridge, role, topic, minute); `TrafficRecorder` flushes them in two bulk writes every
-  `passario.traffic.flush-interval` (5 s) and once more on shutdown. `SOURCE` counts a message when every
+  `cataponte.traffic.flush-interval` (5 s) and once more on shutdown. `SOURCE` counts a message when every
   destination accepted it; `DESTINATION` counts each accepted send. Redeliveries are counted again
   (at-least-once, ARCH-6).
 
@@ -390,7 +409,7 @@ other service is slow or down.
   outage (OBS-2); nothing crashes or exits.
 - **RES-2 [MUST]** Every remote call has explicit timeouts: Pulsar client (`connectionTimeout` 10 s,
   `operationTimeout` 30 s, producer `sendTimeout` 30 s), Pulsar admin (connect 5 s, read 30 s),
-  Pulsário → Passário HTTP (connect 2 s, read 10 s), MongoDB (`serverSelectionTimeoutMS` 5000).
+  Catapulsar → Cataponte HTTP (connect 2 s, read 10 s), MongoDB (`serverSelectionTimeoutMS` 5000).
 - **RES-3 [MUST]** Reconnects use exponential back-off with a cap (Pulsar client `startingBackoffInterval`
   100 ms, `maxBackoffInterval` 30 s).
 - **RES-4 [MUST]** Bridge isolation: each bridge runs on its own worker; an exception in one bridge MUST
@@ -410,14 +429,14 @@ other service is slow or down.
 - **RES-10 [MUST]** Write endpoints are idempotent where HTTP says so (`PUT`, `DELETE`,
   `POST …/enable|disable`). Deleting a missing bridge returns `404`, never `500`.
 - **RES-11 [MUST]** Audit writes are best-effort and never fail the user's action: an audit failure is
-  logged (with the full entry in Passário) and the operation result is returned.
+  logged (with the full entry in Cataponte) and the operation result is returned.
 - **RES-13 [MUST]** No message loops between bridges (ADR 0005): a create, update or enable that would
   close a cycle among enabled bridges is rejected with `400`; the reconciler never runs a bridge on a
   cycle (state `BLOCKED`), even when the documents were written to MongoDB directly.
 - **RES-14 [MUST]** Traffic counts that cannot be written to MongoDB stay in memory and are retried on the
   next flush; a write failure never affects relaying.
-- **RES-12 [MUST]** The UI degrades per feature: if Passário is down, the Bridges panel shows the error
-  and the rest of Pulsário keeps working; every request shows a clear toast on failure.
+- **RES-12 [MUST]** The UI degrades per feature: if Cataponte is down, the Bridges panel shows the error
+  and the rest of Catapulsar keeps working; every request shows a clear toast on failure.
 
 ---
 
@@ -427,12 +446,12 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 
 - **TEST-1 [MUST]** Unit tests (JUnit 5, AssertJ, Mockito) for all service logic, with no network, no
   Docker and no Spring context — they run in seconds. Mandatory targets:
-  - Passário: `BridgeManager` reconcile decisions (start / stop / restart on `updatedAt` change / keep
+  - Cataponte: `BridgeManager` reconcile decisions (start / stop / restart on `updatedAt` change / keep
     running when Mongo fails / back-off after start failure); `BridgeWorker` fan-out to every
     destination, ack only after all destinations succeed, ordered-mode replay vs unordered nack,
     `maxInFlight` bound; bridge validation (destinations, source ≠ destination, ordered ⇒ not `Shared`);
     legacy `destination` → `destinations` normalisation.
-  - Pulsário: audit is best-effort (RES-11), BFF error mapping (Passário down → `502`), input
+  - Catapulsar: audit is best-effort (RES-11), BFF error mapping (Cataponte down → `502`), input
     validation of topic names and peek counts.
 - **TEST-1b [MUST]** Pulsar and Mongo types are mocked at the service boundary (`PulsarClient`,
   `Consumer`, `Producer`, repositories); tests assert behaviour (what was sent, acked, nacked,
@@ -461,18 +480,23 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 - **OBS-3 [MUST]** Logs are JSON on stdout in the cluster (structured logging, ECS format) and
   human-readable locally. Alloy ships them to Loki; Kubernetes labels `app`, `namespace` come from Alloy,
   not from the app.
-- **OBS-4 [MUST]** Passário puts `bridgeId` and `bridgeName` in the MDC inside worker threads.
-- **OBS-5 [MUST]** Passário exposes Micrometer metrics per bridge, tagged `bridge`:
-  `passario_messages_forwarded_total`, `passario_forward_errors_total`, `passario_bridges_running`.
+- **OBS-4 [MUST]** Cataponte puts `bridgeId` and `bridgeName` in the MDC inside worker threads.
+- **OBS-5 [MUST]** Cataponte exposes Micrometer metrics per bridge, tagged `bridge`:
+  `cataponte_messages_forwarded_total`, `cataponte_forward_errors_total`, `cataponte_bridges_running`.
   The `/api/v1/bridges/status` counters read from the same meters.
 - **OBS-6 [MUST]** Every configuration change is recorded in `audit_logs` (ADR 0006), whichever client
-  made it: Pulsário records topic, subscription, backlog, produce and settings changes
-  (`CHANGE_SETTING` with `from`/`to`); Passário records every bridge change with the definition `before`
+  made it: Catapulsar records topic, subscription, backlog, produce and settings changes
+  (`CHANGE_SETTING` with `from`/`to`); Cataponte records every bridge change with the definition `before`
   and `after` (`CREATE/UPDATE/DELETE/ENABLE/DISABLE/MIGRATE_BRIDGE`). A new configurable thing is not
   done until its changes are audited.
-- **OBS-7 [MUST]** Passário stores per-topic message and byte counts per bridge: all-time totals and
+- **OBS-7 [MUST]** Cataponte stores per-topic message and byte counts per bridge: all-time totals and
   per-minute history, served at `GET /api/v1/bridges/traffic`, `/{id}/traffic` and
   `/{id}/traffic/minutes?from&to`.
+- **OBS-8 [MUST]** Catametricas stores every topic's traffic and backlog (ADR 0007). Catapulsar shows them as the
+  cluster (tenants), tenant (namespaces) and namespace (topics) overviews at `GET /api/v1/overview`,
+  `/{tenant}` and `/{tenant}/{namespace}?period=1h|24h|7d|30d`, with the time of Catametricas' last
+  collection. Catametricas exposes `catametricas_collect_duration`, `catametricas_collect_failures_total` and
+  `catametricas_topics`, and a `collector` health component (always UP; details show leader and last run).
 
 ---
 
@@ -480,7 +504,7 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 
 - **SEC-1 [MUST]** Secrets (Mongo user/password, any tokens) come from Kubernetes Secrets mounted as env
   vars. Locally they live only in the IntelliJ run configuration, which is git-ignored.
-- **SEC-2 [MUST]** Passário's Service is `ClusterIP` (ARCH-2). Pulsário is exposed through a Route behind
+- **SEC-2 [MUST]** Cataponte's Service is `ClusterIP` (ARCH-2). Catapulsar is exposed through a Route behind
   authentication (e.g. an OAuth proxy) — the UI can delete topics and skip backlog.
 - **SEC-3 [MUST]** Mongo users have least privilege: `readWrite` on `catacumbas69` only.
 - **SEC-4 [MUST]** Validate and bound all user input (topic names, counts, payload sizes); never build
@@ -488,9 +512,9 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 - **SEC-5 [MUST]** Containers run as non-root with a read-only root filesystem where possible
   (MicroShift `restricted-v2` SCC compatible: no fixed UID).
 
-- **SEC-6 [MUST]** Settings that make the server call a URL (the Passário URL) accept only absolute
+- **SEC-6 [MUST]** Settings that make the server call a URL (the Cataponte URL) accept only absolute
   `http`/`https` URLs without credentials, query or fragment, and every change is audited. Anyone who can
-  open Pulsário can point it at another host, which is one more reason for SEC-2's authentication.
+  open Catapulsar can point it at another host, which is one more reason for SEC-2's authentication.
 ---
 
 ## 12. Build and deploy
@@ -501,7 +525,8 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 - **OPS-2 [MUST]** Image tags are immutable (`<version>-<git-sha>`); `latest` is never deployed.
 - **OPS-3 [MUST]** Kubernetes manifests live in the GitOps repo and are synced by ArgoCD. Each Deployment
   sets resource requests/limits, liveness/readiness probes on Actuator, and config via ConfigMap + Secret.
-- **OPS-4 [MUST]** Passário Deployment: `replicas: 1`, `strategy: Recreate` (ARCH-5).
+- **OPS-4 [MUST]** Cataponte Deployment: `replicas: 1`, `strategy: Recreate` (ARCH-5). Catametricas may run
+  several replicas: a lease in `contario_locks` lets only one collect (ADR 0007).
 - **OPS-5 [SHOULD]** Graceful shutdown (`server.shutdown=graceful`) so workers stop and ack in-flight
   messages before the pod dies; `terminationGracePeriodSeconds` ≥ 30.
 
@@ -509,7 +534,7 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 
 ## 13. Workflow and definition of done
 
-- **GIT-1 [MUST]** Conventional commits: `feat(passario): …`, `fix(pulsario): …`, `docs: …`. One logical
+- **GIT-1 [MUST]** Conventional commits: `feat(cataponte): …`, `fix(catapulsar): …`, `docs: …`. One logical
   change per commit; cite rule IDs when a commit exists to satisfy one.
 - **GIT-2 [MUST]** No commits with secrets, `target/`, or `.idea/`.
 
@@ -533,35 +558,95 @@ The code does not yet follow every rule. Agents fixing a gap remove it here in t
 
 | ID | Service | Gap | Rule |
 |---|---|---|---|
-| G-6 | both | No Testcontainers integration tests (unit and slice tests exist) | TEST-3 |
-| G-11 | Pulsário | No Playwright UI smoke test in the build | TEST-4 |
-| G-16 | both | No Kubernetes manifests in the GitOps repo yet (Dockerfiles exist) | OPS-2..4 |
-| G-17 | Pulsário | No ESLint, Stylelint, html-validate or Prettier for the static UI | HTML-5, JS-6, CSS-6 |
-| G-18 | Pulsário | JSDoc missing on most `pulsario.js` methods | JS-4 |
-| G-20 | Pulsário | Clickable `<div>`s in the sidebar tree and pickers; many inline `style=""`; modals without `role="dialog"`; decorative SVGs without `aria-hidden` | HTML-1, HTML-2, HTML-4 |
-| G-21 | both | No CI pipeline running `mvn verify` and the frontend linters on every push | TEST-5 |
+| G-6 | all | No Testcontainers integration tests (unit and slice tests exist) | TEST-3 |
+| G-11 | Catapulsar | No Playwright UI smoke test in the build | TEST-4 |
+| G-16 | all | No Kubernetes manifests in the GitOps repo yet (Dockerfiles exist) | OPS-2..4 |
+| G-17 | Catapulsar | No ESLint, Stylelint, html-validate or Prettier for the static UI | HTML-5, JS-6, CSS-6 |
+| G-18 | Catapulsar | JSDoc missing on most `catapulsar.js` methods | JS-4 |
+| G-20 | Catapulsar | Clickable `<div>`s in the sidebar tree and pickers; many inline `style=""`; modals without `role="dialog"`; decorative SVGs without `aria-hidden` | HTML-1, HTML-2, HTML-4 |
+| G-21 | all | No CI pipeline running `mvn verify` and the frontend linters on every push | TEST-5 |
 
 Closed on 2026-10-30:
 
-- **Passário** (`mvn verify` green, 46 tests, 0 Checkstyle violations): Boot 3.5, Pulsar client 4.0.3,
+- **Cataponte** (`mvn verify` green, 46 tests, 0 Checkstyle violations): Boot 3.5, Pulsar client 4.0.3,
   `@ConfigurationProperties`, auditing, indexes, `/api/v1`, DTOs, validation, Problem Details, OpenAPI,
   Actuator probes, Micrometer meters, MDC, async fan-out with ordering modes, start back-off, `@Version`,
   explicit timeouts, Javadoc, `package-info.java`, README, Dockerfile, CORS closed.
-- **Pulsário** (`mvn verify` green, 31 tests, 0 Checkstyle violations): Boot 3.5, `@ConfigurationProperties`, explicit timeouts, `/api/v1`, DTOs, validation with
-  `@PulsarName`, Problem Details (Pulsar 4xx kept, 5xx → 502, Passário down → 503), OpenAPI, bridge BFF with
+- **Catapulsar** (`mvn verify` green, 31 tests, 0 Checkstyle violations): Boot 3.5, `@ConfigurationProperties`, explicit timeouts, `/api/v1`, DTOs, validation with
+  `@PulsarName`, Problem Details (Pulsar 4xx kept, 5xx → 502, Cataponte down → 503), OpenAPI, bridge BFF with
   audit, asynchronous best-effort audit, audit indexes, producer cache, skip endpoint (was missing),
   `binary` flag fix, health indicators, Prometheus, Javadoc, `package-info.java`, Checkstyle, README,
   Dockerfile fix, English UI strings.
 - **Shared**: ADRs 0001–0004, `.editorconfig`, `build/checkstyle.xml`.
-- **Later the same day** (`mvn verify` green on 2026-10-31: Passário 77 tests, Pulsário 50 tests, 0 Checkstyle
+- **Later the same day** (`mvn verify` green on 2026-10-31: Cataponte 77 tests, Catapulsar 50 tests, 0 Checkstyle
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
-  ADR 0006), runtime-editable Passário URL, clear backlog per subscription in Overview.
+  ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-10-31** (pending `mvn verify`): Catapulsar auto-refresh (UI-10), backlog tab with per-subscription
+  statistics and peek on click, **Catametricas** (new service, ADR 0007) and the cluster/tenant/namespace
+  overviews (OBS-8), collection interval editable in Catapulsar, clickable breadcrumb.
 
 ### Remediation plan
 
 1. **UI conventions** — G-17, G-18, G-20: frontend lint tooling, JSDoc, semantic and accessible markup,
    inline styles moved to CSS.
 2. **Tests** — G-6, G-11: Testcontainers integration tests (MongoDB, Pulsar), Playwright smoke test.
-3. **Delivery** — G-16, G-21: manifests for ArgoCD (Passário `replicas: 1`, probes, Secrets) and a CI
-   pipeline.
+3. **Delivery** — G-16, G-21: manifests for ArgoCD (Cataponte `replicas: 1`, Catametricas, probes, Secrets)
+   and a CI pipeline.
+
+---
+
+## 15. Target architecture (proposed — ADR 0008–0013)
+
+Status: **proposed, under review**. Until a phase below is implemented, the rules in sections 1–14 stay in
+force. When a phase lands, the rules it changes are updated in the same change and its ADRs become
+"Accepted".
+
+```
+                         REST (commands, queries)                          Pulsar tenant catacumbas69
+ Browser ──▶ Catapulsar ───────────────┬──────────────▶ Cataponte ──────────┐
+   (UI)      (N replicas)              └──────────────▶ Catametricas        │ bridges
+                 │ publishes                                (N)            │ audit-<app>:
+                 ├── catapulsar/events ─────────────────────────────────────┤ <app>/events
+                 └── catapulsar/settings (compacted) ──▶ read by every      │   → cataudit/audit
+                                                         service at start   ▼
+ Cataponte (N) ── cataponte/events            Catametricas (N) ◀── catametricas/collect-tasks (Shared)
+ Catametricas ─── catametricas/events                 │ MongoDB (history) [+ Prometheus later]
+                                               Cataudit (N) ◀── cataudit/audit (Shared) → cataudit_events
+```
+
+Principles:
+
+- **Commands and queries over REST, facts over events** (ADR 0008). Events are CloudEvents 1.0 in JSON with
+  a registered schema, one namespace per app, key = subject, published after commit with retries.
+- **Each collection has one owner**; other services use its API or its events (ADR 0010).
+- **Audit** is a service of its own (Cataudit) fed by each app's events through Cataponte bridges that each
+  app registers at start-up (ADR 0009).
+- **Settings** are owned by Catapulsar and published on a compacted topic every service reads at start-up
+  (ADR 0011).
+- **Every service runs N replicas, all working**: Pulsar subscriptions distribute bridge messages, collection
+  tasks and audit events; writes are idempotent (deterministic ids, conditional updates, claims) (ADR 0012).
+- **Catametricas is the only metrics API**; MongoDB for history, Prometheus for short ranges once it exists
+  on MicroShift (ADR 0013).
+
+### Phases
+
+Each phase ends with `mvn verify` green in every app, the docs updated and the app usable.
+
+| # | Phase | Main changes |
+|---|---|---|
+| 1 | Event foundations | Tenant/namespaces/policies; CloudEvents publisher with retries in each app; events for every action already audited today (still writing `audit_logs` too) |
+| 2 | Cataudit | New service; each app registers its `audit-<app>` bridge; copy `audit_logs`; Catapulsar's audit view reads Cataudit; stop writing `audit_logs` |
+| 3 | Settings topic | Catapulsar publishes settings (compacted); Catametricas, Cataponte and all Catapulsar replicas read them; Catametricas stops reading `pulsario_settings` |
+| 4 | Catametricas API and tasks | Query API; Catapulsar overviews via BFF; collection tasks on Pulsar with claims and conditional snapshot updates; lease removed |
+| 5 | Cataponte replicas | `Exclusive` rejected and migrated to `Failover`; Deployment with N replicas; ADR 0002 superseded |
+| 6 | Prometheus source (later) | Once Prometheus/OpenMetrics/Loki run on MicroShift: short ranges from PromQL in Catametricas |
+
+### Decisions taken on 2026-10-31
+
+1. Tenant, namespaces, topics and policies are created **by each app at start-up** (idempotent; every app
+   needs Pulsar admin access).
+2. Envelope, publisher, topic names and settings reader live in a shared library, **`catacommons`**.
+3. Existing collections are **renamed to their owner's prefix** with a one-off, idempotent migration per
+   owner (ADR 0010).
+4. Until an authentication proxy exists, the event `actor` is the **client IP address**.

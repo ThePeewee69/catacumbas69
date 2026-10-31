@@ -1,21 +1,21 @@
-# 1. Pulsário proxies bridge management (backend-for-frontend)
+# 1. Catapulsar proxies bridge management (backend-for-frontend)
 
 Date: 2026-10-30 · Status: Accepted
 
 ## Context
 
-Pulsário's browser UI manages bridges that live in Passário. Calling Passário directly from the browser
-needs CORS, exposes Passário outside the cluster, and bypasses Pulsário's audit log.
+Catapulsar's browser UI manages bridges that live in Cataponte. Calling Cataponte directly from the browser
+needs CORS, exposes Cataponte outside the cluster, and bypasses Catapulsar's audit log.
 
 ## Decision
 
-The browser talks only to Pulsário. Pulsário exposes `/api/v1/bridges/**` and forwards each call to
-Passário's REST API server-side, recording an audit entry for every mutation. Passário is a `ClusterIP`
+The browser talks only to Catapulsar. Catapulsar exposes `/api/v1/bridges/**` and forwards each call to
+Cataponte's REST API server-side, recording an audit entry for every mutation. Cataponte is a `ClusterIP`
 service with CORS disabled.
 
 ## Consequences
 
 - One origin, one place for authentication and audit.
-- Pulsário must map Passário failures to `502`/`503` Problem Details and keep the rest of the UI working.
-- Passário's CORS is closed by default; `PASSARIO_CORS_ALLOWED_ORIGINS` exists only for local experiments.
-- Pulsário needs `PASSARIO_URL` (in the cluster: `http://passario:8082`).
+- Catapulsar must map Cataponte failures to `502`/`503` Problem Details and keep the rest of the UI working.
+- Cataponte's CORS is closed by default; `CATAPONTE_CORS_ALLOWED_ORIGINS` exists only for local experiments.
+- Catapulsar needs `CATAPONTE_URL` (in the cluster: `http://cataponte:8082`).
