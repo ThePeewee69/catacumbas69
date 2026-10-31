@@ -1,8 +1,12 @@
 package com.catacumbas69.catapulsar.service;
 
+import com.catacumbas69.catacommons.events.EventData;
+import com.catacumbas69.catacommons.events.EventPublisher;
 import com.catacumbas69.catapulsar.model.AuditEntry;
+import com.catacumbas69.catapulsar.model.Setting;
 import com.catacumbas69.catapulsar.repository.AuditRepository;
 import java.time.Clock;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -14,10 +18,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 /**
- * Writes and reads the audit log.
+ * Writes and reads the audit log, and publishes every audited action as an event on
+ * {@code catacumbas69/catapulsar/events} (ADR 0008).
  *
- * <p>Writes are asynchronous and best-effort (RES-11): the user's action never waits for MongoDB and
- * never fails because auditing failed; failures are logged at WARN.
+ * <p>Writes are asynchronous and best-effort (RES-11): the user's action never waits for MongoDB or Pulsar
+ * and never fails because auditing failed; failures are logged. Until Cataudit exists (phase 2) both the
+ * {@code audit_logs} entry and the event are written.
  */
 @Service
 public class AuditService {
@@ -26,6 +32,7 @@ public class AuditService {
 
     private final AuditRepository repository;
     private final ExecutorService executor;
+    private final EventPublisher events;
     private final Clock clock;
 
     /**
@@ -33,12 +40,14 @@ public class AuditService {
      *
      * @param repository audit storage
      * @param executor executor for asynchronous writes
+     * @param events publishes the matching events
      * @param clock time source for entry timestamps
      */
     public AuditService(AuditRepository repository, @Qualifier("auditExecutor") ExecutorService executor,
-                        Clock clock) {
+                        EventPublisher events, Clock clock) {
         this.repository = repository;
         this.executor = executor;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -72,6 +81,7 @@ public class AuditService {
         } catch (RejectedExecutionException e) {
             LOG.warn("Audit dropped during shutdown: action={} topic={}", action, topic);
         }
+        publish(user, action, topic, payload, key, details);
     }
 
     /**
@@ -83,6 +93,41 @@ public class AuditService {
      */
     public List<AuditEntry> recent(int page, int size) {
         return repository.findAllByOrderByTimestampDesc(PageRequest.of(page, size)).getContent();
+    }
+
+    private void publish(String user, AuditAction action, String topic, String payload, String key,
+                         Map<String, Object> details) {
+        try {
+            if (action == AuditAction.CHANGE_SETTING && details != null) {
+                publishSettingChanged(user, details);
+                return;
+            }
+            Map<String, Object> values = new LinkedHashMap<>();
+            if (details != null) {
+                values.putAll(details);
+            }
+            if (key != null) {
+                values.put("key", key);
+            }
+            if (payload != null) {
+                values.put("payload", payload);
+            }
+            events.publish(action.entity(), action.verb(), topic, EventData.action(user, values));
+        } catch (RuntimeException e) {
+            LOG.warn("Event not published: action={} topic={}: {}", action, topic, e.getMessage());
+        }
+    }
+
+    /** Subject is the setting's topic key; before/after hold {@code value}. */
+    private void publishSettingChanged(String user, Map<String, Object> details) {
+        String id = String.valueOf(details.get("setting"));
+        events.publish(AuditAction.CHANGE_SETTING.entity(), AuditAction.CHANGE_SETTING.verb(),
+                Setting.topicKey(id).orElse(id),
+                EventData.change(user, value(details.get("from")), value(details.get("to")), Map.of("id", id)));
+    }
+
+    private static Map<String, Object> value(Object value) {
+        return value == null ? null : Map.of("value", value);
     }
 
     private void save(AuditEntry entry) {

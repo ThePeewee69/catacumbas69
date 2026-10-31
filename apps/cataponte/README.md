@@ -26,6 +26,10 @@ Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs
 - **Audit**: every bridge change is inserted into `audit_logs` with the definition before and after and
   the client address (`X-Forwarded-For` from Catapulsar), see ADR 0006. Schema migrations are recorded
   too (`MIGRATE_BRIDGE`, user `passario`).
+- **Events** (ADR 0008, orch.md §4.4): every audited change is also published as
+  `com.catacumbas69.cataponte.bridge.<created|updated|deleted|enabled|disabled|migrated>.v1` on
+  `catacumbas69/cataponte/events`, keyed by bridge id, with the definition before and after (flattened).
+  The namespace and topic are created at start-up through the Pulsar admin API (`PULSAR_SERVICE_URL`).
 - Run **one replica** only (see ADR 0002).
 
 ## Run locally (IntelliJ on necromancer)
@@ -36,15 +40,20 @@ Run `CataponteApplication` with these environment variables:
 |---|---|
 | `PULSAR_BROKER_URL` | `pulsar://192.168.86.35:31650` |
 | `PULSAR_LISTENER_NAME` | `external` |
+| `PULSAR_SERVICE_URL` | `http://192.168.86.35:31080` (admin API, namespace creation) |
 | `SPRING_DATA_MONGODB_URI` | `mongodb://<user>:<password>@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true` |
 
 In the cluster leave `PULSAR_LISTENER_NAME` empty, use the in-cluster MongoDB URI from a Secret, and set
 `LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs` for JSON logs.
 
-## Test
+## Build and test
+
+The app is a module of the Maven reactor in `apps/` (with the shared library `catacommons`). From `apps/`:
 
 ```bash
-mvn verify      # unit + slice tests, then Checkstyle
+mvn clean install                       # everything: catacommons + every app, tests + Checkstyle
+mvn -pl cataponte -am verify                # this app and catacommons only
+docker build -f cataponte/Dockerfile -t cataponte .   # image (BuildKit), context = apps/
 ```
 
 Unit tests need no Docker, MongoDB or Pulsar.

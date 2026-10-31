@@ -36,6 +36,11 @@ public record CataponteProperties(
      * @param operationTimeout timeout for producer/consumer creation and other client operations
      * @param startingBackoff first reconnect delay
      * @param maxBackoff upper bound for reconnect delays
+     * @param serviceUrl admin HTTP URL, e.g. {@code http://host:8080}; used at start-up to create the
+     *                   namespace and topics (ADR 0008)
+     * @param adminConnectTimeout admin HTTP connect timeout
+     * @param adminReadTimeout admin HTTP read timeout
+     * @param adminRequestTimeout admin HTTP total request timeout
      */
     public record Pulsar(
             @NotBlank String brokerUrl,
@@ -43,7 +48,11 @@ public record CataponteProperties(
             @NotNull Duration connectionTimeout,
             @NotNull Duration operationTimeout,
             @NotNull Duration startingBackoff,
-            @NotNull Duration maxBackoff) {
+            @NotNull Duration maxBackoff,
+            @NotBlank String serviceUrl,
+            @NotNull Duration adminConnectTimeout,
+            @NotNull Duration adminReadTimeout,
+            @NotNull Duration adminRequestTimeout) {
     }
 
     /**

@@ -12,7 +12,7 @@ import org.springframework.validation.annotation.Validated;
 /**
  * Typed configuration under the {@code catametricas.*} prefix (CFG-1).
  *
- * @param pulsar Pulsar admin client settings
+ * @param pulsar Pulsar admin and client settings
  * @param collect collection settings
  * @param mongo MongoDB client timeouts
  */
@@ -30,18 +30,26 @@ public record CatametricasProperties(
     public static final int MAX_INTERVAL_SECONDS = 600;
 
     /**
-     * Pulsar admin client settings (RES-2).
+     * Pulsar settings (RES-2): the admin API reads statistics; the binary client publishes events (ADR 0008).
      *
      * @param serviceUrl admin HTTP URL, e.g. {@code http://host:8080}
      * @param connectTimeout HTTP connect timeout
      * @param readTimeout HTTP read timeout
      * @param requestTimeout HTTP total request timeout
+     * @param brokerUrl binary protocol URL, e.g. {@code pulsar://host:6650}
+     * @param listenerName advertised listener to use from outside the cluster; empty inside a pod
+     * @param connectionTimeout binary client TCP connection timeout
+     * @param operationTimeout binary client operation timeout
      */
     public record Pulsar(
             @NotBlank String serviceUrl,
             @NotNull Duration connectTimeout,
             @NotNull Duration readTimeout,
-            @NotNull Duration requestTimeout) {
+            @NotNull Duration requestTimeout,
+            @NotBlank String brokerUrl,
+            String listenerName,
+            @NotNull Duration connectionTimeout,
+            @NotNull Duration operationTimeout) {
     }
 
     /**

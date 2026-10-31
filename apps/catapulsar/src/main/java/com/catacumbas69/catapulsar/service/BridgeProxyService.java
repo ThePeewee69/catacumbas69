@@ -1,7 +1,18 @@
 package com.catacumbas69.catapulsar.service;
 
+import com.catacumbas69.catacommons.events.EventData;
+import com.catacumbas69.catacommons.events.EventPublisher;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -21,6 +32,10 @@ import org.springframework.web.util.UriComponentsBuilder;
  * Details on errors. The browser's address is sent as {@code X-Forwarded-For} so Cataponte can record who
  * made the change. If Cataponte cannot be reached a {@link CataponteUnavailableException} is thrown, which
  * the API maps to {@code 503} (RES-12).
+ *
+ * <p>Every forwarded change is also published as a {@code bridge.<action>-requested} event on
+ * {@code catacumbas69/catapulsar/events} with Cataponte's HTTP status, refused requests included
+ * (ADR 0008). Cataponte publishes its own {@code bridge.<action>} event for the change it made.
  */
 @Service
 public class BridgeProxyService {
@@ -28,20 +43,29 @@ public class BridgeProxyService {
     /** Header that carries the browser's address to Cataponte, for its audit log. */
     public static final String FORWARDED_FOR = "X-Forwarded-For";
 
+    private static final Logger LOG = LoggerFactory.getLogger(BridgeProxyService.class);
     private static final String BRIDGES = "/api/v1/bridges";
+    private static final int UNAVAILABLE = 503;
 
     private final RestClient cataponte;
     private final CataponteEndpoint endpoint;
+    private final EventPublisher events;
+    private final ObjectMapper objectMapper;
 
     /**
      * Creates the service.
      *
      * @param cataponte HTTP client for Cataponte (timeouts only; the URL comes from {@code endpoint})
      * @param endpoint Cataponte base URL
+     * @param events publishes the request events
+     * @param objectMapper reads bridge ids and names from request and response bodies
      */
-    public BridgeProxyService(@Qualifier("cataponteRestClient") RestClient cataponte, CataponteEndpoint endpoint) {
+    public BridgeProxyService(@Qualifier("cataponteRestClient") RestClient cataponte, CataponteEndpoint endpoint,
+                              EventPublisher events, ObjectMapper objectMapper) {
         this.cataponte = cataponte;
         this.endpoint = endpoint;
+        this.events = events;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -118,7 +142,8 @@ public class BridgeProxyService {
      * @return Cataponte's response
      */
     public ResponseEntity<byte[]> create(String body, String user) {
-        return forward(HttpMethod.POST, BRIDGES, body, user);
+        return requested(AuditAction.CREATE_BRIDGE, null, body, user,
+                () -> forward(HttpMethod.POST, BRIDGES, body, user));
     }
 
     /**
@@ -130,7 +155,8 @@ public class BridgeProxyService {
      * @return Cataponte's response
      */
     public ResponseEntity<byte[]> update(String id, String body, String user) {
-        return forward(HttpMethod.PUT, BRIDGES + "/" + id, body, user);
+        return requested(AuditAction.UPDATE_BRIDGE, id, body, user,
+                () -> forward(HttpMethod.PUT, BRIDGES + "/" + id, body, user));
     }
 
     /**
@@ -141,7 +167,8 @@ public class BridgeProxyService {
      * @return Cataponte's response
      */
     public ResponseEntity<byte[]> delete(String id, String user) {
-        return forward(HttpMethod.DELETE, BRIDGES + "/" + id, null, user);
+        return requested(AuditAction.DELETE_BRIDGE, id, null, user,
+                () -> forward(HttpMethod.DELETE, BRIDGES + "/" + id, null, user));
     }
 
     /**
@@ -153,7 +180,52 @@ public class BridgeProxyService {
      * @return Cataponte's response
      */
     public ResponseEntity<byte[]> setEnabled(String id, boolean enabled, String user) {
-        return forward(HttpMethod.POST, BRIDGES + "/" + id + (enabled ? "/enable" : "/disable"), null, user);
+        return requested(enabled ? AuditAction.ENABLE_BRIDGE : AuditAction.DISABLE_BRIDGE, id, null, user,
+                () -> forward(HttpMethod.POST, BRIDGES + "/" + id + (enabled ? "/enable" : "/disable"), null, user));
+    }
+
+    /** Forwards a change and publishes the matching request event, whatever Cataponte answered. */
+    private ResponseEntity<byte[]> requested(AuditAction action, String id, String body, String user,
+                                             Supplier<ResponseEntity<byte[]>> call) {
+        ResponseEntity<byte[]> response;
+        try {
+            response = call.get();
+        } catch (CataponteUnavailableException e) {
+            publishRequested(action, id, body, user, UNAVAILABLE, null);
+            throw e;
+        }
+        publishRequested(action, id, body, user, response.getStatusCode().value(), response.getBody());
+        return response;
+    }
+
+    private void publishRequested(AuditAction action, String id, String body, String user, int status,
+                                  byte[] responseBody) {
+        try {
+            Map<String, Object> details = new LinkedHashMap<>();
+            details.put("status", status);
+            if (body != null) {
+                details.put("request", body);
+            }
+            String subject = Optional.ofNullable(id)
+                    .or(() -> field(responseBody, "id"))
+                    .or(() -> field(body == null ? null : body.getBytes(StandardCharsets.UTF_8), "name"))
+                    .orElse("unknown");
+            events.publish(action.entity(), action.verb(), subject, EventData.action(user, details));
+        } catch (RuntimeException e) {
+            LOG.warn("Event not published: {} {}: {}", action, id, e.getMessage());
+        }
+    }
+
+    private Optional<String> field(byte[] json, String name) {
+        if (json == null || json.length == 0) {
+            return Optional.empty();
+        }
+        try {
+            JsonNode value = objectMapper.readTree(json).path(name);
+            return value.isTextual() ? Optional.of(value.asText()) : Optional.empty();
+        } catch (IOException e) {
+            return Optional.empty();
+        }
     }
 
     private ResponseEntity<byte[]> forward(HttpMethod method, String path, String body, String user) {

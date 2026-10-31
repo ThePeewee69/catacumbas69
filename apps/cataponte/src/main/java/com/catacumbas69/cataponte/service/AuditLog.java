@@ -1,5 +1,7 @@
 package com.catacumbas69.cataponte.service;
 
+import com.catacumbas69.catacommons.events.EventData;
+import com.catacumbas69.catacommons.events.EventPublisher;
 import com.catacumbas69.cataponte.model.AuditRecord;
 import com.catacumbas69.cataponte.model.BridgeDocument;
 import com.catacumbas69.cataponte.model.BridgeSource;
@@ -16,6 +18,10 @@ import org.springframework.stereotype.Component;
  * <p>The entry is written right after the change is stored. A failed audit write does not undo the
  * change (it is already applied); it is logged at {@code ERROR} with the full entry so it can be
  * recovered from the logs.
+ *
+ * <p>Every change is also published as a {@code bridge.<verb>} event on {@code catacumbas69/cataponte/events}
+ * (ADR 0008): subject = bridge id, {@code before}/{@code after} = the definitions, flattened. Until Cataudit
+ * exists (phase 2) both are written.
  */
 @Slf4j
 @Component
@@ -24,17 +30,23 @@ public class AuditLog {
     /** User recorded for changes Cataponte makes on its own, such as schema migration. */
     public static final String SYSTEM_USER = AuditRecord.APPLICATION;
 
+    /** Actor in events for changes Cataponte makes on its own. */
+    public static final String SYSTEM_ACTOR = "cataponte";
+
     private final MongoTemplate mongoTemplate;
+    private final EventPublisher events;
     private final Clock clock;
 
     /**
      * Creates the audit log.
      *
      * @param mongoTemplate template for inserts
+     * @param events publishes the matching events
      * @param clock time source
      */
-    public AuditLog(MongoTemplate mongoTemplate, Clock clock) {
+    public AuditLog(MongoTemplate mongoTemplate, EventPublisher events, Clock clock) {
         this.mongoTemplate = mongoTemplate;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -63,6 +75,18 @@ public class AuditLog {
             mongoTemplate.insert(entry);
         } catch (RuntimeException e) {
             log.error("Audit entry not stored: {} {} by {} details={}", action, subject.getId(), user, details, e);
+        }
+        publish(user, action, subject, before, after);
+    }
+
+    private void publish(String user, AuditAction action, BridgeDocument subject, BridgeDocument before,
+                         BridgeDocument after) {
+        try {
+            String actor = SYSTEM_USER.equals(user) ? SYSTEM_ACTOR : user;
+            events.publish(AuditAction.ENTITY, action.verb(), subject.getId(), EventData.change(actor,
+                    before == null ? null : snapshot(before), after == null ? null : snapshot(after), null));
+        } catch (RuntimeException e) {
+            log.warn("Event not published: {} {}: {}", action, subject.getId(), e.getMessage());
         }
     }
 

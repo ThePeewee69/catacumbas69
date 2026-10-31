@@ -19,6 +19,8 @@
 
     <properties>
         <java.version>21</java.version>
+        <!-- Shared library, built in the same reactor (apps/pom.xml) -->
+        <catacommons.version>0.1.0-SNAPSHOT</catacommons.version>
         <!-- Same Pulsar line as Catapulsar and Cataponte (PUL-2) -->
         <pulsar.version>4.0.3</pulsar.version>
         <maven-checkstyle-plugin.version>3.5.0</maven-checkstyle-plugin.version>
@@ -26,6 +28,12 @@
     </properties>
 
     <dependencies>
+        <!-- Events, Pulsar names and start-up provisioning (ADR 0008) -->
+        <dependency>
+            <groupId>com.catacumbas69</groupId>
+            <artifactId>catacommons</artifactId>
+            <version>${catacommons.version}</version>
+        </dependency>
         <!-- Web only for Actuator (health, Prometheus); Catametricas has no business API -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -50,6 +58,12 @@
         <dependency>
             <groupId>org.apache.pulsar</groupId>
             <artifactId>pulsar-client-admin</artifactId>
+            <version>${pulsar.version}</version>
+        </dependency>
+        <!-- Binary client: publishes events (ADR 0008) -->
+        <dependency>
+            <groupId>org.apache.pulsar</groupId>
+            <artifactId>pulsar-client</artifactId>
             <version>${pulsar.version}</version>
         </dependency>
 

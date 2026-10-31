@@ -1,6 +1,9 @@
 package com.catacumbas69.catapulsar.model;
 
 import java.time.Instant;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -19,6 +22,20 @@ public class Setting {
 
     /** Id of Catametricas' collection interval, in seconds; Catametricas reads this document (ADR 0007). */
     public static final String COLLECT_INTERVAL_SECONDS = "contario.collect-interval-seconds";
+
+    /** Key of {@link #CATAPONTE_URL} on the settings topic (ADR 0011). */
+    public static final String CATAPONTE_URL_KEY = "catapulsar.cataponte-url";
+
+    /** Key of {@link #REFRESH_INTERVAL_SECONDS} on the settings topic. */
+    public static final String REFRESH_INTERVAL_SECONDS_KEY = "catapulsar.refresh-interval-seconds";
+
+    /** Key of {@link #COLLECT_INTERVAL_SECONDS} on the settings topic. */
+    public static final String COLLECT_INTERVAL_SECONDS_KEY = "catametricas.collect-interval-seconds";
+
+    private static final Map<String, String> TOPIC_KEYS = Map.of(
+            CATAPONTE_URL, CATAPONTE_URL_KEY,
+            REFRESH_INTERVAL_SECONDS, REFRESH_INTERVAL_SECONDS_KEY,
+            COLLECT_INTERVAL_SECONDS, COLLECT_INTERVAL_SECONDS_KEY);
 
     @Id
     private String id;
@@ -83,5 +100,25 @@ public class Setting {
      */
     public String getUpdatedBy() {
         return updatedBy;
+    }
+
+    /**
+     * Returns the key a setting has on the settings topic. Document ids keep the names the apps had when
+     * the collection was created until the phase 3 migration; topic keys use the owner's name already.
+     *
+     * @param id document id
+     * @return the topic key, or empty for an unknown id
+     */
+    public static Optional<String> topicKey(String id) {
+        return Optional.ofNullable(TOPIC_KEYS.get(id));
+    }
+
+    /**
+     * Returns the ids of every setting published on the settings topic.
+     *
+     * @return document ids
+     */
+    public static Set<String> publishedIds() {
+        return TOPIC_KEYS.keySet();
     }
 }

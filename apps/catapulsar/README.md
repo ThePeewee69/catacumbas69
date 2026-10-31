@@ -36,12 +36,22 @@ Catapulsar  :8081  (Spring Boot)
     ├── /api/v1/overview/**  (read-only, ADR 0007) ──► MongoDB catacumbas69.contario_*  (written by Catametricas)
     ├── /api/v1/audit                              ──► MongoDB catacumbas69.audit_logs
     └── /actuator/**, /swagger-ui.html
+
+Events (ADR 0008, catacommons) ──► Pulsar catacumbas69/catapulsar/events    (every audited action)
+Settings (ADR 0011)            ──► Pulsar catacumbas69/catapulsar/settings  (compacted, key = setting key)
 ```
 
 - The browser never talks to Pulsar or Cataponte directly: no CORS, and Cataponte stays internal.
 - Producers are cached per topic and closed after 5 minutes idle (no producer per request).
 - Pulsar, Cataponte and MongoDB outages only affect the features that need them: the page keeps working
   and shows a clear error (Problem Details) for the failing call.
+- **Events** (orch.md §4.4): every action written to `audit_logs` is also published as a CloudEvent on
+  `catacumbas69/catapulsar/events` (`topic.created`, `message.produced`, `subscription.backlog-cleared`,
+  `setting.changed`, …), and every bridge change forwarded to Cataponte as `bridge.*-requested` with
+  Cataponte's HTTP status. The namespace `catacumbas69/catapulsar`, its topics and policies are created at
+  start-up. Publishing is asynchronous and retried; it never fails a request.
+- **Settings topic**: each setting is published on `catacumbas69/catapulsar/settings` when it changes and
+  once at start-up (a tombstone when it is at its default), for the other services to read from phase 3.
 
 ## Configuration
 
@@ -66,10 +76,15 @@ recorded in the audit log (`CHANGE_SETTING`). "Use default" deletes it and goes 
 
 ## Build, test, run
 
+The app is a module of the Maven reactor in `apps/` (with the shared library `catacommons`). From `apps/`:
+
 ```bash
-mvn verify                       # unit + slice tests, then Checkstyle
-mvn spring-boot:run              # or run CatapulsarApplication from IntelliJ
+mvn clean install                       # everything: catacommons + every app, tests + Checkstyle
+mvn -pl catapulsar -am verify                # this app and catacommons only
+docker build -f catapulsar/Dockerfile -t catapulsar .   # image (BuildKit), context = apps/
 ```
+
+Run `CatapulsarApplication` from IntelliJ (or `mvn -pl catapulsar spring-boot:run` after an install).
 
 Unit tests need no Docker, MongoDB, Pulsar or Cataponte. Open <http://localhost:8081>.
 
@@ -118,4 +133,4 @@ Full contract: <http://localhost:8081/swagger-ui.html>. Errors are RFC 9457 Prob
 | `/actuator/health` | details: `pulsar`, `cataponte`, `mongo` components |
 | `/actuator/prometheus` | HTTP, JVM and Pulsar client metrics |
 
-Container image: `Dockerfile` (multi-stage, layered jar, non-root).
+Container image: `Dockerfile` (multi-stage, layered jar, non-root), built from `apps/` (see above).

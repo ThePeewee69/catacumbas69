@@ -14,6 +14,7 @@ import org.springframework.context.ApplicationContext;
  */
 @SpringBootTest(properties = {
         "PULSAR_SERVICE_URL=http://127.0.0.1:1",
+        "PULSAR_BROKER_URL=pulsar://127.0.0.1:1",
         "spring.data.mongodb.uri=mongodb://127.0.0.1:1/test",
         "catametricas.collect.initial-delay=1h",
         "catametricas.mongo.server-selection-timeout=500ms",

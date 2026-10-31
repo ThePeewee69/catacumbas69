@@ -3,14 +3,17 @@ package com.catacumbas69.catametricas.config;
 import java.time.Clock;
 import java.util.concurrent.TimeUnit;
 import org.apache.pulsar.client.admin.PulsarAdmin;
+import org.apache.pulsar.client.api.ClientBuilder;
+import org.apache.pulsar.client.api.PulsarClient;
 import org.apache.pulsar.client.api.PulsarClientException;
 import org.springframework.boot.autoconfigure.mongo.MongoClientSettingsBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.util.StringUtils;
 
 /**
- * Core beans: time source, MongoDB client timeouts and the Pulsar admin client. Nothing connects at
- * start-up, so Catametricas starts even when Pulsar or MongoDB is down (RES-1).
+ * Core beans: time source, MongoDB client timeouts and the Pulsar admin and binary clients. Nothing connects
+ * at start-up, so Catametricas starts even when Pulsar or MongoDB is down (RES-1).
  */
 @Configuration
 public class CoreConfig {
@@ -58,6 +61,26 @@ public class CoreConfig {
                 .readTimeout(toInt(pulsar.readTimeout().toMillis()), TimeUnit.MILLISECONDS)
                 .requestTimeout(toInt(pulsar.requestTimeout().toMillis()), TimeUnit.MILLISECONDS)
                 .build();
+    }
+
+    /**
+     * Binary-protocol client, used to publish events (ADR 0008).
+     *
+     * @param properties application properties
+     * @return the client, closed on shutdown
+     * @throws PulsarClientException if the configuration is invalid
+     */
+    @Bean(destroyMethod = "close")
+    public PulsarClient pulsarClient(CatametricasProperties properties) throws PulsarClientException {
+        CatametricasProperties.Pulsar pulsar = properties.pulsar();
+        ClientBuilder builder = PulsarClient.builder()
+                .serviceUrl(pulsar.brokerUrl())
+                .connectionTimeout(toInt(pulsar.connectionTimeout().toMillis()), TimeUnit.MILLISECONDS)
+                .operationTimeout(toInt(pulsar.operationTimeout().toMillis()), TimeUnit.MILLISECONDS);
+        if (StringUtils.hasText(pulsar.listenerName())) {
+            builder.listenerName(pulsar.listenerName());
+        }
+        return builder.build();
     }
 
     private static int toInt(long millis) {

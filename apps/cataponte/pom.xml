@@ -19,6 +19,8 @@
 
     <properties>
         <java.version>21</java.version>
+        <!-- Shared library, built in the same reactor (apps/pom.xml) -->
+        <catacommons.version>0.1.0-SNAPSHOT</catacommons.version>
         <!-- Same Pulsar client line as Catapulsar (PUL-2); overrides the version managed by Spring Boot -->
         <pulsar.version>4.0.3</pulsar.version>
         <springdoc.version>2.8.9</springdoc.version>
@@ -27,6 +29,12 @@
     </properties>
 
     <dependencies>
+        <!-- Events, Pulsar names and start-up provisioning (ADR 0008) -->
+        <dependency>
+            <groupId>com.catacumbas69</groupId>
+            <artifactId>catacommons</artifactId>
+            <version>${catacommons.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -55,6 +63,12 @@
         <dependency>
             <groupId>org.apache.pulsar</groupId>
             <artifactId>pulsar-client</artifactId>
+            <version>${pulsar.version}</version>
+        </dependency>
+        <!-- Admin API: creates the namespace and topics at start-up (ADR 0008) -->
+        <dependency>
+            <groupId>org.apache.pulsar</groupId>
+            <artifactId>pulsar-client-admin</artifactId>
             <version>${pulsar.version}</version>
         </dependency>
         <dependency>

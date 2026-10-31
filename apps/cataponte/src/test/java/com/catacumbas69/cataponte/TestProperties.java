@@ -19,7 +19,8 @@ public final class TestProperties {
     public static CataponteProperties properties(int defaultMaxInFlight) {
         return new CataponteProperties(
                 new CataponteProperties.Pulsar("pulsar://localhost:6650", "", Duration.ofSeconds(1),
-                        Duration.ofSeconds(1), Duration.ofMillis(10), Duration.ofMillis(100)),
+                        Duration.ofSeconds(1), Duration.ofMillis(10), Duration.ofMillis(100),
+                        "http://localhost:8080", Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(1)),
                 bridge(defaultMaxInFlight),
                 new CataponteProperties.Mongo(Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(1)),
                 new CataponteProperties.Cors(List.of()));

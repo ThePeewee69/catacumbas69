@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Aggregator only (orch.md §15): builds the shared library and every app in one reactor, in dependency
+  order. Each module keeps its own parent (spring-boot-starter-parent) and its own version.
+
+    mvn clean install                       # everything, from apps/
+    mvn -pl catapulsar -am verify           # one app and what it needs (catacommons)
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.catacumbas69</groupId>
+    <artifactId>apps</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <name>catacumbas69 apps</name>
+    <description>Reactor for catacommons, Catapulsar, Cataponte and Catametricas</description>
+
+    <modules>
+        <module>catacommons</module>
+        <module>catapulsar</module>
+        <module>cataponte</module>
+        <module>catametricas</module>
+    </modules>
+</project>

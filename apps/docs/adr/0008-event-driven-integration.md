@@ -1,6 +1,6 @@
 # 8. Services integrate through REST commands and Pulsar events
 
-Date: 2026-10-31 · Status: Proposed
+Date: 2026-10-31 · Status: Accepted (phase 1 implemented 2026-10-31)
 
 ## Context
 
@@ -49,5 +49,20 @@ replaced on their own. We already run Pulsar, so it can carry events between our
   idempotent ("already exists" is success), so N replicas starting together are safe. Every app therefore
   needs admin access to Pulsar (`PULSAR_SERVICE_URL`).
 - The CloudEvents envelope, the publisher with retries, the topic names and the settings reader live in a
-  small shared library, **`catacommons`**, used by every app.
+  small shared library, **`catacommons`**, used by every app. The apps become modules of one Maven
+  build (`apps/pom.xml`), so the library needs no external repository.
 - Until an authentication proxy exists (SEC-2), `data.actor` is the client IP address.
+
+## Implementation (phase 1, 2026-10-31)
+
+- `catacommons` is a Spring Boot auto-configuration. It provides `EventPublisher`, `RetryingSenderFactory` and
+  `PulsarProvisioner`. Each app keeps creating its own `PulsarClient` and `PulsarAdmin`.
+- Schema: Pulsar JSON schema of the `CloudEvent` record. `data` = `{actor, before, after, details}` as
+  **text maps**, so one schema fits every event; nested values are flattened (`source.topic`).
+- Publishing is asynchronous: 3 retries (1 s, 2 s, 4 s), then `ERROR` with the full event.
+- Event topics are non-partitioned. Namespace policies: retention 7 days / 1 GB, backlog quota 1 GB with
+  `producer_exception`.
+- Bridge changes produce two events: Catapulsar `bridge.<action>-requested` for every forwarded request
+  (with Cataponte's HTTP status) and Cataponte `bridge.<action>` for the change it made.
+- Catametricas publishes only state changes: `collection.failed` and `collection.recovered`.
+- The event catalogue is in `orch.md` §4.4.

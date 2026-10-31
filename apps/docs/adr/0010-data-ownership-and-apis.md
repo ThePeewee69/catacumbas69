@@ -19,8 +19,13 @@ are explicit exceptions to ARCH-1 and couple the services through document shape
   | Catametricas | `contario_topic_snapshots`, `contario_topic_minutes`, `contario_topic_hours`, `contario_topic_totals`, `contario_status`, `contario_locks`, `catametricas_task_runs` (new) |
   | Cataudit | `cataudit_events` (new); `audit_logs` until migrated (ADR 0009) |
 
-  New collections use the owner's prefix. Renaming the existing ones to their owner's prefix is optional and
-  needs a one-off migration (open question).
+  **All collections are renamed to their owner's prefix** in a one-off migration run by each owner at
+  start-up (copy → verify counts → switch → drop the old one; idempotent, so a restart halfway is safe):
+  `pulsario_settings` → `catapulsar_settings`; `bridges`, `bridge_traffic_*` → `cataponte_bridges`,
+  `cataponte_traffic_*`; `contario_*` → `catametricas_*`; `audit_logs` → `cataudit_events` (ADR 0009).
+  The audit `application` values keep the old app names only in migrated entries. Each migration ships with
+  its owner's phase (decided 2026-10-31): `audit_logs` in phase 2, `pulsario_settings` in phase 3,
+  `contario_*` in phase 4, `bridges`/`bridge_traffic_*` in phase 5 (orch.md §15).
 - **Catametricas exposes a query API** (`GET /api/v1/metrics/overview`, `/tenants/{t}`, `/namespaces/{t}/{ns}`,
   `/topics/{topic}` with `period`), returning the overview rows Catapulsar shows today. Catapulsar calls it
   through its BFF (as it does for Cataponte) and no longer reads MongoDB for statistics.

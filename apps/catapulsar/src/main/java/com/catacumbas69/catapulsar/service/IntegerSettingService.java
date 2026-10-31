@@ -12,7 +12,8 @@ import org.slf4j.LoggerFactory;
  * A whole-number setting stored in {@code pulsario_settings} with a default from configuration and an
  * accepted range. The value is read from MongoDB on every call, so every replica (and other services
  * that read the same document, such as Catametricas) sees a change at once; if MongoDB cannot be read the
- * default is used. Every change is audited as {@code CHANGE_SETTING} (OBS-6).
+ * default is used. Every change is audited as {@code CHANGE_SETTING} (OBS-6) and published on the settings
+ * topic (ADR 0011).
  */
 public abstract class IntegerSettingService {
 
@@ -24,6 +25,7 @@ public abstract class IntegerSettingService {
     private final int max;
     private final SettingRepository settings;
     private final AuditService audit;
+    private final SettingsPublisher publisher;
     private final Clock clock;
 
     /**
@@ -35,16 +37,18 @@ public abstract class IntegerSettingService {
      * @param max largest accepted value
      * @param settings stored settings
      * @param audit audit log
+     * @param publisher publishes the value on the settings topic
      * @param clock time source
      */
     protected IntegerSettingService(String id, int defaultValue, int min, int max, SettingRepository settings,
-                                    AuditService audit, Clock clock) {
+                                    AuditService audit, SettingsPublisher publisher, Clock clock) {
         this.id = id;
         this.defaultValue = defaultValue;
         this.min = min;
         this.max = max;
         this.settings = settings;
         this.audit = audit;
+        this.publisher = publisher;
         this.clock = clock;
     }
 
@@ -85,7 +89,7 @@ public abstract class IntegerSettingService {
     }
 
     /**
-     * Stores and audits a new value. Storing the default removes the saved value.
+     * Stores, audits and publishes a new value. Storing the default removes the saved value.
      *
      * @param value new value
      * @param user client IP address, for the audit log
@@ -103,6 +107,7 @@ public abstract class IntegerSettingService {
             settings.save(new Setting(id, Integer.toString(value), clock.instant(), user));
         }
         audit.record(user, AuditAction.CHANGE_SETTING, null, Map.of("setting", id, "from", previous, "to", value));
+        publisher.changed(id, value == defaultValue ? null : Integer.toString(value));
         return value;
     }
 

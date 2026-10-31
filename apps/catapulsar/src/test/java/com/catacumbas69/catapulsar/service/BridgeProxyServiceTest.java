@@ -2,7 +2,9 @@ package com.catacumbas69.catapulsar.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
@@ -12,9 +14,13 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import com.catacumbas69.catacommons.events.EventData;
+import com.catacumbas69.catacommons.events.EventPublisher;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -31,7 +37,9 @@ class BridgeProxyServiceTest {
     private final CataponteEndpoint endpoint = mock(CataponteEndpoint.class);
     private final RestClient.Builder builder = RestClient.builder();
     private final MockRestServiceServer cataponte = MockRestServiceServer.bindTo(builder).build();
-    private final BridgeProxyService service = new BridgeProxyService(builder.build(), endpoint);
+    private final EventPublisher events = mock(EventPublisher.class);
+    private final BridgeProxyService service = new BridgeProxyService(builder.build(), endpoint, events,
+            new ObjectMapper());
 
     @BeforeEach
     void cataponteUrl() {
@@ -51,6 +59,8 @@ class BridgeProxyServiceTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(new String(response.getBody(), StandardCharsets.UTF_8)).isEqualTo(BRIDGE_JSON);
         cataponte.verify();
+        verify(events).publish("bridge", "create-requested", "b1",
+                EventData.action("10.0.0.1", Map.of("status", 201, "request", "{\"name\":\"fanout\"}")));
     }
 
     @Test
@@ -120,10 +130,25 @@ class BridgeProxyServiceTest {
                     throw new IOException("Connection refused");
                 })
                 .build();
-        BridgeProxyService proxy = new BridgeProxyService(unreachable, endpoint);
+        BridgeProxyService proxy = new BridgeProxyService(unreachable, endpoint, events, new ObjectMapper());
 
         assertThatThrownBy(proxy::list)
                 .isInstanceOf(CataponteUnavailableException.class)
                 .hasMessageContaining("Connection refused");
+    }
+
+    @Test
+    void publishesRequestEvent_whenCataponteCannotBeReached() {
+        RestClient unreachable = RestClient.builder()
+                .requestFactory((uri, httpMethod) -> {
+                    throw new IOException("Connection refused");
+                })
+                .build();
+        BridgeProxyService proxy = new BridgeProxyService(unreachable, endpoint, events, new ObjectMapper());
+
+        assertThatThrownBy(() -> proxy.delete("b1", "10.0.0.1")).isInstanceOf(CataponteUnavailableException.class);
+
+        verify(events).publish(eq("bridge"), eq("delete-requested"), eq("b1"),
+                eq(EventData.action("10.0.0.1", Map.of("status", 503))));
     }
 }

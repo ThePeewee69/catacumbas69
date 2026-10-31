@@ -1,0 +1,14 @@
+# Build context is apps/ (see each app's Dockerfile): send only the Maven reactor
+*
+!pom.xml
+!build/
+!catacommons/
+!catapulsar/
+!cataponte/
+!catametricas/
+**/target/
+**/.idea/
+**/*.iml
+**/.DS_Store
+**/orch.md
+**/README.md

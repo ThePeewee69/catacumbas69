@@ -5,10 +5,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.catacumbas69.catacommons.events.EventData;
+import com.catacumbas69.catacommons.events.EventPublisher;
 import com.catacumbas69.catametricas.model.CollectorStatus;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
@@ -20,6 +23,7 @@ import java.util.Set;
 import org.apache.pulsar.client.admin.PulsarAdminException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.mongodb.core.MongoTemplate;
 
@@ -31,8 +35,9 @@ class StatsCollectorTest {
     private final PulsarStatsReader reader = mock(PulsarStatsReader.class);
     private final StatsWriter writer = mock(StatsWriter.class);
     private final MongoTemplate mongoTemplate = mock(MongoTemplate.class);
+    private final EventPublisher events = mock(EventPublisher.class);
     private final StatsCollector collector = new StatsCollector(lock, interval, indexes, reader, writer, mongoTemplate,
-            Clock.fixed(Instant.parse("2026-10-31T09:00:00Z"), ZoneOffset.UTC), new SimpleMeterRegistry());
+            events, Clock.fixed(Instant.parse("2026-10-31T09:00:00Z"), ZoneOffset.UTC), new SimpleMeterRegistry());
 
     @BeforeEach
     void interval() {
@@ -88,5 +93,40 @@ class StatsCollectorTest {
 
         verifyNoInteractions(reader, writer);
         assertThat(collector.isLeader()).isFalse();
+    }
+
+    @Test
+    void publishesFailedOnce_andRecoveredAfterwards() throws Exception {
+        when(lock.tryAcquire(any())).thenReturn(true);
+        PulsarAdminException down = mock(PulsarAdminException.class);
+        when(down.getMessage()).thenReturn("Connection refused");
+        PulsarReading reading = new PulsarReading(List.of(), Set.of(), Set.of());
+        when(reader.read()).thenThrow(down).thenThrow(down).thenReturn(reading).thenReturn(reading);
+        when(writer.write(eq(reading), any())).thenReturn(new CollectionPlan(List.of(), List.of()));
+
+        collector.collectIfLeader();
+        collector.collectIfLeader();
+        collector.collectIfLeader();
+        collector.collectIfLeader();
+
+        ArgumentCaptor<EventData> failed = ArgumentCaptor.forClass(EventData.class);
+        verify(events, times(1)).publish(eq("collection"), eq("failed"), eq("collector"), failed.capture());
+        assertThat(failed.getValue().actor()).isEqualTo("catametricas");
+        assertThat(failed.getValue().details()).containsEntry("error", "Connection refused")
+                .containsEntry("stage", "collect").containsEntry("instance", "pod-1");
+        verify(events, times(1)).publish(eq("collection"), eq("recovered"), eq("collector"), any());
+    }
+
+    @Test
+    void publishesNothing_whileHealthy() throws Exception {
+        when(lock.tryAcquire(any())).thenReturn(true);
+        PulsarReading reading = new PulsarReading(List.of(), Set.of(), Set.of());
+        when(reader.read()).thenReturn(reading);
+        when(writer.write(eq(reading), any())).thenReturn(new CollectionPlan(List.of(), List.of()));
+
+        collector.collectIfLeader();
+        collector.collectIfLeader();
+
+        verifyNoInteractions(events);
     }
 }

@@ -21,12 +21,13 @@ public class CollectIntervalService extends IntegerSettingService {
      * @param properties application properties, for the default
      * @param settings stored settings
      * @param audit audit log
+     * @param publisher publishes the value on the settings topic
      * @param clock time source
      */
     public CollectIntervalService(CatapulsarProperties properties, SettingRepository settings, AuditService audit,
-                                  Clock clock) {
+                                  SettingsPublisher publisher, Clock clock) {
         super(Setting.COLLECT_INTERVAL_SECONDS, properties.catametricas().collectIntervalSeconds(),
                 CatapulsarProperties.MIN_COLLECT_SECONDS, CatapulsarProperties.MAX_COLLECT_SECONDS,
-                settings, audit, clock);
+                settings, audit, publisher, clock);
     }
 }

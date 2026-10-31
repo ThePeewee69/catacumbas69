@@ -19,7 +19,8 @@ import org.springframework.stereotype.Service;
  *
  * <p>Starts with {@code catapulsar.cataponte.url} ({@code CATAPONTE_URL}) and can be changed from the UI. A
  * changed URL is stored in MongoDB ({@code pulsario_settings}) and loaded again at start-up, in the
- * background so that a missing MongoDB does not delay start-up (RES-1). Every change is audited.
+ * background so that a missing MongoDB does not delay start-up (RES-1). Every change is audited and
+ * published on the settings topic (ADR 0011).
  */
 @Service
 public class CataponteEndpoint {
@@ -30,6 +31,7 @@ public class CataponteEndpoint {
     private final String defaultUrl;
     private final SettingRepository settings;
     private final AuditService audit;
+    private final SettingsPublisher publisher;
     private final Clock clock;
     private final Object lock = new Object();
     private volatile String url;
@@ -41,14 +43,16 @@ public class CataponteEndpoint {
      * @param properties application properties, for the default URL
      * @param settings stored settings
      * @param audit audit log
+     * @param publisher publishes the URL on the settings topic
      * @param clock time source
      */
     public CataponteEndpoint(CatapulsarProperties properties, SettingRepository settings, AuditService audit,
-                            Clock clock) {
+                             SettingsPublisher publisher, Clock clock) {
         this.defaultUrl = normalize(properties.cataponte().url());
         this.url = defaultUrl;
         this.settings = settings;
         this.audit = audit;
+        this.publisher = publisher;
         this.clock = clock;
     }
 
@@ -125,6 +129,7 @@ public class CataponteEndpoint {
             changedSinceStart = true;
             audit.record(user, AuditAction.CHANGE_SETTING, null,
                     Map.of("setting", Setting.CATAPONTE_URL, "from", previous, "to", normalized));
+            publisher.changed(Setting.CATAPONTE_URL, normalized.equals(defaultUrl) ? null : normalized);
             LOG.info("Cataponte URL changed from {} to {}", previous, normalized);
             return normalized;
         }

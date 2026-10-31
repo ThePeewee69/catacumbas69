@@ -1,0 +1,9 @@
+# IntelliJ project opened at apps/ (run configurations contain credentials, CFG-2)
+.idea/
+*.iml
+
+# Build output of the reactor
+target/
+
+# OS
+.DS_Store

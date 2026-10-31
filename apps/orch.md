@@ -42,6 +42,7 @@ This file lives at `apps/orch.md`. `apps/catapulsar/orch.md`, `apps/cataponte/or
 |---|---|---|---|
 | **Catapulsar** | Web UI for Pulsar (tenants, namespaces, topics, subscriptions, backlog, produce); UI for bridges; runtime settings (Cataponte URL); audit of its changes | `audit_logs` (owner, reads + indexes), `pulsario_settings` | Pulsar Admin API, Pulsar binary (produce/peek), Cataponte REST, MongoDB |
 | **Cataponte** | Runs bridges: consumes a source topic and fans each message out to 1..n destination topics; CRUD API for bridge config; per-topic traffic counts; loop blocking; audit of bridge changes | `bridges`, `bridge_traffic_minutes`, `bridge_traffic_totals`; inserts into `audit_logs` | Pulsar binary, MongoDB |
+| **catacommons** | Shared library (not a service): CloudEvents envelope, event publisher with retries, Pulsar names, start-up provisioning of the tenant/namespace/topics (ADR 0008) | — | Pulsar binary + Admin API, through each app's clients |
 | **Catametricas** | Collects every topic's statistics from Pulsar on an interval and stores traffic (messages/bytes in and out) and backlog per topic: latest snapshot, per minute (30 days), per hour and all-time (ADR 0007). No business API | `contario_topic_snapshots`, `contario_topic_minutes`, `contario_topic_hours`, `contario_topic_totals`, `contario_status`, `contario_locks`; reads one document of `pulsario_settings` | Pulsar Admin API, MongoDB |
 
 **Names.** The apps were renamed on 2026-10-31: Pulsário → **Catapulsar**, Passário → **Cataponte**,
@@ -51,6 +52,12 @@ collections `pulsario_settings` and `contario_*`, the setting ids `passario.url`
 `contario.collect-interval-seconds`, and the audit `application` values `pulsario` / `passario`. New code
 MUST keep using these exact names (they are constants in `Setting`, `CatametricasSchema`/`Schema`,
 `AuditEntry` and `AuditRecord`).
+
+**Events (§15 phase 1, §4.4).** Every app also owns a Pulsar namespace `catacumbas69/<app>`, created at
+start-up, and publishes a CloudEvent to `catacumbas69/<app>/events` for every action it audits. Catapulsar
+also publishes the shared settings to the compacted topic `catacumbas69/catapulsar/settings`. Nothing
+consumes these topics yet: Cataudit (phase 2) and the settings readers (phase 3) come next, and until then
+`audit_logs` is still written as before.
 
 Runtime: MicroShift on `meloes` (NUC, `192.168.86.35`), deployed with ArgoCD. Local development runs
 from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
@@ -93,13 +100,14 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 
 | Env var | Service | Default (in-cluster) | Local (necromancer) |
 |---|---|---|---|
-| `PULSAR_SERVICE_URL` | Catapulsar, Catametricas | `http://pulsar.pulsar.svc.cluster.local:8080` | `http://192.168.86.35:31080` |
-| `PULSAR_BROKER_URL` | Catapulsar, Cataponte | `pulsar://pulsar.pulsar.svc.cluster.local:6650` | `pulsar://192.168.86.35:31650` |
-| `PULSAR_LISTENER_NAME` | Catapulsar, Cataponte | *(empty)* | `external` |
+| `PULSAR_SERVICE_URL` | all (admin API; namespace creation at start-up) | `http://pulsar.pulsar.svc.cluster.local:8080` | `http://192.168.86.35:31080` |
+| `PULSAR_BROKER_URL` | all (binary protocol; events) | `pulsar://pulsar.pulsar.svc.cluster.local:6650` | `pulsar://192.168.86.35:31650` |
+| `PULSAR_LISTENER_NAME` | all | *(empty)* | `external` |
 | `SPRING_DATA_MONGODB_URI` | all | in-cluster ReplicaSet URI from Secret | NodePort `32017` + `authSource=admin&directConnection=true` |
 | `CATAPONTE_URL` | Catapulsar | `http://cataponte.<ns>.svc.cluster.local:8082` | `http://localhost:8082` |
 | `CATAPULSAR_REFRESH_INTERVAL_SECONDS` | Catapulsar | `10` | `10` |
 | `CATAMETRICAS_COLLECT_INTERVAL_SECONDS` | Catapulsar, Catametricas (same value) | `60` | `60` |
+| `CATACOMMONS_*` (optional) | all | see `CatacommonsProperties`: retries `1s,2s,4s`, retention `7d`/`1GB`, backlog quota `1GB` | same |
 
 `CATAPONTE_URL` is the default; it can be changed at runtime from Catapulsar's Connection Settings
 (`PUT /api/v1/settings/cataponte`), which stores it in `pulsario_settings` and audits the change.
@@ -282,9 +290,11 @@ Every package has a `package-info.java` (DOC-2). Dependencies point downwards on
 
 ### 4.2 Pulsar
 
-- **PUL-1 [MUST]** One `PulsarClient` bean per service (`destroyMethod = "close"`), configured from
-  `PULSAR_BROKER_URL` + optional `PULSAR_LISTENER_NAME`. Never create clients per request.
-- **PUL-2 [MUST]** Both services use the **same Pulsar client version**, from the broker's LTS line.
+- **PUL-1 [MUST]** One `PulsarClient` and one `PulsarAdmin` bean per service (`destroyMethod = "close"`),
+  created by the app's own configuration from `PULSAR_BROKER_URL` + optional `PULSAR_LISTENER_NAME` and
+  `PULSAR_SERVICE_URL`; catacommons uses them. Never create clients per request.
+- **PUL-2 [MUST]** Every service and catacommons use the **same Pulsar client version**, from the broker's
+  LTS line.
 - **PUL-3 [MUST]** Topics are always stored and passed as fully-qualified names
   (`persistent://tenant/namespace/topic`).
 - **PUL-4 [SHOULD]** Bridge subscriptions are named `cataponte-<bridge-name>` unless the user sets one;
@@ -313,6 +323,52 @@ Every package has a `package-info.java` (DOC-2). Dependencies point downwards on
   very first collection only sets the baseline. History of deleted topics is kept (`active=false`).
 
 ---
+
+### 4.4 Events (ADR 0008)
+
+- **EVT-1 [MUST]** Publish only through catacommons' `EventPublisher`, **after** the change is stored. It is
+  asynchronous, retried (`1s, 2s, 4s`) and never fails or delays the caller; an event still not sent is
+  logged at `ERROR` with its full JSON. Never publish before the change or make a request fail because
+  publishing failed.
+- **EVT-2 [MUST]** Event type `com.catacumbas69.<app>.<entity>.<verb>.v1`, verb in the past tense
+  (`created`, `backlog-cleared`); `subject` is the thing the event is about and is also the message key, so
+  events about one thing stay in order. A breaking change of `data` is a new type (`.v2`) published next to
+  the old one until every consumer has moved.
+- **EVT-3 [MUST]** `data` is `{actor, before, after, details}` with text values only: build it with
+  `EventData.action(...)` or `EventData.change(...)`, which flatten nested values (`source.topic`) and join
+  lists with commas. `actor` is the client IP address (ADR 0008) or the app name for changes the app makes
+  on its own.
+- **EVT-4 [MUST]** Until Cataudit exists (phase 2) every action written to `audit_logs` also publishes an
+  event, and every new audited action does both.
+- **EVT-5 [MUST]** An app writes only to topics in its own namespace `catacumbas69/<app>`. Topics are
+  declared as `TopicSpec` beans (the events topic is declared by catacommons) and created at start-up by
+  `PulsarProvisioner`, never by hand; topics are non-partitioned.
+- **EVT-6 [MUST]** Namespace policies are set by the app on every start: retention 7 days / 1 GB, backlog
+  quota 1 GB with `producer_exception`. Compacted topics (settings) get topic policies: infinite retention
+  and a compaction threshold of 1 MB.
+
+Event catalogue (phase 1):
+
+| Source | Type (`com.catacumbas69.` + …) | Subject | `data` |
+|---|---|---|---|
+| Catapulsar | `catapulsar.topic.created\|deleted.v1` | topic | actor |
+| Catapulsar | `catapulsar.subscription.created\|deleted\|backlog-cleared.v1` | topic | details: `subscription` |
+| Catapulsar | `catapulsar.message.produced.v1` | topic | details: `key`, `payload`, `properties.*`… |
+| Catapulsar | `catapulsar.message.peeked\|skipped.v1` | topic | details: `subscription`, `count` |
+| Catapulsar | `catapulsar.setting.changed.v1` | setting key (below) | before/after: `value`; details: `id` (document id) |
+| Catapulsar | `catapulsar.bridge.create\|update\|delete\|enable\|disable-requested.v1` | bridge id (create: id from the response, else the requested name) | details: `status` (Cataponte's HTTP status, `503` if unreachable), `request` (body) |
+| Cataponte | `cataponte.bridge.created\|updated\|deleted\|enabled\|disabled\|migrated.v1` | bridge id | before/after: flattened definition; actor `cataponte` for migrations |
+| Catametricas | `catametricas.collection.failed\|recovered.v1` | `collector` | details: `stage`, `error`, `instance`… (state changes only) |
+
+Settings topic `catacumbas69/catapulsar/settings` (ADR 0011): key = setting key, value `{"value": "<text>"}`,
+empty value (tombstone) = default. Catapulsar publishes on every change and every value (or tombstone) at
+start-up.
+
+| Key | Document id in `pulsario_settings` |
+|---|---|
+| `catapulsar.cataponte-url` | `passario.url` |
+| `catapulsar.refresh-interval-seconds` | `ui.refresh-interval-seconds` |
+| `catametricas.collect-interval-seconds` | `contario.collect-interval-seconds` |
 
 ## 5. REST contracts and errors
 
@@ -520,8 +576,14 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 ## 12. Build and deploy
 
 - **OPS-1 [MUST]** Multi-stage Dockerfile per service: Maven build stage → JRE 21 runtime stage, layered
-  jar (`java -Djarmode=layertools`), non-root, `EXPOSE` the service port, JVM tuned with
-  `-XX:MaxRAMPercentage=75`.
+  jar (`java -Djarmode=tools`), non-root, `EXPOSE` the service port, JVM tuned with
+  `-XX:MaxRAMPercentage=75`. The build context is `apps/` (`docker build -f <app>/Dockerfile .`): the build
+  stage runs `mvn -pl <app> -am package` so catacommons is compiled with the app, with the Maven repository
+  in a BuildKit cache mount; `apps/.dockerignore` sends only the reactor.
+- **OPS-6 [MUST]** `apps/pom.xml` is an aggregator only: it lists `catacommons` and every app. Each module
+  keeps `spring-boot-starter-parent` as its parent and its own version; apps depend on
+  `catacommons` through a `catacommons.version` property. `mvn clean install` at `apps/` builds and checks
+  everything.
 - **OPS-2 [MUST]** Image tags are immutable (`<version>-<git-sha>`); `latest` is never deployed.
 - **OPS-3 [MUST]** Kubernetes manifests live in the GitOps repo and are synced by ArgoCD. Each Deployment
   sets resource requests/limits, liveness/readiness probes on Actuator, and config via ConfigMap + Secret.
@@ -582,7 +644,10 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
-- **2026-10-31** (pending `mvn verify`): Catapulsar auto-refresh (UI-10), backlog tab with per-subscription
+- **2026-10-31, phase 1 of §15** (pending `mvn clean install` at `apps/`): Maven reactor and `catacommons`,
+  Pulsar namespaces created at start-up, events for every audited action (§4.4), settings topic published,
+  Dockerfiles built from `apps/`.
+- **2026-10-31** (`mvn verify` green): Catapulsar auto-refresh (UI-10), backlog tab with per-subscription
   statistics and peek on click, **Catametricas** (new service, ADR 0007) and the cluster/tenant/namespace
   overviews (OBS-8), collection interval editable in Catapulsar, clickable breadcrumb.
 
@@ -598,9 +663,9 @@ Closed on 2026-10-30:
 
 ## 15. Target architecture (proposed — ADR 0008–0013)
 
-Status: **proposed, under review**. Until a phase below is implemented, the rules in sections 1–14 stay in
-force. When a phase lands, the rules it changes are updated in the same change and its ADRs become
-"Accepted".
+Status: **phase 1 implemented** (2026-10-31); phases 2–6 proposed. Until a phase below is implemented, the
+rules in sections 1–14 stay in force. When a phase lands, the rules it changes are updated in the same change
+and its ADRs become "Accepted".
 
 ```
                          REST (commands, queries)                          Pulsar tenant catacumbas69
@@ -633,14 +698,14 @@ Principles:
 
 Each phase ends with `mvn verify` green in every app, the docs updated and the app usable.
 
-| # | Phase | Main changes |
-|---|---|---|
-| 1 | Event foundations | Tenant/namespaces/policies; CloudEvents publisher with retries in each app; events for every action already audited today (still writing `audit_logs` too) |
-| 2 | Cataudit | New service; each app registers its `audit-<app>` bridge; copy `audit_logs`; Catapulsar's audit view reads Cataudit; stop writing `audit_logs` |
-| 3 | Settings topic | Catapulsar publishes settings (compacted); Catametricas, Cataponte and all Catapulsar replicas read them; Catametricas stops reading `pulsario_settings` |
-| 4 | Catametricas API and tasks | Query API; Catapulsar overviews via BFF; collection tasks on Pulsar with claims and conditional snapshot updates; lease removed |
-| 5 | Cataponte replicas | `Exclusive` rejected and migrated to `Failover`; Deployment with N replicas; ADR 0002 superseded |
-| 6 | Prometheus source (later) | Once Prometheus/OpenMetrics/Loki run on MicroShift: short ranges from PromQL in Catametricas |
+| # | Phase | Main changes | Status |
+|---|---|---|---|
+| 1 | Event foundations | Reactor + catacommons; tenant/namespaces/policies at start-up; CloudEvents publisher with retries in each app; events for every action already audited today (still writing `audit_logs` too); Catapulsar already publishes the settings topic | **Done** 2026-10-31 |
+| 2 | Cataudit | New service; each app registers its `audit-<app>` bridge; copy `audit_logs`; Catapulsar's audit view reads Cataudit; stop writing `audit_logs`; `audit_logs` → `cataudit_*` | Next |
+| 3 | Settings topic | Catametricas, Cataponte and all Catapulsar replicas read the settings topic (TableView); Catametricas stops reading `pulsario_settings`; `pulsario_settings` → `catapulsar_settings` | Proposed |
+| 4 | Catametricas API and tasks | Query API; Catapulsar overviews via BFF; collection tasks on Pulsar with claims and conditional snapshot updates; lease removed; `contario_*` → `catametricas_*` | Proposed |
+| 5 | Cataponte replicas | `Exclusive` rejected and migrated to `Failover`; Deployment with N replicas; ADR 0002 superseded; `bridges`, `bridge_traffic_*` → `cataponte_*` | Proposed |
+| 6 | Prometheus source (later) | Once Prometheus/OpenMetrics/Loki run on MicroShift: short ranges from PromQL in Catametricas | Later |
 
 ### Decisions taken on 2026-10-31
 
@@ -650,3 +715,27 @@ Each phase ends with `mvn verify` green in every app, the docs updated and the a
 3. Existing collections are **renamed to their owner's prefix** with a one-off, idempotent migration per
    owner (ADR 0010).
 4. Until an authentication proxy exists, the event `actor` is the **client IP address**.
+5. The apps become a **Maven multi-module build**: `apps/pom.xml` aggregates `catacommons` and every app;
+   `mvn clean install` at `apps/` builds everything, and each Dockerfile builds from `apps/` with
+   `mvn -pl <app> -am`.
+6. **Cataudit** listens on port **8084**.
+
+Phase 1 decisions (2026-10-31):
+
+7. `apps/pom.xml` is **aggregator only**; every module keeps `spring-boot-starter-parent` and **its own
+   version** (catacommons starts at `0.1.0-SNAPSHOT`).
+8. catacommons is a Spring Boot **auto-configuration**; each app creates its own `PulsarClient` and
+   `PulsarAdmin` (Cataponte gained the admin client, Catametricas the binary client).
+9. Event topics are **non-partitioned**; namespace retention 7 days / 1 GB and backlog quota 1 GB with
+   **`producer_exception`**.
+10. The event schema is a Pulsar JSON schema of `CloudEvent`, with **`data` as text maps**
+    (`actor`, `before`, `after`, `details`).
+11. Publishing is **asynchronous** with 3 retries (1 s, 2 s, 4 s), then `ERROR` with the full event.
+12. Bridge changes are published by **both** apps: Catapulsar `bridge.*-requested` (every forwarded request,
+    refused ones included) and Cataponte `bridge.*` (the change made).
+13. Catametricas publishes only **state changes** of collection: `collection.failed` and
+    `collection.recovered`.
+14. Collections are renamed to their owner's prefix **in the phase of each owner** (see the table).
+15. The settings topic is **created and published already in phase 1**, with the **new keys**; readers come
+    in phase 3.
+16. Docker builds cache the Maven repository with a **BuildKit cache mount**.

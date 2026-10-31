@@ -19,12 +19,13 @@ public class RefreshIntervalService extends IntegerSettingService {
      * @param properties application properties, for the default
      * @param settings stored settings
      * @param audit audit log
+     * @param publisher publishes the value on the settings topic
      * @param clock time source
      */
     public RefreshIntervalService(CatapulsarProperties properties, SettingRepository settings, AuditService audit,
-                                  Clock clock) {
+                                  SettingsPublisher publisher, Clock clock) {
         super(Setting.REFRESH_INTERVAL_SECONDS, properties.ui().refreshIntervalSeconds(),
                 CatapulsarProperties.MIN_REFRESH_SECONDS, CatapulsarProperties.MAX_REFRESH_SECONDS,
-                settings, audit, clock);
+                settings, audit, publisher, clock);
     }
 }

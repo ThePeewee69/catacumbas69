@@ -28,8 +28,9 @@ class CataponteEndpointTest {
 
     private final SettingRepository settings = mock(SettingRepository.class);
     private final AuditService audit = mock(AuditService.class);
+    private final SettingsPublisher publisher = mock(SettingsPublisher.class);
     private final CataponteEndpoint endpoint = new CataponteEndpoint(TestProperties.properties(), settings, audit,
-            Clock.fixed(Instant.parse("2026-10-30T22:00:00Z"), ZoneOffset.UTC));
+            publisher, Clock.fixed(Instant.parse("2026-10-30T22:00:00Z"), ZoneOffset.UTC));
 
     @Test
     void startsWithTheConfiguredUrl() {
@@ -49,6 +50,7 @@ class CataponteEndpointTest {
                 && setting.getUpdatedBy().equals("10.0.0.1")));
         verify(audit).record(eq("10.0.0.1"), eq(AuditAction.CHANGE_SETTING), isNull(), eq(Map.of(
                 "setting", Setting.CATAPONTE_URL, "from", DEFAULT_URL, "to", "http://cataponte-dev:8082")));
+        verify(publisher).changed(Setting.CATAPONTE_URL, "http://cataponte-dev:8082");
     }
 
     @Test

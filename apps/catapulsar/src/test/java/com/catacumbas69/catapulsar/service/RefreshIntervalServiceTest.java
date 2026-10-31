@@ -26,8 +26,9 @@ class RefreshIntervalServiceTest {
 
     private final SettingRepository settings = mock(SettingRepository.class);
     private final AuditService audit = mock(AuditService.class);
+    private final SettingsPublisher publisher = mock(SettingsPublisher.class);
     private final RefreshIntervalService service = new RefreshIntervalService(TestProperties.properties(), settings,
-            audit, Clock.fixed(Instant.parse("2026-10-31T08:30:00Z"), ZoneOffset.UTC));
+            audit, publisher, Clock.fixed(Instant.parse("2026-10-31T08:30:00Z"), ZoneOffset.UTC));
 
     @Test
     void usesTheDefault_whenNothingIsSaved() {
@@ -67,6 +68,7 @@ class RefreshIntervalServiceTest {
                 && setting.getValue().equals("30") && setting.getUpdatedBy().equals("10.0.0.1")));
         verify(audit).record(eq("10.0.0.1"), eq(AuditAction.CHANGE_SETTING), isNull(), eq(Map.of(
                 "setting", Setting.REFRESH_INTERVAL_SECONDS, "from", 10, "to", 30)));
+        verify(publisher).changed(Setting.REFRESH_INTERVAL_SECONDS, "30");
     }
 
     @Test
@@ -78,6 +80,7 @@ class RefreshIntervalServiceTest {
         verify(settings).deleteById(Setting.REFRESH_INTERVAL_SECONDS);
         verify(audit).record(eq("10.0.0.2"), eq(AuditAction.CHANGE_SETTING), isNull(), eq(Map.of(
                 "setting", Setting.REFRESH_INTERVAL_SECONDS, "from", 30, "to", 10)));
+        verify(publisher).changed(Setting.REFRESH_INTERVAL_SECONDS, null);
     }
 
     @Test
@@ -90,6 +93,7 @@ class RefreshIntervalServiceTest {
         }
         verify(settings, never()).save(any());
         verify(audit, never()).record(any(), any(), any(), any());
+        verify(publisher, never()).changed(any(), any());
     }
 
     private void saved(String value) {
