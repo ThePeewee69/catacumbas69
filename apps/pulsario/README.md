@@ -18,6 +18,7 @@ Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs
 | **Backlog** | Peek up to 100 messages without consuming them; view, edit & re-produce, skip one or all |
 | **Bridges** | Create, edit, enable/disable and delete Passário bridges; running state, errors, loop blocks and all-time message counts per topic |
 | **Settings** | ⚙️ Connection Settings: change the Passário URL at runtime (saved in MongoDB, audited) |
+| **Auto-refresh** | Top bar "Auto N s": on/off per browser; ▾ sets the interval for everyone (2–300 s, default 10 s, saved in MongoDB, audited). Refreshes the sidebar, Overview, Subscriptions and Bridges; never repeats a backlog peek |
 | **Audit** | Every configuration change is recorded in MongoDB (`audit_logs`); bridge changes by Passário (ADR 0006) |
 
 ## Architecture
@@ -49,6 +50,7 @@ All settings have in-cluster defaults in `application.properties`; override them
 | `PULSAR_BROKER_URL` | `pulsar://pulsar.pulsar.svc.cluster.local:6650` | `pulsar://192.168.86.35:31650` |
 | `PULSAR_LISTENER_NAME` | *(empty)* | `external` |
 | `PASSARIO_URL` | `http://passario:8082` | `http://localhost:8082` |
+| `PULSARIO_REFRESH_INTERVAL_SECONDS` | `10` | `10` |
 | `SPRING_DATA_MONGODB_URI` | in-cluster ReplicaSet URI (Secret) | NodePort `32017` + `authSource=admin&directConnection=true` |
 | `LOGGING_STRUCTURED_FORMAT_CONSOLE` | `ecs` (JSON logs for Loki) | *(unset)* |
 
@@ -89,6 +91,7 @@ Full contract: <http://localhost:8081/swagger-ui.html>. Errors are RFC 9457 Prob
 | `POST` | `/api/v1/topics/{tenant}/{ns}/{topic}/subscriptions/{sub}/clear-backlog` | Skip the whole backlog (`204`) |
 | `*` | `/api/v1/bridges/**` | Bridges and their traffic counts, forwarded to Passário (see Passário's API) |
 | `GET` / `PUT` / `DELETE` | `/api/v1/settings/passario` | Passário URL in use / change `{url}` / back to default |
+| `GET` / `PUT` / `DELETE` | `/api/v1/settings/refresh-interval` | UI auto-refresh interval / change `{seconds}` (2–300) / back to default |
 | `GET` | `/api/v1/audit?page=0&size=50` | Audit log, newest first |
 
 | Status | Meaning |

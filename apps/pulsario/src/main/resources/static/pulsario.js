@@ -1,5 +1,14 @@
 /** Bridge API, served by Pulsário and forwarded to Passário (ADR 0001). */
 const BRIDGES_API = '/api/v1/bridges';
+/** localStorage key of the auto-refresh on/off switch (per browser). */
+const AUTO_REFRESH_KEY = 'autoRefresh';
+/** Re-read the shared refresh interval from the server every this many ticks. */
+const INTERVAL_RELOAD_TICKS = 6;
+
+/** Reads the per-browser auto-refresh switch; on unless explicitly turned off. */
+function autoRefreshStored() {
+  try { return localStorage.getItem(AUTO_REFRESH_KEY) !== 'off'; } catch { return true; }
+}
 
 /**
  * Extracts a readable message from an error body: RFC 9457 Problem Details (`detail`/`title`),
@@ -20,6 +29,9 @@ function app() {
     sel: { tenant: null, namespace: null, topic: null },
     tab: 'stats',
     stats: null,
+    // Auto-refresh: `on` is per browser; `seconds` is shared by every user (pulsario_settings, audited).
+    auto: { on: autoRefreshStored(), seconds: 10, defaultSeconds: 10, min: 2, max: 300, custom: false,
+            menuOpen: false, draft: 10, saving: false, tick: 0, busy: false, timer: null },
     subscriptions: [],
     newTopic: '',
     newSub: '',
@@ -55,7 +67,119 @@ function app() {
 
     // ── Init ───────────────────────────────────────────────────────────────
     async init() {
+      await this.loadRefreshInterval();
+      this.scheduleRefresh();
       await this.loadTenants();
+    },
+
+    // ── Auto-refresh ───────────────────────────────────────────────────────
+    /** Loads the shared interval; keeps the current one if the server cannot be reached. */
+    async loadRefreshInterval() {
+      try {
+        const r = await this.api('/api/v1/settings/refresh-interval');
+        const changed = r.seconds !== this.auto.seconds;
+        Object.assign(this.auto, { seconds: r.seconds, defaultSeconds: r.defaultSeconds, min: r.min,
+                                   max: r.max, custom: r.custom });
+        if (changed) this.scheduleRefresh();
+      } catch { /* keep the current interval */ }
+    },
+
+    /** (Re)arms the timer with the current interval; one pending timer at a time. */
+    scheduleRefresh() {
+      clearTimeout(this.auto.timer);
+      this.auto.timer = setTimeout(async () => {
+        await this.refreshVisibleView();
+        this.scheduleRefresh();
+      }, this.auto.seconds * 1000);
+    },
+
+    /**
+     * Refreshes everything on screen that only reads: the sidebar lists, Overview statistics, the
+     * subscription list, and in the Bridges panel the bridge list, status and traffic counts. Backlog
+     * peek is never repeated automatically because each peek is written to the audit log. Nothing is
+     * cleared and no spinner is shown; errors are ignored and the next tick retries. Skipped while
+     * switched off, while the browser tab is hidden, or while the previous refresh is still running.
+     */
+    async refreshVisibleView() {
+      if (!this.auto.on || document.hidden || this.auto.busy) return;
+      this.auto.busy = true;
+      this.auto.tick++;
+      try {
+        const work = [this.refreshSidebar()];
+        if (this.bridgesView) {
+          work.push(this.refreshBridgeList(), this.loadBridgeStatus());
+        } else if (this.sel.topic && this.tab === 'stats' && this.stats) {
+          work.push(this.refreshStats());
+        } else if (this.sel.topic && this.tab === 'subs') {
+          work.push(this.refreshSubs());
+        } else if (this.sel.topic && this.tab === 'backlog') {
+          // Statistics and the subscription list only: re-peeking would write an audit entry every tick.
+          work.push(this.refreshStats(), this.refreshSubs());
+        }
+        if (this.auto.tick % INTERVAL_RELOAD_TICKS === 0) work.push(this.loadRefreshInterval());
+        await Promise.all(work);
+      } finally {
+        this.auto.busy = false;
+      }
+    },
+
+    /** Turns auto-refresh on or off in this browser only. */
+    toggleAutoRefresh() {
+      this.auto.on = !this.auto.on;
+      try { localStorage.setItem(AUTO_REFRESH_KEY, this.auto.on ? 'on' : 'off'); } catch { /* not persisted */ }
+      if (this.auto.on) this.refreshVisibleView();
+    },
+
+    openRefreshMenu() {
+      this.auto.draft = this.auto.seconds;
+      this.auto.menuOpen = !this.auto.menuOpen;
+    },
+
+    /**
+     * Saves the interval for every user (stored in MongoDB and audited), or resets it to the default.
+     * @param {'PUT'|'DELETE'} method PUT saves `auto.draft`, DELETE goes back to the default
+     */
+    async saveRefreshInterval(method = 'PUT') {
+      const a = this.auto;
+      a.saving = true;
+      try {
+        const options = { method };
+        if (method === 'PUT') options.body = JSON.stringify({ seconds: Number(a.draft) });
+        const r = await this.api('/api/v1/settings/refresh-interval', options);
+        Object.assign(a, { seconds: r.seconds, custom: r.custom, menuOpen: false });
+        this.scheduleRefresh();
+        this.notify(`Auto-refresh every ${r.seconds} s for every user`);
+      } catch (e) {
+        this.notify('Refresh interval not saved: ' + e.message, 'error');
+      } finally {
+        a.saving = false;
+      }
+    },
+
+    /**
+     * Replaces a list only when its content changed, so Alpine does not re-render it on every tick.
+     * @param {string} key property of this component holding the list
+     * @param {Array} value new list
+     */
+    replaceIfChanged(key, value) {
+      if (JSON.stringify(this[key]) !== JSON.stringify(value)) this[key] = value;
+    },
+
+    /** Reloads tenants, the open tenant's namespaces and the open namespace's topics, silently. */
+    async refreshSidebar() {
+      const { tenant, namespace } = this.sel;
+      try {
+        const [tenants, namespaces, topics] = await Promise.all([
+          this.api('/api/v1/tenants'),
+          tenant ? this.api(`/api/v1/namespaces/${tenant}`) : null,
+          tenant && namespace ? this.api(`/api/v1/topics/${tenant}/${namespace}`) : null,
+        ]);
+        this.replaceIfChanged('tenants', tenants);
+        if (namespaces && this.sel.tenant === tenant) this.replaceIfChanged('namespaces', namespaces);
+        if (topics && this.sel.tenant === tenant && this.sel.namespace === namespace) {
+          this.replaceIfChanged('topics', topics);
+        }
+      } catch { /* keep the current lists */ }
     },
 
     async reload() {
@@ -155,7 +279,7 @@ function app() {
           { method: 'POST' }
         );
         this.notify(`Skipped ${n} message(s) from "${this.backlog.sub}"`);
-        await this.peekMessages();
+        await Promise.all([this.peekMessages(), this.refreshStats()]);
       } catch (e) { this.notify('Skip failed: ' + e.message, 'error'); }
     },
 
@@ -178,7 +302,7 @@ function app() {
           { method: 'POST' }
         );
         this.notify(`Backlog of "${sub}" cleared`);
-        await this.loadStats();
+        await this.refreshStats();
       } catch (e) { this.notify('Clear backlog failed: ' + e.message, 'error'); }
     },
 
@@ -265,7 +389,28 @@ function app() {
       finally { this.loading.stats = false; }
     },
 
+    /** Reloads the statistics in place (no spinner); dropped if the user picked another topic meanwhile. */
+    async refreshStats() {
+      const { tenant, namespace, topic } = this.sel;
+      try {
+        const stats = await this.api(`/api/v1/topics/${tenant}/${namespace}/${topic}/stats`);
+        const sameTopic = this.sel.tenant === tenant && this.sel.namespace === namespace && this.sel.topic === topic;
+        if (sameTopic && (this.tab === 'stats' || this.tab === 'backlog')) this.stats = stats;
+      } catch { /* keep the last values; the next tick retries */ }
+    },
+
     // ── Subscriptions ──────────────────────────────────────────────────────
+    /** Reloads the subscription list in place; dropped if another topic was selected meanwhile. */
+    async refreshSubs() {
+      const { tenant, namespace, topic } = this.sel;
+      try {
+        const subs = await this.api(`/api/v1/topics/${tenant}/${namespace}/${topic}/subscriptions`);
+        if (this.sel.topic === topic && this.sel.namespace === namespace && ['subs', 'backlog'].includes(this.tab)) {
+          this.replaceIfChanged('subscriptions', subs);
+        }
+      } catch { /* keep the current list */ }
+    },
+
     async loadSubs() {
       if (!this.sel.topic) return;
       this.loading.subs = true;
@@ -313,16 +458,47 @@ function app() {
     },
 
     // ── Backlog peek ───────────────────────────────────────────────────────
+    /** Opens the Backlog tab: subscription names and their statistics are loaded in the background. */
+    openBacklogTab() {
+      this.tab = 'backlog';
+      this.loadSubs();
+      this.refreshStats();
+    },
+
+    /**
+     * Subscriptions for the Backlog list, with their statistics from the topic stats when available.
+     * @returns {{name: string, stats: object|undefined}[]} sorted by name
+     */
+    backlogSubs() {
+      const stats = this.stats?.subscriptions ?? {};
+      const names = new Set([...this.subscriptions, ...Object.keys(stats)]);
+      return [...names].sort().map(name => ({ name, stats: stats[name] }));
+    },
+
+    /**
+     * Selects a subscription and peeks its backlog straight away (audited as PEEK_MESSAGES).
+     * @param {string} name subscription name
+     */
+    async selectBacklogSub(name) {
+      this.backlog.sub = name;
+      await this.peekMessages();
+    },
+
     async peekMessages() {
       if (!this.backlog.sub) return;
+      const sub = this.backlog.sub;
+      const count = Math.min(100, Math.max(1, Number(this.backlog.count) || 10));
+      this.backlog.count = count;
       this.loading.backlog = true; this.backlog.messages = []; this.backlog.queried = false;
       try {
-        this.backlog.messages = await this.api(
-          `/api/v1/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/peek/${this.backlog.sub}?count=${this.backlog.count}`
+        const messages = await this.api(
+          `/api/v1/topics/${this.sel.tenant}/${this.sel.namespace}/${this.sel.topic}/peek/${encodeURIComponent(sub)}?count=${count}`
         );
+        if (this.backlog.sub !== sub) return;   // another subscription was clicked meanwhile
+        this.backlog.messages = messages;
         this.backlog.queried = true;
       } catch (e) { this.notify('Peek error: ' + e.message, 'error'); }
-      finally { this.loading.backlog = false; }
+      finally { if (this.backlog.sub === sub) this.loading.backlog = false; }
     },
 
     // ── Bridges ────────────────────────────────────────────────────────────
@@ -396,6 +572,14 @@ function app() {
     /** Loads runtime status and all-time traffic counts; failures are ignored (Passário may be down). */
     async loadBridgeStatus() {
       await Promise.all([this.loadWorkerStatus(), this.loadBridgeTraffic()]);
+    },
+
+    /** Reloads the bridge list in place (no spinner); bridges added or removed elsewhere appear. */
+    async refreshBridgeList() {
+      try {
+        const list = await this.bridgesApi(BRIDGES_API);
+        if (JSON.stringify(list) !== JSON.stringify(this.bridges.list)) this.bridges.list = list;
+      } catch { /* keep the current list */ }
     },
 
     async loadWorkerStatus() {

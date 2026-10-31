@@ -2,6 +2,7 @@ package com.catacumbas69.pulsario.controller;
 
 import static org.hamcrest.Matchers.hasItem;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -14,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.catacumbas69.pulsario.service.InvalidSettingException;
 import com.catacumbas69.pulsario.service.PassarioEndpoint;
+import com.catacumbas69.pulsario.service.RefreshIntervalService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +33,55 @@ class SettingsControllerTest {
 
     @MockitoBean
     private PassarioEndpoint passario;
+
+    @MockitoBean
+    private RefreshIntervalService refresh;
+
+    @Test
+    void refreshInterval_returnsValueDefaultAndRange() throws Exception {
+        when(refresh.seconds()).thenReturn(30);
+        when(refresh.defaultSeconds()).thenReturn(10);
+
+        mvc.perform(get("/api/v1/settings/refresh-interval"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.seconds").value(30))
+                .andExpect(jsonPath("$.defaultSeconds").value(10))
+                .andExpect(jsonPath("$.min").value(2))
+                .andExpect(jsonPath("$.max").value(300))
+                .andExpect(jsonPath("$.custom").value(true));
+    }
+
+    @Test
+    void changeRefreshInterval_storesWithClientAddress() throws Exception {
+        when(refresh.change(eq(30), any())).thenReturn(30);
+        when(refresh.defaultSeconds()).thenReturn(10);
+
+        mvc.perform(put("/api/v1/settings/refresh-interval").header("X-Forwarded-For", "10.0.0.9")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"seconds\":30}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.seconds").value(30));
+
+        verify(refresh).change(30, "10.0.0.9");
+    }
+
+    @Test
+    void changeRefreshInterval_returns400_outOfRange() throws Exception {
+        mvc.perform(put("/api/v1/settings/refresh-interval")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"seconds\":1}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[*].field", hasItem("seconds")));
+        verify(refresh, never()).change(anyInt(), any());
+    }
+
+    @Test
+    void resetRefreshInterval_goesBackToDefault() throws Exception {
+        when(refresh.reset(any())).thenReturn(10);
+        when(refresh.defaultSeconds()).thenReturn(10);
+
+        mvc.perform(delete("/api/v1/settings/refresh-interval"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.custom").value(false));
+    }
 
     @BeforeEach
     void currentUrl() {

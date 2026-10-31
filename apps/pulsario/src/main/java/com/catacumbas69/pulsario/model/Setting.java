@@ -14,6 +14,9 @@ public class Setting {
     /** Id of the Passário base URL setting. */
     public static final String PASSARIO_URL = "passario.url";
 
+    /** Id of the UI auto-refresh interval setting, in seconds. */
+    public static final String REFRESH_INTERVAL_SECONDS = "ui.refresh-interval-seconds";
+
     @Id
     private String id;
 

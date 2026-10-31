@@ -1,8 +1,12 @@
 package com.catacumbas69.pulsario.controller;
 
+import com.catacumbas69.pulsario.config.PulsarioProperties;
 import com.catacumbas69.pulsario.dto.PassarioSettingRequest;
 import com.catacumbas69.pulsario.dto.PassarioSettingResponse;
+import com.catacumbas69.pulsario.dto.RefreshIntervalRequest;
+import com.catacumbas69.pulsario.dto.RefreshIntervalResponse;
 import com.catacumbas69.pulsario.service.PassarioEndpoint;
+import com.catacumbas69.pulsario.service.RefreshIntervalService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,14 +27,54 @@ import org.springframework.web.bind.annotation.RestController;
 public class SettingsController {
 
     private final PassarioEndpoint passario;
+    private final RefreshIntervalService refresh;
 
     /**
      * Creates the controller.
      *
      * @param passario Passário base URL holder
+     * @param refresh UI auto-refresh interval
      */
-    public SettingsController(PassarioEndpoint passario) {
+    public SettingsController(PassarioEndpoint passario, RefreshIntervalService refresh) {
         this.passario = passario;
+        this.refresh = refresh;
+    }
+
+    /**
+     * Returns the UI auto-refresh interval.
+     *
+     * @return interval in use, default and accepted range
+     */
+    @Operation(summary = "UI auto-refresh interval")
+    @GetMapping("/refresh-interval")
+    public RefreshIntervalResponse refreshInterval() {
+        return refreshResponse(refresh.seconds());
+    }
+
+    /**
+     * Changes the UI auto-refresh interval for every user.
+     *
+     * @param request new interval
+     * @param http current request, for the audit log
+     * @return interval in use, default and accepted range
+     */
+    @Operation(summary = "Change the UI auto-refresh interval")
+    @PutMapping("/refresh-interval")
+    public RefreshIntervalResponse changeRefreshInterval(@Valid @RequestBody RefreshIntervalRequest request,
+                                                         HttpServletRequest http) {
+        return refreshResponse(refresh.change(request.seconds(), ClientAddress.of(http)));
+    }
+
+    /**
+     * Goes back to the configured auto-refresh interval ({@code PULSARIO_REFRESH_INTERVAL_SECONDS}).
+     *
+     * @param http current request, for the audit log
+     * @return interval in use, default and accepted range
+     */
+    @Operation(summary = "Reset the UI auto-refresh interval to its configured default")
+    @DeleteMapping("/refresh-interval")
+    public RefreshIntervalResponse resetRefreshInterval(HttpServletRequest http) {
+        return refreshResponse(refresh.reset(ClientAddress.of(http)));
     }
 
     /**
@@ -70,6 +114,11 @@ public class SettingsController {
     public PassarioSettingResponse resetPassario(HttpServletRequest http) {
         passario.reset(ClientAddress.of(http));
         return response();
+    }
+
+    private RefreshIntervalResponse refreshResponse(int seconds) {
+        return new RefreshIntervalResponse(seconds, refresh.defaultSeconds(), PulsarioProperties.MIN_REFRESH_SECONDS,
+                PulsarioProperties.MAX_REFRESH_SECONDS, seconds != refresh.defaultSeconds());
     }
 
     private PassarioSettingResponse response() {

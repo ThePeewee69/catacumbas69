@@ -16,13 +16,29 @@ import org.springframework.validation.annotation.Validated;
  * @param pulsar Pulsar admin and client settings
  * @param passario Passário HTTP client settings
  * @param mongo MongoDB client timeouts
+ * @param ui web UI defaults
  */
 @Validated
 @ConfigurationProperties(prefix = "pulsario")
 public record PulsarioProperties(
         @Valid @NotNull Pulsar pulsar,
         @Valid @NotNull Passario passario,
-        @Valid @NotNull Mongo mongo) {
+        @Valid @NotNull Mongo mongo,
+        @Valid @NotNull Ui ui) {
+
+    /** Smallest auto-refresh interval the UI may use, in seconds. */
+    public static final int MIN_REFRESH_SECONDS = 2;
+
+    /** Largest auto-refresh interval the UI may use, in seconds. */
+    public static final int MAX_REFRESH_SECONDS = 300;
+
+    /**
+     * Web UI defaults. Each can be overridden at runtime from the UI (stored in {@code pulsario_settings}).
+     *
+     * @param refreshIntervalSeconds how often the UI refreshes what is on screen
+     */
+    public record Ui(@Min(MIN_REFRESH_SECONDS) @Max(MAX_REFRESH_SECONDS) int refreshIntervalSeconds) {
+    }
 
     /**
      * Pulsar settings (RES-2, PERF-5, PERF-6).

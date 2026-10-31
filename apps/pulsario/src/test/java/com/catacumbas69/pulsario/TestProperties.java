@@ -21,6 +21,7 @@ public final class TestProperties {
                         Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(1),
                         Duration.ofSeconds(1), Duration.ofMinutes(5), maxCachedProducers, maxPeekCount),
                 new PulsarioProperties.Passario("http://localhost:8082", Duration.ofSeconds(1), Duration.ofSeconds(1)),
-                new PulsarioProperties.Mongo(Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(1)));
+                new PulsarioProperties.Mongo(Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(1)),
+                new PulsarioProperties.Ui(10));
     }
 }

@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pulsário</title>
 <link rel="icon" type="image/svg+xml" href="/pulsario-icon.svg">
-<link rel="stylesheet" href="/pulsario.css?v=8">
-<script src="/pulsario.js?v=8" defer></script>
+<link rel="stylesheet" href="/pulsario.css?v=11">
+<script src="/pulsario.js?v=11" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
 </head>
 <body x-data="app()" x-init="init()">
@@ -343,6 +343,35 @@
       <span x-text="connLabel()"></span>
     </div>
 
+    <!-- Auto-refresh: on/off per browser, interval shared by everyone (pulsario_settings, audited) -->
+    <div class="auto-refresh" @click.outside="auto.menuOpen = false" @keydown.escape="auto.menuOpen = false">
+      <button type="button" class="btn btn-ghost auto-toggle" :class="{ on: auto.on }" :aria-pressed="auto.on"
+              @click="toggleAutoRefresh()"
+              :title="auto.on ? 'Auto-refresh on in this browser — click to turn off' : 'Auto-refresh off in this browser — click to turn on'">
+        <span class="auto-dot" aria-hidden="true"></span>
+        <span x-text="auto.on ? 'Auto ' + auto.seconds + ' s' : 'Auto off'"></span>
+      </button>
+      <button type="button" class="btn btn-ghost auto-menu-btn" :aria-expanded="auto.menuOpen"
+              aria-haspopup="dialog" aria-label="Auto-refresh interval" @click="openRefreshMenu()">▾</button>
+      <template x-if="auto.menuOpen">
+        <form class="auto-menu" role="dialog" aria-label="Auto-refresh interval" @submit.prevent="saveRefreshInterval()">
+          <label for="refresh-seconds">Refresh every (seconds)</label>
+          <input id="refresh-seconds" type="number" required :min="auto.min" :max="auto.max" step="1"
+                 x-model.number="auto.draft">
+          <p class="settings-hint">
+            <span x-text="auto.min + '–' + auto.max + ' s · default ' + auto.defaultSeconds + ' s.'"></span>
+            Applies to every user; saved in MongoDB and recorded in the audit log.
+            The on/off switch only affects this browser.
+          </p>
+          <div class="auto-menu-actions">
+            <button type="button" class="btn btn-ghost btn-xs" x-show="auto.custom" :disabled="auto.saving"
+                    @click="saveRefreshInterval('DELETE')">Use default</button>
+            <button type="submit" class="btn btn-primary btn-xs" :disabled="auto.saving">Save</button>
+          </div>
+        </form>
+      </template>
+    </div>
+
     <button class="btn btn-secondary" style="font-size:12px;" @click="reload()">↺ Refresh</button>
     <button class="btn btn-ghost bridges-btn" :class="{'active': bridgesView}"
             @click="bridgesView ? closeBridges() : openBridges()" title="Passário Bridges">
@@ -534,7 +563,7 @@
           <button class="tab" :class="{active:tab==='stats'}"  @click="tab='stats'">📊 Overview</button>
           <button class="tab" :class="{active:tab==='produce'}" @click="tab='produce'">📤 Produce</button>
           <button class="tab" :class="{active:tab==='subs'}"   @click="tab='subs';loadSubs()">🔔 Subscriptions</button>
-          <button class="tab" :class="{active:tab==='backlog'}" @click="tab='backlog';loadSubs()">📋 Backlog</button>
+          <button class="tab" :class="{active:tab==='backlog'}" @click="openBacklogTab()">📋 Backlog</button>
         </div>
 
         <!-- ── Overview tab ── -->
@@ -674,38 +703,67 @@
           </div>
         </template>
 
-        <!-- ── Backlog tab ── -->
+        <!-- ── Backlog tab: subscriptions with backlog statistics (left), peeked messages (right) ── -->
         <template x-if="tab==='backlog'">
-          <div>
-            <div class="card">
-              <div class="card-title"><span class="dot"></span>Peek Backlog Messages</div>
-              <div class="form-row">
-                <div class="field">
-                  <label>Subscription</label>
-                  <div class="sub-picker">
-                    <template x-if="subscriptions.length === 0">
-                      <div class="sub-picker-empty">no subscriptions</div>
-                    </template>
-                    <template x-for="s in subscriptions" :key="s">
-                      <div class="sub-picker-item"
-                           :class="{ selected: backlog.sub === s }"
-                           @click="backlog.sub = s"
-                           x-text="s"></div>
-                    </template>
-                  </div>
+          <div class="backlog-layout">
+            <section class="card backlog-subs" aria-labelledby="backlog-subs-title">
+              <div class="card-title"><span class="dot"></span><span id="backlog-subs-title">Subscriptions</span></div>
+              <template x-if="backlogSubs().length === 0">
+                <p class="muted backlog-empty-subs">No subscriptions on this topic.</p>
+              </template>
+              <ul class="backlog-sub-list">
+                <template x-for="item in backlogSubs()" :key="item.name">
+                  <li>
+                    <button type="button" class="backlog-sub" :class="{ selected: backlog.sub === item.name }"
+                            :aria-pressed="backlog.sub === item.name" @click="selectBacklogSub(item.name)">
+                      <span class="backlog-sub-head">
+                        <span class="backlog-sub-name mono" x-text="item.name"></span>
+                        <span class="tag tag-blue" x-show="item.stats?.type" x-text="item.stats?.type"></span>
+                      </span>
+                      <template x-if="item.stats">
+                        <span class="backlog-sub-stats">
+                          <span class="backlog-count" :class="{ zero: !item.stats.msgBacklog }"
+                                x-text="fmtNum(item.stats.msgBacklog ?? 0) + ' msgs'"></span>
+                          <span x-text="fmtBytes(item.stats.backlogSize ?? 0)"></span>
+                          <span x-text="(item.stats.consumers ?? []).length + ' consumer(s)'"></span>
+                          <span x-text="fmt(item.stats.msgRateOut ?? 0) + ' msg/s out'"></span>
+                          <span x-text="fmtNum(item.stats.unackedMessages ?? 0) + ' unacked'"></span>
+                        </span>
+                      </template>
+                      <template x-if="!item.stats">
+                        <span class="backlog-sub-stats muted">statistics loading…</span>
+                      </template>
+                    </button>
+                  </li>
+                </template>
+              </ul>
+            </section>
 
+            <section class="backlog-detail" aria-live="polite">
+              <div class="card backlog-toolbar">
+                <div class="card-title" style="margin-bottom:0;">
+                  <span class="dot"></span>
+                  <span x-text="backlog.sub ? 'Peek' : 'Select a subscription'"></span>
+                  <span class="peek-sub mono" x-show="backlog.sub" x-text="backlog.sub"></span>
+                  <span class="backlog-toolbar-actions">
+                    <label for="peek-count" class="muted">Count</label>
+                    <input id="peek-count" type="number" min="1" max="100" x-model.number="backlog.count"
+                           @change="backlog.sub && peekMessages()">
+                    <button type="button" class="btn btn-ghost btn-xs" @click="peekMessages()"
+                            :disabled="!backlog.sub || loading.backlog" title="Peek again" aria-label="Peek again">
+                      <template x-if="loading.backlog"><span class="spinner" style="width:12px;height:12px;"></span></template>
+                      <template x-if="!loading.backlog"><span>↻</span></template>
+                    </button>
+                  </span>
                 </div>
-                <div class="field" style="max-width:110px;">
-                  <label>Count</label>
-                  <input type="number" x-model.number="backlog.count" min="1" max="100">
-                </div>
-                <button class="btn btn-primary" @click="peekMessages()"
-                        :disabled="!backlog.sub || loading.backlog">
-                  <template x-if="loading.backlog"><span class="spinner"></span></template>
-                  Peek
-                </button>
               </div>
-            </div>
+
+              <template x-if="!backlog.sub">
+                <div class="card empty">
+                  <p>Click a subscription to see the first messages of its backlog.</p>
+                  <p class="muted" style="font-size:12px;">Peeking does not consume messages. Each peek is recorded in the audit log.</p>
+                </div>
+              </template>
 
             <template x-if="backlog.messages.length > 0">
               <div class="card">
@@ -775,6 +833,7 @@
                 <p>No messages in backlog for this subscription.</p>
               </div>
             </template>
+            </section>
           </div>
         </template>
 

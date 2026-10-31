@@ -84,6 +84,7 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 | `PULSAR_LISTENER_NAME` | both | *(empty)* | `external` |
 | `SPRING_DATA_MONGODB_URI` | both | in-cluster ReplicaSet URI from Secret | NodePort `32017` + `authSource=admin&directConnection=true` |
 | `PASSARIO_URL` | Pulsário | `http://passario.<ns>.svc.cluster.local:8082` | `http://localhost:8082` |
+| `PULSARIO_REFRESH_INTERVAL_SECONDS` | Pulsário | `10` | `10` |
 
 `PASSARIO_URL` is the default; it can be changed at runtime from Pulsário's Connection Settings
 (`PUT /api/v1/settings/passario`), which stores it in `pulsario_settings` and audits the change.
@@ -337,6 +338,11 @@ Stack: plain HTML + Alpine.js 3 (from cdnjs, pinned version), one `index.html`, 
   styles; no unbounded growth of the page.
 - **UI-8 [MUST]** Views are mutually exclusive: opening a topic closes the Bridges panel and vice versa.
 - **UI-9 [SHOULD]** Colours, radii and fonts only from the CSS variables in `:root`.
+- **UI-10 [MUST]** Auto-refresh only repeats reads: sidebar lists, Overview statistics, subscription list,
+  bridge list/status/traffic. It never repeats an action with side effects or one that writes an audit
+  entry (backlog peek). It refreshes in place (no spinner, no toast), skips while the browser tab is
+  hidden, and lists are replaced only when they changed. The on/off switch is per browser; the interval
+  is shared (`pulsario_settings`, 2–300 s, audited).
 
 ---
 
@@ -547,7 +553,8 @@ Closed on 2026-10-30:
   `binary` flag fix, health indicators, Prometheus, Javadoc, `package-info.java`, Checkstyle, README,
   Dockerfile fix, English UI strings.
 - **Shared**: ADRs 0001–0004, `.editorconfig`, `build/checkstyle.xml`.
-- **Later the same day** (pending `mvn verify`): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
+- **Later the same day** (`mvn verify` green on 2026-10-31: Passário 77 tests, Pulsário 50 tests, 0 Checkstyle
+  violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Passário URL, clear backlog per subscription in Overview.
 
