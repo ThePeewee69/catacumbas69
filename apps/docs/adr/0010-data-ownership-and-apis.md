@@ -1,6 +1,7 @@
 # 10. Each service owns its collections and exposes them through its API
 
-Date: 2026-10-31 · Status: Proposed · Supersedes: the cross-service reads of ADR 0007 (once implemented)
+Date: 2026-10-31 · Status: Accepted (phases 2–4 done 2026-11-01; Cataponte's collections in phase 5) ·
+Supersedes: the cross-service reads of ADR 0007
 
 ## Context
 
@@ -14,9 +15,9 @@ are explicit exceptions to ARCH-1 and couple the services through document shape
 
   | Owner | Collections (current names) |
   |---|---|
-  | Catapulsar | `pulsario_settings` |
+  | Catapulsar | `catapulsar_settings` (was `pulsario_settings`) |
   | Cataponte | `bridges`, `bridge_traffic_minutes`, `bridge_traffic_totals` |
-  | Catametricas | `contario_topic_snapshots`, `contario_topic_minutes`, `contario_topic_hours`, `contario_topic_totals`, `contario_status`, `contario_locks`, `catametricas_task_runs` (new) |
+  | Catametricas | `catametricas_topic_snapshots`, `catametricas_topic_minutes`, `catametricas_topic_hours`, `catametricas_topic_totals`, `catametricas_task_runs` (were `contario_*`; `contario_status` and `contario_locks` dropped) |
   | Cataudit | `cataudit_events` (new); `audit_logs` until migrated (ADR 0009) |
 
   **All collections are renamed to their owner's prefix** in a one-off migration run by each owner at
@@ -26,10 +27,11 @@ are explicit exceptions to ARCH-1 and couple the services through document shape
   The audit `application` values keep the old app names only in migrated entries. Each migration ships with
   its owner's phase (decided 2026-10-31): `audit_logs` in phase 2 (copied, kept), `pulsario_settings` in phase 3 (copied, dropped;
   done 2026-11-01),
-  `contario_*` in phase 4, `bridges`/`bridge_traffic_*` in phase 5 (orch.md §15).
-- **Catametricas exposes a query API** (`GET /api/v1/metrics/overview`, `/tenants/{t}`, `/namespaces/{t}/{ns}`,
-  `/topics/{topic}` with `period`), returning the overview rows Catapulsar shows today. Catapulsar calls it
-  through its BFF (as it does for Cataponte) and no longer reads MongoDB for statistics.
+  `contario_*` in phase 4 (renamed with `renameCollection` instead of copied, indexes kept; done 2026-11-01),
+  `bridges`/`bridge_traffic_*` in phase 5 (orch.md §15).
+- **Catametricas exposes a query API**, which Catapulsar calls instead of reading MongoDB for statistics. As
+  built in phase 4 it is generic (decided 2026-11-01): `GET /api/v1/topics`, `GET /api/v1/series` and
+  `GET /api/v1/collector` (ADR 0013); Catapulsar keeps building the overview rows from them.
 - Catametricas no longer reads Catapulsar's settings collection; it gets its interval from the settings
   topic (ADR 0011).
 - Each service's MongoDB user is still shared at first; separate users with access to their own prefix only

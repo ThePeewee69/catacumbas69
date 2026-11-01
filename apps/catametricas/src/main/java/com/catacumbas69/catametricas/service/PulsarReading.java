@@ -4,12 +4,12 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Everything read from Pulsar in one collection.
+ * Everything read from Pulsar for one namespace in one task.
  *
+ * @param namespace full namespace, {@code tenant/namespace}; its topic list was read, so topics of it that were
+ *        not listed are gone
  * @param samples statistics of every topic that could be read
- * @param listedNamespaces namespaces ({@code tenant/namespace}) whose topic list was read; only topics of
- *        these namespaces can be marked as deleted
  * @param failedTopics topics that were listed but whose statistics could not be read
  */
-public record PulsarReading(List<TopicSample> samples, Set<String> listedNamespaces, Set<String> failedTopics) {
+public record PulsarReading(String namespace, List<TopicSample> samples, Set<String> failedTopics) {
 }

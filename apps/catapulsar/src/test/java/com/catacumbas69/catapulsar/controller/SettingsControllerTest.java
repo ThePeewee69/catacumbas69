@@ -16,6 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.catacumbas69.catapulsar.service.CollectIntervalService;
 import com.catacumbas69.catapulsar.service.InvalidSettingException;
 import com.catacumbas69.catapulsar.service.CataponteEndpoint;
+import com.catacumbas69.catapulsar.service.CatametricasEndpoint;
 import com.catacumbas69.catapulsar.service.CatauditEndpoint;
 import com.catacumbas69.catapulsar.service.RefreshIntervalService;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +39,9 @@ class SettingsControllerTest {
 
     @MockitoBean
     private CatauditEndpoint cataudit;
+
+    @MockitoBean
+    private CatametricasEndpoint catametricas;
 
     @MockitoBean
     private RefreshIntervalService refresh;
@@ -209,5 +213,23 @@ class SettingsControllerTest {
         verify(cataudit).change("http://localhost:8084", "10.0.0.9");
         mvc.perform(delete("/api/v1/settings/cataudit")).andExpect(status().isOk());
         verify(cataudit).reset(any());
+    }
+
+    @Test
+    void catametricas_getChangeAndReset() throws Exception {
+        when(catametricas.url()).thenReturn("http://localhost:8083");
+        when(catametricas.defaultUrl()).thenReturn("http://catametricas:8083");
+        when(catametricas.isCustom()).thenReturn(true);
+
+        mvc.perform(get("/api/v1/settings/catametricas"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.url").value("http://localhost:8083"))
+                .andExpect(jsonPath("$.defaultUrl").value("http://catametricas:8083"));
+        mvc.perform(put("/api/v1/settings/catametricas").header("X-Forwarded-For", "10.0.0.9")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"url\":\"http://localhost:8083\"}"))
+                .andExpect(status().isOk());
+        verify(catametricas).change("http://localhost:8083", "10.0.0.9");
+        mvc.perform(delete("/api/v1/settings/catametricas")).andExpect(status().isOk());
+        verify(catametricas).reset(any());
     }
 }

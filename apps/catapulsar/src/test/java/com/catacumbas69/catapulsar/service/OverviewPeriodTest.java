@@ -21,12 +21,12 @@ class OverviewPeriodTest {
     }
 
     @Test
-    void lastMonth_usesSixHourBuckets_fromTheHourlyHistory() {
+    void lastMonth_usesSixHourBuckets() {
         List<Instant> buckets = OverviewPeriod.LAST_MONTH.buckets(NOW);
 
         assertThat(buckets).hasSize(120);
         assertThat(buckets.get(119)).isEqualTo(Instant.parse("2026-10-31T06:00:00Z"));
-        assertThat(OverviewPeriod.LAST_MONTH.collection()).isEqualTo("contario_topic_hours");
+        assertThat(OverviewPeriod.LAST_MONTH.stepParameter()).isEqualTo("6h");
     }
 
     @Test

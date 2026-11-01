@@ -1,10 +1,5 @@
 package com.catacumbas69.catapulsar.service;
 
-import static com.catacumbas69.catapulsar.model.CatametricasSchema.HOUR;
-import static com.catacumbas69.catapulsar.model.CatametricasSchema.HOURS;
-import static com.catacumbas69.catapulsar.model.CatametricasSchema.MINUTE;
-import static com.catacumbas69.catapulsar.model.CatametricasSchema.MINUTES;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -12,19 +7,19 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Time ranges offered by the overviews, with the history collection and the chart step each one uses.
- * Short ranges read per-minute history (kept 30 days), long ones per-hour history (kept forever).
+ * Time ranges offered by the overviews, with the chart step each one asks Catametricas for. Steps below an hour
+ * are answered from per-minute history (kept 30 days), longer ones from per-hour history (kept forever).
  */
 public enum OverviewPeriod {
 
     /** Last hour, one point per minute. */
-    LAST_HOUR("1h", Duration.ofHours(1), Duration.ofMinutes(1), MINUTES, MINUTE),
+    LAST_HOUR("1h", Duration.ofHours(1), Duration.ofMinutes(1), "1m"),
     /** Last 24 hours, one point per 15 minutes. */
-    LAST_DAY("24h", Duration.ofHours(24), Duration.ofMinutes(15), MINUTES, MINUTE),
+    LAST_DAY("24h", Duration.ofHours(24), Duration.ofMinutes(15), "15m"),
     /** Last 7 days, one point per hour. */
-    LAST_WEEK("7d", Duration.ofDays(7), Duration.ofHours(1), HOURS, HOUR),
+    LAST_WEEK("7d", Duration.ofDays(7), Duration.ofHours(1), "1h"),
     /** Last 30 days, one point per 6 hours. */
-    LAST_MONTH("30d", Duration.ofDays(30), Duration.ofHours(6), HOURS, HOUR);
+    LAST_MONTH("30d", Duration.ofDays(30), Duration.ofHours(6), "6h");
 
     /** Accepted values of the {@code period} request parameter. */
     public static final String VALUES = "1h|24h|7d|30d";
@@ -32,15 +27,13 @@ public enum OverviewPeriod {
     private final String value;
     private final Duration length;
     private final Duration step;
-    private final String collection;
-    private final String timeField;
+    private final String stepParameter;
 
-    OverviewPeriod(String value, Duration length, Duration step, String collection, String timeField) {
+    OverviewPeriod(String value, Duration length, Duration step, String stepParameter) {
         this.value = value;
         this.length = length;
         this.step = step;
-        this.collection = collection;
-        this.timeField = timeField;
+        this.stepParameter = stepParameter;
     }
 
     /**
@@ -91,20 +84,11 @@ public enum OverviewPeriod {
     }
 
     /**
-     * Returns the history collection this period reads.
+     * Returns the step as Catametricas' {@code /api/v1/series} expects it.
      *
-     * @return collection name
+     * @return e.g. {@code 15m}
      */
-    public String collection() {
-        return collection;
-    }
-
-    /**
-     * Returns the time field of that collection.
-     *
-     * @return {@code minute} or {@code hour}
-     */
-    public String timeField() {
-        return timeField;
+    public String stepParameter() {
+        return stepParameter;
     }
 }

@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Cluster, tenant and namespace overviews from Catametricas' statistics: current state, traffic in the
- * chosen period, all-time traffic and chart series. Reads MongoDB only.
+ * chosen period, all-time traffic and chart series, from Catametricas' API ({@code 503} if it is down).
  */
 @Tag(name = "Overview")
 @RestController

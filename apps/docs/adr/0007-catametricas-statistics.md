@@ -1,6 +1,7 @@
 # 7. Catametricas collects topic statistics; Catapulsar reads them from MongoDB
 
-Date: 2026-10-31 · Status: Accepted
+Date: 2026-10-31 · Status: Accepted · Partly superseded (phase 4, 2026-11-01): the lease by ADR 0012, the
+cross-service reads by ADRs 0010 and 0013, the collection names by ADR 0010 (`contario_*` → `catametricas_*`)
 
 ## Context
 
@@ -39,3 +40,13 @@ These two cross-service reads are explicit exceptions to ARCH-1. The field names
 - Catapulsar and Catametricas must be changed together when the collections change shape (MONGO-2).
 - Per-topic storage grows with the number of topics: about 1,440 minute documents per topic per day,
   removed after 30 days, plus 24 hour documents per topic per day kept forever.
+
+## Superseded parts (phase 4, 2026-11-01)
+
+- The lease (`contario_locks`) is gone: every replica collects, sharing one task per namespace and interval
+  through Pulsar, with claims and conditional snapshot updates (ADR 0012).
+- Catapulsar no longer reads Catametricas' collections: it calls Catametricas' API (`/api/v1/topics`,
+  `/api/v1/series`, `/api/v1/collector`, ADR 0013). `CatametricasSchema` was removed from Catapulsar.
+- The collections are renamed to `catametricas_*`; `contario_status` is dropped ("last collection" is the
+  newest snapshot). The baseline is now per namespace: a namespace's first collection only sets the starting
+  point.

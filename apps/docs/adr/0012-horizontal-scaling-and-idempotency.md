@@ -1,6 +1,7 @@
 # 12. Every service scales horizontally; all writes are idempotent
 
-Date: 2026-10-31 · Status: Proposed · Supersedes: ADR 0002 and the collector lease of ADR 0007 (once implemented)
+Date: 2026-10-31 · Status: Accepted for Catapulsar, Cataudit and Catametricas (phase 4, 2026-11-01); Cataponte in
+phase 5 · Supersedes: the collector lease of ADR 0007; ADR 0002 once phase 5 is done
 
 ## Context
 
@@ -54,3 +55,20 @@ adds (`$inc`) only what it relayed itself.
 - The scheduler's duplicate tasks cost a few messages per namespace and interval; the claim keeps the work
   single.
 - `catametricas_task_runs` and the conditional snapshot update add one round-trip per task and per topic.
+
+## Implementation for Catametricas (phase 4, 2026-11-01)
+
+- Every instance publishes, just after the start of each interval (aligned to the epoch), one `CollectTask`
+  per namespace to `catacumbas69/catametricas/collect-tasks`, key and id `<tenant>/<namespace>@<interval start>`.
+- Every instance consumes the topic with the `Shared` subscription `catametricas` and a receiver queue of 1, so
+  tasks spread over the instances.
+- The claim is an insert into `catametricas_task_runs` (`_id` = task id, TTL 6 h); the run's result is added to
+  the same document. A duplicate key means another instance has the task: acknowledge and skip.
+- Each topic's snapshot is replaced with a conditional `findAndReplace` (`_id` = topic and
+  `collectedAt < sample time`, upsert) that returns the replaced snapshot; the delta is computed from that
+  snapshot and added only by this caller. A duplicate key on the upsert means a newer snapshot exists:
+  nothing is counted.
+- Every task is run, however late. A failed task releases its claim and is negatively acknowledged; Pulsar
+  delivers it again after 10 s, doubling up to 5 min. A namespace that no longer exists marks its topics as
+  gone.
+- The lease and its collection are removed.

@@ -27,6 +27,9 @@ public class Setting {
     /** Cataudit base URL (ADR 0009). */
     public static final String CATAUDIT_URL = "catapulsar.cataudit-url";
 
+    /** Catametricas base URL (ADR 0013). */
+    public static final String CATAMETRICAS_URL = "catapulsar.catametricas-url";
+
     /** UI auto-refresh interval, in seconds. */
     public static final String REFRESH_INTERVAL_SECONDS = "catapulsar.refresh-interval-seconds";
 
@@ -39,6 +42,10 @@ public class Setting {
             CATAUDIT_URL, CATAUDIT_URL,
             "ui.refresh-interval-seconds", REFRESH_INTERVAL_SECONDS,
             "contario.collect-interval-seconds", COLLECT_INTERVAL_SECONDS);
+
+    /** Every shared setting. */
+    private static final Set<String> IDS = Set.of(CATAPONTE_URL, CATAUDIT_URL, CATAMETRICAS_URL,
+            REFRESH_INTERVAL_SECONDS, COLLECT_INTERVAL_SECONDS);
 
     @Id
     private String id;
@@ -111,7 +118,7 @@ public class Setting {
      * @return the ids (= topic keys)
      */
     public static Set<String> ids() {
-        return Set.copyOf(LEGACY_IDS.values());
+        return IDS;
     }
 
     /**

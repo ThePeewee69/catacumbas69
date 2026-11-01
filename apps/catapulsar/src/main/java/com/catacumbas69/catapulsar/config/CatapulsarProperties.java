@@ -17,7 +17,7 @@ import org.springframework.validation.annotation.Validated;
  * @param cataponte Cataponte HTTP client settings
  * @param mongo MongoDB client timeouts
  * @param ui web UI defaults
- * @param catametricas Catametricas defaults shared through the settings topic
+ * @param catametricas Catametricas HTTP client settings (overviews, ADR 0013) and shared defaults
  * @param cataudit Cataudit HTTP client settings (audit view, ADR 0009)
  */
 @Validated
@@ -43,11 +43,18 @@ public record CatapulsarProperties(
     public static final int MAX_COLLECT_SECONDS = 600;
 
     /**
-     * Catametricas settings edited in Catapulsar (ADR 0007).
+     * Catametricas: its API, used by the overviews (ADR 0013), and its interval, edited in Catapulsar (ADR 0007).
      *
+     * @param url Catametricas base URL
+     * @param connectTimeout HTTP connect timeout
+     * @param readTimeout HTTP read timeout
      * @param collectIntervalSeconds default collection interval; keep equal to Catametricas' default
      */
-    public record Catametricas(@Min(MIN_COLLECT_SECONDS) @Max(MAX_COLLECT_SECONDS) int collectIntervalSeconds) {
+    public record Catametricas(
+            @NotBlank String url,
+            @NotNull Duration connectTimeout,
+            @NotNull Duration readTimeout,
+            @Min(MIN_COLLECT_SECONDS) @Max(MAX_COLLECT_SECONDS) int collectIntervalSeconds) {
     }
 
     /**

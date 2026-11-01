@@ -1,200 +1,194 @@
 package com.catacumbas69.catametricas.service;
 
-import com.catacumbas69.catacommons.events.EventData;
-import com.catacumbas69.catacommons.events.EventPublisher;
-import com.catacumbas69.catametricas.model.CollectorStatus;
-import com.catacumbas69.catametricas.model.Schema;
+import com.catacumbas69.catametricas.model.CollectTask;
+import com.catacumbas69.catametricas.model.TaskRun;
 import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.List;
+import java.util.Set;
 import org.apache.pulsar.client.admin.PulsarAdminException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
 /**
- * Runs one collection: takes the lease, reads every topic from Pulsar and writes the result. A failed
- * collection is logged and retried at the next interval; nothing is written halfway for the snapshot
- * deltas because the snapshots are only replaced together with the traffic they produced.
+ * Runs one collection task (ADR 0012): claims it, reads the namespace from Pulsar and writes the result.
  *
- * <p>Only changes of state are published as events on {@code catacumbas69/catametricas/events} (ADR 0008):
- * {@code collection.failed} on the first failure of this instance (or after a success) and
- * {@code collection.recovered} on the first success after a failure, both with subject {@value #SUBJECT}.
+ * <ul>
+ *   <li>The claim is an insert into {@code catametricas_task_runs} keyed by the task id; a duplicate key means
+ *       another instance has the task, so this one skips it.</li>
+ *   <li>The write is idempotent ({@link StatsWriter}): a late or repeated task never counts traffic twice, so
+ *       every task is run, however old.</li>
+ *   <li>If reading or writing fails, the claim is removed and the task is delivered again later. A namespace
+ *       that no longer exists is not a failure: its topics are marked as gone.</li>
+ * </ul>
+ *
+ * <p>Metrics: {@code catametricas.tasks{outcome=done|duplicate|invalid|retry}} and
+ * {@code catametricas.collect.duration} (one namespace).
  */
 @Service
 public class StatsCollector {
 
     private static final Logger LOG = LoggerFactory.getLogger(StatsCollector.class);
-    private static final int LEASE_INTERVALS = 3;
-    /** Subject of the collection events. */
-    static final String SUBJECT = "collector";
-    private static final String ENTITY = "collection";
-    private static final String ACTOR = "catametricas";
 
-    private final CollectorLock lock;
+    /** What happened to one task. */
+    public enum Outcome {
+        /** Collected and stored by this instance. */
+        DONE,
+        /** Already claimed by an instance; skipped. */
+        DUPLICATE,
+        /** Not a usable task; dropped. */
+        INVALID,
+        /** Pulsar or MongoDB failed; delivered again later. */
+        RETRY
+    }
+
     private final CollectInterval interval;
     private final CatametricasIndexes indexes;
     private final PulsarStatsReader reader;
     private final StatsWriter writer;
     private final MongoTemplate mongoTemplate;
-    private final EventPublisher events;
+    private final CollectorState state;
     private final Clock clock;
     private final Timer duration;
-    private final Counter failures;
-    private final AtomicInteger topics = new AtomicInteger();
-    private volatile boolean leader;
-    private volatile CollectorStatus lastStatus;
-    private volatile String lastError;
-    private volatile Boolean healthy;
+    private final Counter done;
+    private final Counter duplicates;
+    private final Counter invalid;
+    private final Counter retries;
 
     /**
      * Creates the collector.
      *
-     * @param lock collector lease
-     * @param interval collection interval
-     * @param indexes index initializer
+     * @param interval collection interval, for logs and events
+     * @param indexes prepares the collections
      * @param reader reads Pulsar
      * @param writer writes MongoDB
-     * @param mongoTemplate template for the status document
-     * @param events publishes failure and recovery events
+     * @param mongoTemplate template for the task claims
+     * @param state this instance's collection state and events
      * @param clock time source
      * @param meterRegistry metrics registry
      */
-    public StatsCollector(CollectorLock lock, CollectInterval interval, CatametricasIndexes indexes,
-                          PulsarStatsReader reader, StatsWriter writer, MongoTemplate mongoTemplate,
-                          EventPublisher events, Clock clock, MeterRegistry meterRegistry) {
-        this.lock = lock;
+    public StatsCollector(CollectInterval interval, CatametricasIndexes indexes, PulsarStatsReader reader,
+                          StatsWriter writer, MongoTemplate mongoTemplate, CollectorState state, Clock clock,
+                          MeterRegistry meterRegistry) {
         this.interval = interval;
         this.indexes = indexes;
         this.reader = reader;
         this.writer = writer;
         this.mongoTemplate = mongoTemplate;
-        this.events = events;
+        this.state = state;
         this.clock = clock;
         this.duration = Timer.builder("catametricas.collect.duration")
-                .description("Time to read and store all topic statistics").register(meterRegistry);
-        this.failures = Counter.builder("catametricas.collect.failures")
-                .description("Collections that failed").register(meterRegistry);
-        Gauge.builder("catametricas.topics", topics, AtomicInteger::get)
-                .description("Topics read in the last collection").register(meterRegistry);
+                .description("Time to read and store the statistics of one namespace").register(meterRegistry);
+        this.done = counter(meterRegistry, "done");
+        this.duplicates = counter(meterRegistry, "duplicate");
+        this.invalid = counter(meterRegistry, "invalid");
+        this.retries = counter(meterRegistry, "retry");
     }
 
-    /** Collects if this instance holds (or can take) the lease. Never throws. */
-    public void collectIfLeader() {
+    /**
+     * Runs a task. Never throws.
+     *
+     * @param task the task, or {@code null} if the message could not be read
+     * @return what happened
+     */
+    public Outcome handle(CollectTask task) {
+        if (task == null || !task.complete()) {
+            invalid.increment();
+            if (task != null) {
+                LOG.error("Collection task is not valid, dropped: {}", task);
+            }
+            return Outcome.INVALID;
+        }
         int seconds = interval.seconds();
-        try {
-            leader = lock.tryAcquire(Duration.ofSeconds((long) seconds * LEASE_INTERVALS));
-        } catch (RuntimeException e) {
-            leader = false;
-            lastError = "MongoDB: " + e.getMessage();
-            LOG.warn("Collection skipped, lease not checked: {}", e.getMessage());
-            failed("lease", lastError, seconds);
-            return;
-        }
-        if (!leader) {
-            LOG.debug("Another instance holds the collector lease");
-            return;
-        }
         Instant started = clock.instant();
         try {
             indexes.ensure();
-            PulsarReading reading = reader.read();
-            CollectionPlan plan = writer.write(reading, started);
+            mongoTemplate.insert(TaskRun.claim(task, started, state.instance()));
+        } catch (DuplicateKeyException e) {
+            duplicates.increment();
+            LOG.debug("Task {} already claimed", task.id());
+            return Outcome.DUPLICATE;
+        } catch (RuntimeException e) {
+            retries.increment();
+            LOG.warn("Task {} not claimed, will be delivered again: {}", task.id(), e.getMessage());
+            state.failed("claim", "MongoDB: " + e.getMessage(), seconds);
+            return Outcome.RETRY;
+        }
+        try {
+            PulsarReading reading = read(task.namespace());
+            StatsWriter.Result result = writer.write(reading, started);
             long millis = Duration.between(started, clock.instant()).toMillis();
-            CollectorStatus status = new CollectorStatus(Schema.STATUS_ID, clock.instant(), millis,
-                    reading.samples().size(), reading.failedTopics().size(), seconds, lock.owner());
-            mongoTemplate.save(status);
+            TaskRun run = finish(task, started, millis, reading, result);
             duration.record(Duration.ofMillis(millis));
-            topics.set(reading.samples().size());
-            lastStatus = status;
-            lastError = null;
-            LOG.info("Collected {} topic(s) in {} ms ({} failed, {} gone); next in {} s", reading.samples().size(),
-                    millis, reading.failedTopics().size(), plan.deactivate().size(), seconds);
-            recovered(status);
+            done.increment();
+            LOG.info("Collected {}: {} topic(s) in {} ms ({} counted, {} already newer, {} failed, {} gone)",
+                    task.id(), reading.samples().size(), millis, result.advanced(), result.skipped(),
+                    reading.failedTopics().size(), result.deactivated());
+            state.succeeded(run, seconds);
+            return Outcome.DONE;
         } catch (PulsarAdminException | RuntimeException e) {
-            failures.increment();
-            lastError = e.getMessage();
-            LOG.warn("Collection failed, retrying in {} s: {}", seconds, e.getMessage());
-            failed("collect", e.getMessage(), seconds);
+            release(task);
+            retries.increment();
+            LOG.warn("Task {} failed, will be delivered again: {}", task.id(), e.getMessage());
+            state.failed("collect", e.getMessage(), seconds);
+            return Outcome.RETRY;
         }
     }
 
-    private void failed(String stage, String error, int seconds) {
-        if (Boolean.FALSE.equals(healthy)) {
-            return;
-        }
-        healthy = false;
-        Map<String, Object> details = new LinkedHashMap<>();
-        details.put("stage", stage);
-        details.put("error", error);
-        details.put("intervalSeconds", seconds);
-        details.put("instance", owner());
-        publish("failed", details);
-    }
-
-    private void recovered(CollectorStatus status) {
-        boolean wasFailing = Boolean.FALSE.equals(healthy);
-        healthy = true;
-        if (!wasFailing) {
-            return;
-        }
-        Map<String, Object> details = new LinkedHashMap<>();
-        details.put("topics", status.topics());
-        details.put("failedTopics", status.failedTopics());
-        details.put("durationMillis", status.durationMillis());
-        details.put("intervalSeconds", status.intervalSeconds());
-        details.put("instance", status.owner());
-        publish("recovered", details);
-    }
-
-    private void publish(String action, Map<String, Object> details) {
+    /** Reads a namespace; one that no longer exists reads as empty, so its topics are marked as gone. */
+    private PulsarReading read(String namespace) throws PulsarAdminException {
         try {
-            events.publish(ENTITY, action, SUBJECT, EventData.action(ACTOR, details));
-        } catch (RuntimeException e) {
-            LOG.warn("Event collection.{} not published: {}", action, e.getMessage());
+            return reader.read(namespace);
+        } catch (PulsarAdminException.NotFoundException e) {
+            LOG.info("Namespace {} no longer exists; its topics are marked as gone", namespace);
+            return new PulsarReading(namespace, List.of(), Set.of());
         }
     }
 
-    private String owner() {
+    private TaskRun finish(CollectTask task, Instant started, long millis, PulsarReading reading,
+                           StatsWriter.Result result) {
+        TaskRun claim = TaskRun.claim(task, started, state.instance());
+        TaskRun run = new TaskRun(claim.id(), claim.namespace(), claim.bucket(), claim.claimedAt(), claim.instance(),
+                clock.instant(), millis, reading.samples().size(), reading.failedTopics().size(), result.advanced());
         try {
-            return lock.owner();
+            mongoTemplate.updateFirst(Query.query(Criteria.where("_id").is(task.id())),
+                    Update.update("finishedAt", run.finishedAt())
+                            .set("durationMillis", run.durationMillis())
+                            .set("topics", run.topics())
+                            .set("failedTopics", run.failedTopics())
+                            .set("advancedTopics", run.advancedTopics()),
+                    TaskRun.class);
         } catch (RuntimeException e) {
-            return null;
+            LOG.debug("Result of task {} not recorded: {}", task.id(), e.getMessage());
+        }
+        return run;
+    }
+
+    /** Gives a failed task back, so it is run when delivered again. */
+    private void release(CollectTask task) {
+        try {
+            mongoTemplate.remove(Query.query(Criteria.where("_id").is(task.id())
+                    .and("instance").is(state.instance())), TaskRun.class);
+        } catch (RuntimeException e) {
+            LOG.warn("Claim of task {} not released ({}); the next task counts its traffic", task.id(),
+                    e.getMessage());
         }
     }
 
-    /**
-     * Tells whether this instance held the lease at the last attempt.
-     *
-     * @return {@code true} if it is the collecting instance
-     */
-    public boolean isLeader() {
-        return leader;
-    }
-
-    /**
-     * Returns the last successful collection of this instance.
-     *
-     * @return the status, or {@code null} if none yet
-     */
-    public CollectorStatus lastStatus() {
-        return lastStatus;
-    }
-
-    /**
-     * Returns the error of the last attempt.
-     *
-     * @return the message, or {@code null} if the last attempt succeeded
-     */
-    public String lastError() {
-        return lastError;
+    private static Counter counter(MeterRegistry registry, String outcome) {
+        return Counter.builder("catametricas.tasks")
+                .description("Collection tasks received, by outcome")
+                .tag("outcome", outcome)
+                .register(registry);
     }
 }

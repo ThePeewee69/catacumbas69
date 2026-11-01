@@ -4,6 +4,7 @@ import com.catacumbas69.catapulsar.dto.IntervalSettingRequest;
 import com.catacumbas69.catapulsar.dto.IntervalSettingResponse;
 import com.catacumbas69.catapulsar.dto.UrlSettingRequest;
 import com.catacumbas69.catapulsar.dto.UrlSettingResponse;
+import com.catacumbas69.catapulsar.service.CatametricasEndpoint;
 import com.catacumbas69.catapulsar.service.CataponteEndpoint;
 import com.catacumbas69.catapulsar.service.CatauditEndpoint;
 import com.catacumbas69.catapulsar.service.CollectIntervalService;
@@ -29,6 +30,7 @@ public class SettingsController {
 
     private final CataponteEndpoint cataponte;
     private final CatauditEndpoint cataudit;
+    private final CatametricasEndpoint catametricas;
     private final RefreshIntervalService refresh;
     private final CollectIntervalService collect;
 
@@ -37,13 +39,16 @@ public class SettingsController {
      *
      * @param cataponte Cataponte base URL holder
      * @param cataudit Cataudit base URL holder
+     * @param catametricas Catametricas base URL holder
      * @param refresh UI auto-refresh interval
      * @param collect Catametricas collection interval
      */
-    public SettingsController(CataponteEndpoint cataponte, CatauditEndpoint cataudit, RefreshIntervalService refresh,
+    public SettingsController(CataponteEndpoint cataponte, CatauditEndpoint cataudit,
+                              CatametricasEndpoint catametricas, RefreshIntervalService refresh,
                               CollectIntervalService collect) {
         this.cataponte = cataponte;
         this.cataudit = cataudit;
+        this.catametricas = catametricas;
         this.refresh = refresh;
         this.collect = collect;
     }
@@ -198,5 +203,44 @@ public class SettingsController {
     public UrlSettingResponse resetCataudit(HttpServletRequest http) {
         cataudit.reset(ClientAddress.of(http));
         return UrlSettingResponse.of(cataudit);
+    }
+
+    /**
+     * Returns the Catametricas base URL in use.
+     *
+     * @return current and default URL
+     */
+    @Operation(summary = "Catametricas URL in use")
+    @GetMapping("/catametricas")
+    public UrlSettingResponse catametricas() {
+        return UrlSettingResponse.of(catametricas);
+    }
+
+    /**
+     * Changes the Catametricas base URL. Takes effect immediately.
+     *
+     * @param request new URL
+     * @param http current request, for the audit log
+     * @return current and default URL
+     */
+    @Operation(summary = "Change the Catametricas URL")
+    @PutMapping("/catametricas")
+    public UrlSettingResponse changeCatametricas(@Valid @RequestBody UrlSettingRequest request,
+                                                 HttpServletRequest http) {
+        catametricas.change(request.url(), ClientAddress.of(http));
+        return UrlSettingResponse.of(catametricas);
+    }
+
+    /**
+     * Goes back to the configured Catametricas base URL ({@code CATAMETRICAS_URL}).
+     *
+     * @param http current request, for the audit log
+     * @return current and default URL
+     */
+    @Operation(summary = "Reset the Catametricas URL to its configured default")
+    @DeleteMapping("/catametricas")
+    public UrlSettingResponse resetCatametricas(HttpServletRequest http) {
+        catametricas.reset(ClientAddress.of(http));
+        return UrlSettingResponse.of(catametricas);
     }
 }

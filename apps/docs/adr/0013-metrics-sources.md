@@ -1,6 +1,6 @@
 # 13. Catametricas serves long-term history from MongoDB and, later, short-term from Prometheus
 
-Date: 2026-10-31 · Status: Proposed
+Date: 2026-10-31 · Status: Accepted (MongoDB source implemented in phase 4, 2026-11-01; Prometheus source later)
 
 ## Context
 
@@ -23,3 +23,17 @@ one is planned together with OpenMetrics collection and Loki.
 - Two sources can disagree slightly at the 24 h boundary (different sampling); the API reports which source
   answered.
 - MongoDB history stays the long-term record and keeps working when Prometheus is down.
+
+## Implementation (phase 4, 2026-11-01)
+
+- `GET /api/v1/topics?tenant=&namespace=`: every topic or partition of the scope with its current state (from
+  the snapshot; absent once the topic is gone) and its all-time traffic.
+- `GET /api/v1/series?tenant=&namespace=&groupBy=tenant|namespace|topic&from=&to=&step=`: traffic in and out
+  (messages and bytes) and backlog per bucket, summed per group by MongoDB. Steps below an hour (`1m`–`59m`)
+  read the per-minute history, whole hours (`1h`, `6h`) the hourly one; at most 2000 buckets. The answer
+  carries `source: "mongodb"`.
+- `GET /api/v1/collector`: the newest sample of any topic and the interval in use.
+- Errors are Problem Details (`400` for a query that does not fit, `503` when MongoDB is down); OpenAPI at
+  `/swagger-ui.html`.
+- Catapulsar calls this API from `OverviewService` at the editable Catametricas URL (`CATAMETRICAS_URL` by
+  default) and answers `503` for the overviews when Catametricas is down.

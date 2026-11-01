@@ -57,6 +57,8 @@ function app() {
                 metric: storedChoice('overviewMetric', 'in', Object.keys(OVERVIEW_METRICS)) },
     // Catametricas collection interval, edited in ⚙️ Settings (catapulsar_settings, audited).
     collect: { seconds: 60, defaultSeconds: 60, min: 15, max: 600, custom: false, draft: 60 },
+    // Catametricas URL: where the overviews read their statistics (ADR 0013)
+    catametricas: { url: '', defaultUrl: '', custom: false, draft: '', saving: false, healthState: null, healthMsg: '' },
     // Auto-refresh: `on` is per browser; `seconds` is shared by every user (catapulsar_settings, audited).
     auto: { on: autoRefreshStored(), seconds: 10, defaultSeconds: 10, min: 2, max: 300, custom: false,
             menuOpen: false, draft: 10, saving: false, tick: 0, busy: false, timer: null },
@@ -221,7 +223,7 @@ function app() {
     },
 
     /**
-     * Loads the overview of the current selection from Catametricas' statistics (MongoDB reads only).
+     * Loads the overview of the current selection from Catametricas' statistics (through Catapulsar).
      * @param {boolean} silent true for auto-refresh: no spinner, errors keep the last data
      */
     async loadOverview(silent = false) {
@@ -441,15 +443,18 @@ function app() {
       this.settings.open = true;
       this.bridges.settings.healthState = null;
       this.audit.settings.healthState = null;
-      await Promise.all([this.loadCataponteSettings(), this.loadCatauditSettings(), this.loadCollectInterval()]);
+      this.catametricas.healthState = null;
+      await Promise.all([this.loadCataponteSettings(), this.loadCatauditSettings(), this.loadCatametricasSettings(),
+                         this.loadCollectInterval()]);
       this.bridges.settings.draft = this.bridges.settings.url;
       this.audit.settings.draft = this.audit.settings.url;
+      this.catametricas.draft = this.catametricas.url;
       this.collect.draft = this.collect.seconds;
     },
 
     /**
-     * Saves the Pulsar label (this browser) and whatever changed on the server (Cataponte and Cataudit URLs,
-     * Catametricas interval; all audited). The dialog stays open if a server change is refused.
+     * Saves the Pulsar label (this browser) and whatever changed on the server (Cataponte, Cataudit and
+     * Catametricas URLs, Catametricas interval; all audited). The dialog stays open if a server change is refused.
      */
     async saveSettings() {
       try { localStorage.setItem('pulsarUrl', this.settings.pulsarUrl); } catch { /* label not remembered */ }
@@ -462,6 +467,11 @@ function app() {
       const a = this.audit.settings;
       if (a.draft && a.draft !== a.url) {
         if (!await this.changeCatauditUrl('PUT', { url: a.draft })) return;
+        changed = true;
+      }
+      const m = this.catametricas;
+      if (m.draft && m.draft !== m.url) {
+        if (!await this.changeCatametricasUrl('PUT', { url: m.draft })) return;
         changed = true;
       }
       if (Number(this.collect.draft) !== this.collect.seconds) {
@@ -511,6 +521,60 @@ function app() {
       } catch (e) {
         s.healthState = 'error';
         s.healthMsg = e.message;
+      }
+    },
+
+    /** Asks Catametricas, through Catapulsar, for the last hour of the cluster (save first to test a new URL). */
+    async checkCatametricas() {
+      const s = this.catametricas;
+      s.healthState = 'checking'; s.healthMsg = '';
+      try {
+        const overview = await this.api('/api/v1/overview?period=1h');
+        const age = overview.collectedAt
+          ? `last collection ${Math.max(0, Math.round((Date.now() - Date.parse(overview.collectedAt)) / 1000))} s ago`
+          : 'nothing collected yet';
+        s.healthState = 'ok';
+        s.healthMsg = `${s.url} · ${overview.rows.length} tenant(s), ${age}`;
+      } catch (e) {
+        s.healthState = 'error';
+        s.healthMsg = e.message;
+      }
+    },
+
+    // ── Catametricas URL (stored in MongoDB, audited, published on the settings topic) ──
+    async loadCatametricasSettings() {
+      try {
+        Object.assign(this.catametricas, await this.api('/api/v1/settings/catametricas'));
+      } catch (e) { this.notify('Settings: ' + e.message, 'error'); }
+    },
+
+    async resetCatametricasUrl() {
+      if (!confirm(`Go back to the default Catametricas URL ${this.catametricas.defaultUrl}?`)) return;
+      if (await this.changeCatametricasUrl('DELETE')) this.catametricas.draft = this.catametricas.url;
+    },
+
+    /**
+     * Saves or resets the Catametricas URL, then reloads the overview from the new address.
+     * @param {'PUT'|'DELETE'} method PUT saves `body.url`, DELETE goes back to the default
+     * @param {{url: string}} [body] new URL
+     * @returns {Promise<boolean>} whether the change was saved
+     */
+    async changeCatametricasUrl(method, body) {
+      const s = this.catametricas;
+      s.saving = true;
+      try {
+        const options = { method };
+        if (body) options.body = JSON.stringify(body);
+        Object.assign(s, await this.api('/api/v1/settings/catametricas', options));
+        s.healthState = null;
+        this.notify(`Catametricas URL set to ${s.url}`);
+        if (!this.sel.topic) await this.loadOverview();
+        return true;
+      } catch (e) {
+        this.notify('Catametricas URL not saved: ' + e.message, 'error');
+        return false;
+      } finally {
+        s.saving = false;
       }
     },
 

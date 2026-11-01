@@ -18,7 +18,7 @@ public final class CounterDelta {
      *
      * @param previous value at the previous collection, or {@code null} if the topic was not seen before
      * @param current value now
-     * @param baseline {@code true} on the very first collection: unknown topics only set the starting
+     * @param baseline {@code true} on the first collection of a namespace: unknown topics only set the starting
      *        point, otherwise everything since the broker loaded them would land in one minute
      * @return the increase, never negative
      */

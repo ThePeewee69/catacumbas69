@@ -1,46 +1,33 @@
 package com.catacumbas69.catapulsar.service;
 
-import static com.catacumbas69.catapulsar.model.CatametricasSchema.ACTIVE;
-import static com.catacumbas69.catapulsar.model.CatametricasSchema.BACKLOG_MSGS;
-import static com.catacumbas69.catapulsar.model.CatametricasSchema.BASE_NAME;
-import static com.catacumbas69.catapulsar.model.CatametricasSchema.BYTES_IN;
-import static com.catacumbas69.catapulsar.model.CatametricasSchema.BYTES_OUT;
-import static com.catacumbas69.catapulsar.model.CatametricasSchema.MSGS_IN;
-import static com.catacumbas69.catapulsar.model.CatametricasSchema.MSGS_OUT;
-import static com.catacumbas69.catapulsar.model.CatametricasSchema.NAMESPACE;
-import static com.catacumbas69.catapulsar.model.CatametricasSchema.TENANT;
-
 import com.catacumbas69.catapulsar.dto.OverviewResponse;
-import com.catacumbas69.catapulsar.model.CatametricasSchema;
+import com.catacumbas69.catapulsar.service.CatametricasClient.Collector;
+import com.catacumbas69.catapulsar.service.CatametricasClient.Series;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
-import org.bson.Document;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.aggregation.Aggregation;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 
 /**
- * Builds the cluster, tenant and namespace overviews from the statistics Catametricas writes to MongoDB
- * (ADR 0007). Read-only: Catapulsar never writes Catametricas' collections. History is summed per row and time
- * bucket by MongoDB, so a request reads at most one document per row and minute or hour.
+ * Builds the cluster, tenant and namespace overviews from Catametricas' API (ADR 0013): the topics of the scope
+ * (current state and all-time traffic), the series of the period summed per row, and when Catametricas last
+ * collected. Catapulsar keeps the presentation (rows, summary, chart buckets); Catametricas owns the data. If
+ * Catametricas is not available a {@link CatametricasUnavailableException} is thrown ({@code 503}).
  */
 @Service
 public class OverviewService {
 
-    private final MongoTemplate mongoTemplate;
+    private final CatametricasClient catametricas;
     private final Clock clock;
 
     /**
      * Creates the service.
      *
-     * @param mongoTemplate template for Catametricas' collections
+     * @param catametricas client for Catametricas' API
      * @param clock time source
      */
-    public OverviewService(MongoTemplate mongoTemplate, Clock clock) {
-        this.mongoTemplate = mongoTemplate;
+    public OverviewService(CatametricasClient catametricas, Clock clock) {
+        this.catametricas = catametricas;
         this.clock = clock;
     }
 
@@ -51,7 +38,7 @@ public class OverviewService {
      * @return the overview
      */
     public OverviewResponse cluster(OverviewPeriod period) {
-        return build("cluster", null, null, TENANT, new Criteria(), period);
+        return build(OverviewScope.CLUSTER, null, null, period);
     }
 
     /**
@@ -62,7 +49,7 @@ public class OverviewService {
      * @return the overview
      */
     public OverviewResponse tenant(String tenant, OverviewPeriod period) {
-        return build("tenant", tenant, null, NAMESPACE, Criteria.where(TENANT).is(tenant), period);
+        return build(OverviewScope.TENANT, tenant, null, period);
     }
 
     /**
@@ -74,44 +61,23 @@ public class OverviewService {
      * @return the overview
      */
     public OverviewResponse namespace(String tenant, String namespace, OverviewPeriod period) {
-        return build("namespace", tenant, namespace, BASE_NAME,
-                Criteria.where(TENANT).is(tenant).and(NAMESPACE).is(namespace), period);
+        return build(OverviewScope.NAMESPACE, tenant, namespace, period);
     }
 
-    private OverviewResponse build(String scope, String tenant, String namespace, String keyField, Criteria where,
-                                   OverviewPeriod period) {
-        List<Instant> buckets = period.buckets(clock.instant());
-        OverviewAssembler assembler = new OverviewAssembler(keyField, buckets, period.step());
+    private OverviewResponse build(OverviewScope scope, String tenant, String namespace, OverviewPeriod period) {
+        Instant now = clock.instant();
+        List<Instant> buckets = period.buckets(now);
+        OverviewAssembler assembler = new OverviewAssembler(scope, buckets);
 
-        Query activeTopics = Query.query(copy(where).and(ACTIVE).is(true));
-        mongoTemplate.find(activeTopics, Document.class, CatametricasSchema.SNAPSHOTS).forEach(assembler::addSnapshot);
-        mongoTemplate.find(Query.query(copy(where)), Document.class, CatametricasSchema.TOTALS)
-                .forEach(assembler::addTotal);
-
-        Aggregation history = Aggregation.newAggregation(
-                Aggregation.match(copy(where).and(period.timeField()).gte(buckets.get(0))),
-                Aggregation.group(keyField, period.timeField())
-                        .sum(MSGS_IN).as(MSGS_IN)
-                        .sum(MSGS_OUT).as(MSGS_OUT)
-                        .sum(BYTES_IN).as(BYTES_IN)
-                        .sum(BYTES_OUT).as(BYTES_OUT)
-                        .sum(BACKLOG_MSGS).as(BACKLOG_MSGS));
-        mongoTemplate.aggregate(history, period.collection(), Document.class)
-                .forEach(document -> assembler.addHistory(document, period.timeField()));
-
-        Document status = mongoTemplate.findById(CatametricasSchema.STATUS_ID, Document.class,
-                CatametricasSchema.STATUS);
-        Instant collectedAt = status == null ? null : OverviewAssembler.instant(status.get("finishedAt"));
-        Integer interval = status == null || !(status.get("intervalSeconds") instanceof Number number)
-                ? null : number.intValue();
-        return new OverviewResponse(scope, tenant, namespace, period.value(), period.step().toSeconds(), buckets,
-                collectedAt, interval, assembler.summary(), assembler.rows());
-    }
-
-    /** Criteria are mutable; every query gets its own copy of the scope. */
-    private static Criteria copy(Criteria where) {
-        Criteria copy = new Criteria();
-        where.getCriteriaObject().forEach((field, value) -> copy.and(field).is(value));
-        return copy;
+        catametricas.topics(tenant, namespace).forEach(assembler::addTopic);
+        Series series = catametricas.series(tenant, namespace, scope.groupBy(), buckets.get(0), now,
+                period.stepParameter());
+        if (series != null && series.groups() != null) {
+            series.groups().forEach(group -> assembler.addSeries(series.times(), group));
+        }
+        Collector collector = catametricas.collector();
+        return new OverviewResponse(scope.value(), tenant, namespace, period.value(), period.step().toSeconds(),
+                buckets, collector == null ? null : collector.lastCollectionAt(),
+                collector == null ? null : collector.intervalSeconds(), assembler.summary(), assembler.rows());
     }
 }

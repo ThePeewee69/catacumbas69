@@ -25,14 +25,15 @@ catacommons) are symlinks to it — edit only the original.
                     ┌──────────────────────────────┐
   Browser ─────────▶│  Catapulsar  (:8081)         │──── Admin REST ───▶ Pulsar broker
   (Alpine.js UI)    │  UI + BFF API                │                     (HTTP :8080 / NodePort 31080)
-                    └──┬────────────┬──────────┬───┘
-         REST bridges  │            │ REST     │ catapulsar_settings; reads contario_*
-                       ▼            ▼ audit    ▼
-              ┌──────────────┐ ┌──────────┐ ┌──────────────────────────┐ ┌──────────────┐
-              │ Cataponte    │ │ Cataudit │ │ MongoDB  catacumbas69    │ │ Catametricas │── Admin REST ──▶ Pulsar
-              │ (:8082)      │ │ (:8084)  │ │ (ReplicaSet, 3 members)  │ │ (:8083)      │   (topic stats)
-              │ bridge engine│ └────▲─────┘ └──────────────────────────┘ └──────────────┘
-              └──────┬───────┘      │ consumes catacumbas69/cataudit/audit
+                    └──┬──────────┬──────────┬───┬─┘
+         REST bridges  │   REST   │          │   │ REST overviews (ADR 0013)
+                       │   audit  │          │   └──────────────────────────────────────┐
+                       ▼          ▼          ▼ catapulsar_settings                      ▼
+              ┌──────────────┐ ┌──────────┐ ┌──────────────────────────┐ ┌──────────────────┐
+              │ Cataponte    │ │ Cataudit │ │ MongoDB  catacumbas69    │ │ Catametricas (N) │── Admin REST ──▶ Pulsar
+              │ (:8082)      │ │ (:8084)  │ │ (ReplicaSet, 3 members)  │ │ (:8083)          │   (topic stats)
+              │ bridge engine│ └────▲─────┘ └──────────────────────────┘ └────────▲─────────┘
+              └──────┬───────┘      │ consumes cataudit/audit                       │ shares catametricas/collect-tasks
                      │ binary protocol: user bridges, and audit-<app>: <app>/events → cataudit/audit
                      ▼
                Pulsar broker (:6650 / NodePort 31650)
@@ -40,19 +41,19 @@ catacommons) are symlinks to it — edit only the original.
 
 | Component | Responsibility | Owns (data) | Talks to |
 |---|---|---|---|
-| **Catapulsar** | Web UI for Pulsar (tenants, namespaces, topics, subscriptions, backlog, produce); UI for bridges and for the audit trail (BFF to Cataudit); runtime settings (Cataponte and Cataudit URLs, intervals), published on the settings topic; events for its actions | `catapulsar_settings` | Pulsar Admin API, Pulsar binary (produce/peek, events), Cataponte REST, Cataudit REST, MongoDB |
+| **Catapulsar** | Web UI for Pulsar (tenants, namespaces, topics, subscriptions, backlog, produce); UI for bridges, for the audit trail (BFF to Cataudit) and for the statistics (overviews from Catametricas' API); runtime settings (Cataponte, Cataudit and Catametricas URLs, intervals), published on the settings topic; events for its actions | `catapulsar_settings` | Pulsar Admin API, Pulsar binary (produce/peek, events), Cataponte REST, Cataudit REST, Catametricas REST, MongoDB |
 | **Cataponte** | Runs bridges: consumes a source topic and fans each message out to 1..n destination topics; CRUD API for bridge config; system bridges registered by the apps (`audit-<app>`); per-topic traffic counts; loop blocking; events for bridge changes | `bridges`, `bridge_traffic_minutes`, `bridge_traffic_totals` | Pulsar binary + Admin API, MongoDB |
 | **Cataudit** | Owns the audit trail (ADR 0009): consumes `catacumbas69/cataudit/audit` (fed by the `audit-<app>` bridges), stores every event once, serves a query API; copied the old `audit_logs` | `cataudit_events`; reads `audit_logs` once per start (copy) | Pulsar binary + Admin API, MongoDB |
 | **catacommons** | Shared library (not a service): CloudEvents envelope, event publisher with retries, Pulsar names, start-up provisioning of the tenant/namespace/topics, registration of the app's audit bridge (ADR 0008, 0009) | — | Pulsar binary + Admin API through each app's clients; Cataponte REST |
-| **Catametricas** | Collects every topic's statistics from Pulsar on an interval and stores traffic (messages/bytes in and out) and backlog per topic: latest snapshot, per minute (30 days), per hour and all-time (ADR 0007). No business API | `contario_topic_snapshots`, `contario_topic_minutes`, `contario_topic_hours`, `contario_topic_totals`, `contario_status`, `contario_locks`; reads its interval from the settings topic | Pulsar Admin API, MongoDB |
+| **Catametricas** | Collects every topic's statistics from Pulsar on an interval and stores traffic (messages/bytes in and out) and backlog per topic: latest snapshot, per minute (30 days), per hour and all-time (ADR 0007). The work is shared by every replica through collection tasks on Pulsar (ADR 0012). The only metrics API: topics, series and collector state (ADR 0013) | `catametricas_topic_snapshots`, `catametricas_topic_minutes`, `catametricas_topic_hours`, `catametricas_topic_totals`, `catametricas_task_runs`; reads its interval from the settings topic | Pulsar Admin API + binary (tasks, events, settings), MongoDB |
 
 **Names.** The apps were renamed on 2026-10-31: Pulsário → **Catapulsar**, Passário → **Cataponte**,
 Contário → **Catametricas** (folders, Maven artifacts, packages, classes, properties, environment variables,
 metrics, images and docs). **MongoDB identifiers kept the old names** at first so no data had to be migrated;
 each owner migrates its collections in its phase (§15). Done: `pulsario_settings` → `catapulsar_settings`
-with ids equal to the topic keys (phase 3). Still old: `contario_*` (phase 4), `bridges` and
-`bridge_traffic_*` (phase 5); new code MUST keep using those exact names (constants in
-`CatametricasSchema`/`Schema` and the Cataponte models) until then. The old shared `audit_logs`
+with ids equal to the topic keys (phase 3); `contario_*` → `catametricas_*`, renamed, with `contario_locks` and
+`contario_status` dropped (phase 4). Still old: `bridges` and `bridge_traffic_*` (phase 5); new code MUST keep
+using those exact names (constants in the Cataponte models) until then. The old shared `audit_logs`
 (with `application` values `pulsario` / `passario`) is no longer written; Cataudit copies it at start-up.
 
 **Events and audit (§15 phases 1–2, §4.4).** Every app owns a Pulsar namespace `catacumbas69/<app>`,
@@ -71,11 +72,8 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 - **ARCH-1 [MUST]** Each service owns its MongoDB collections. A service MUST NOT read or write another
   service's collection. Cross-service data goes through the owner's REST API or its events. **Exceptions**,
   each with its ADR and removed in a later phase (§15): Cataudit **reads** the old `audit_logs` to copy it
-  (ADR 0009); Catapulsar **reads** Catametricas' `contario_*` collections for the overviews (ADR 0007, until
-  phase 4). Shared settings travel on the settings topic, never through another app's collection (ADR 0011).
-  The shared
-  field names live in `catametricas/.../model/Schema.java` and its mirror `catapulsar/.../model/CatametricasSchema.java`;
-  change both together.
+  (ADR 0009). Statistics come from Catametricas' API (ADR 0013) and shared settings travel on the settings
+  topic (ADR 0011), never through another app's collection.
 - **ARCH-2 [MUST]** The browser talks only to Catapulsar. Catapulsar exposes the bridge API to its UI as a
   **backend-for-frontend (BFF)** proxy (`/api/v1/bridges/**` → Cataponte). Cataponte is not exposed outside
   the cluster except for local development.
@@ -110,12 +108,13 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 | `SPRING_DATA_MONGODB_URI` | all | in-cluster ReplicaSet URI from Secret | NodePort `32017` + `authSource=admin&directConnection=true` |
 | `CATAPONTE_URL` | Catapulsar (default of the editable URL), Catametricas (audit bridge registration) | `http://cataponte.<ns>.svc.cluster.local:8082` | `http://localhost:8082` |
 | `CATAUDIT_URL` | Catapulsar (default of the editable URL of the audit view) | `http://cataudit:8084` | `http://localhost:8084` |
+| `CATAMETRICAS_URL` | Catapulsar (default of the editable URL of the overviews) | `http://catametricas:8083` | `http://localhost:8083` |
 | `CATAPULSAR_REFRESH_INTERVAL_SECONDS` | Catapulsar | `10` | `10` |
 | `CATAMETRICAS_COLLECT_INTERVAL_SECONDS` | Catapulsar, Catametricas (same value) | `60` | `60` |
 | `CATACOMMONS_*` (optional) | all | see `CatacommonsProperties`: retries `1s,2s,4s`, retention `7d`/`1GB`, backlog quota `1GB` | same |
 
-`CATAPONTE_URL` and `CATAUDIT_URL` are defaults; both can be changed at runtime from Catapulsar's Connection
-Settings (`PUT /api/v1/settings/cataponte`, `PUT /api/v1/settings/cataudit`), which stores them in
+`CATAPONTE_URL`, `CATAUDIT_URL` and `CATAMETRICAS_URL` are defaults; each can be changed at runtime from
+Catapulsar's Connection Settings (`PUT /api/v1/settings/cataponte|cataudit|catametricas`), which stores them in
 `catapulsar_settings`, audits the change and publishes it on the settings topic. Deleting the setting goes back
 to the env var.
 
@@ -322,11 +321,14 @@ Every package has a `package-info.java` (DOC-2). Dependencies point downwards on
 - **MONGO-5 [MUST]** Counters are written with `$inc` bulk upserts on a unique key, never read-modify-write:
   `bridge_traffic_minutes` (`bridgeId`, `role`, `topic`, `minute`) and `bridge_traffic_totals`
   (`bridgeId`, `role`, `topic`). Both are kept forever (no TTL); queries over minutes are bounded to
-  7 days (PERF-5). Catametricas uses the same pattern: `contario_topic_minutes` (`topic`, `minute`, TTL 30 days),
-  `contario_topic_hours` (`topic`, `hour`, forever) and `contario_topic_totals` (`_id` = topic, forever).
+  7 days (PERF-5). Catametricas uses the same pattern: `catametricas_topic_minutes` (`topic`, `minute`, TTL
+  30 days), `catametricas_topic_hours` (`topic`, `hour`, forever) and `catametricas_topic_totals` (`_id` = topic,
+  forever).
 - **MONGO-6 [MUST]** Cumulative counters read from Pulsar are stored as deltas: the last raw value is kept
-  per topic (`contario_topic_snapshots`); a lower value than before is a reset (count the new value); the
-  very first collection only sets the baseline. History of deleted topics is kept (`active=false`).
+  per topic (`catametricas_topic_snapshots`); a lower value than before is a reset (count the new value); the
+  first collection of a namespace only sets the baseline. History of deleted topics is kept (`active=false`).
+  The snapshot is replaced only by a newer sample (conditional `findAndReplace`), and only the instance that
+  replaced it adds the delta, so a repeated or late collection task never counts twice (ADR 0012).
 
 ---
 
@@ -364,10 +366,10 @@ Event catalogue (phase 1):
 | Catapulsar | `catapulsar.subscription.created\|deleted\|backlog-cleared.v1` | topic | details: `subscription` |
 | Catapulsar | `catapulsar.message.produced.v1` | topic | details: `key`, `payload`, `properties.*`… |
 | Catapulsar | `catapulsar.message.peeked\|skipped.v1` | topic | details: `subscription`, `count` |
-| Catapulsar | `catapulsar.setting.changed.v1` | setting key (below) | before/after: `value`; details: `id` (document id) |
+| Catapulsar | `catapulsar.setting.changed.v1` | setting key (below) | before/after: `value` |
 | Catapulsar | `catapulsar.bridge.create\|update\|delete\|enable\|disable-requested.v1` | bridge id (create: id from the response, else the requested name) | details: `status` (Cataponte's HTTP status, `503` if unreachable), `request` (body) |
 | Cataponte | `cataponte.bridge.created\|updated\|deleted\|enabled\|disabled\|migrated.v1` | bridge id | before/after: flattened definition; actor `cataponte` for migrations |
-| Catametricas | `catametricas.collection.failed\|recovered.v1` | `collector` | details: `stage`, `error`, `instance`… (state changes only) |
+| Catametricas | `catametricas.collection.failed\|recovered.v1` | `collector` | details: `stage` (`schedule`, `claim`, `collect`), `error`, `instance`, `task`… (state changes of each instance only) |
 
 System bridges (ADR 0009): `audit-<app>` = `catacumbas69/<app>/events` → `catacumbas69/cataudit/audit`,
 subscription `cataponte-audit-<app>` (`Failover`, ordered), flagged `system` and shown with a badge; otherwise
@@ -390,6 +392,7 @@ start-up, from `catapulsar_settings` (document id = key).
 |---|---|---|
 | `catapulsar.cataponte-url` | Catapulsar | `passario.url` |
 | `catapulsar.cataudit-url` | Catapulsar | `catapulsar.cataudit-url` |
+| `catapulsar.catametricas-url` | Catapulsar | (new in phase 4) |
 | `catapulsar.refresh-interval-seconds` | Catapulsar | `ui.refresh-interval-seconds` |
 | `catametricas.collect-interval-seconds` | Catametricas | `contario.collect-interval-seconds` |
 
@@ -571,11 +574,13 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 - **OBS-7 [MUST]** Cataponte stores per-topic message and byte counts per bridge: all-time totals and
   per-minute history, served at `GET /api/v1/bridges/traffic`, `/{id}/traffic` and
   `/{id}/traffic/minutes?from&to`.
-- **OBS-8 [MUST]** Catametricas stores every topic's traffic and backlog (ADR 0007). Catapulsar shows them as the
-  cluster (tenants), tenant (namespaces) and namespace (topics) overviews at `GET /api/v1/overview`,
-  `/{tenant}` and `/{tenant}/{namespace}?period=1h|24h|7d|30d`, with the time of Catametricas' last
-  collection. Catametricas exposes `catametricas_collect_duration`, `catametricas_collect_failures_total` and
-  `catametricas_topics`, and a `collector` health component (always UP; details show leader and last run).
+- **OBS-8 [MUST]** Catametricas stores every topic's traffic and backlog (ADR 0007) and is the only metrics API
+  (ADR 0013): `GET /api/v1/topics`, `/api/v1/series?groupBy=&from=&to=&step=` and `/api/v1/collector`.
+  Catapulsar shows them as the cluster (tenants), tenant (namespaces) and namespace (topics) overviews at
+  `GET /api/v1/overview`, `/{tenant}` and `/{tenant}/{namespace}?period=1h|24h|7d|30d`, with the time of the
+  latest sample (`503` when Catametricas is down). Catametricas exposes `catametricas_tasks_total{outcome}` and
+  `catametricas_collect_duration` (per namespace), and a `collector` health component (always UP; details
+  show whether this instance consumes tasks and its last task).
 
 ---
 
@@ -611,7 +616,8 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 - **OPS-3 [MUST]** Kubernetes manifests live in the GitOps repo and are synced by ArgoCD. Each Deployment
   sets resource requests/limits, liveness/readiness probes on Actuator, and config via ConfigMap + Secret.
 - **OPS-4 [MUST]** Cataponte Deployment: `replicas: 1`, `strategy: Recreate` (ARCH-5). Catametricas may run
-  several replicas: a lease in `contario_locks` lets only one collect (ADR 0007). Cataudit may run several
+  several replicas, all collecting: the `Shared` subscription of `collect-tasks` spreads the tasks and the claims
+  in `catametricas_task_runs` keep each task single (ADR 0012). Cataudit may run several
   replicas: its `Shared` subscription splits the audit topic between them and inserts are keyed by event id
   (ADR 0012).
 - **OPS-5 [SHOULD]** Graceful shutdown (`server.shutdown=graceful`) so workers stop and ack in-flight
@@ -669,7 +675,13 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
-- **2026-11-01, phase 3 of §15** (pending `mvn clean install` at `apps/`): `SharedSettings` (TableView) in
+- **2026-11-01, phase 4 of §15** (`mvn clean install` at `apps/` green: catacommons 20, Catapulsar 102,
+  Cataponte 84, Catametricas 54, Cataudit 18 tests, 0 Checkstyle violations): Catametricas API (`topics`, `series`,
+  `collector`, OpenAPI), collection tasks on `catacumbas69/catametricas/collect-tasks` with claims and
+  conditional snapshot updates (lease removed, every replica collects), `contario_*` renamed to
+  `catametricas_*`; Catapulsar overviews from the API, Catametricas URL editable.
+- **2026-11-01, phase 3 of §15** (`mvn clean install` at `apps/` green: catacommons 20, Catapulsar 90,
+  Cataponte 84, Catametricas 26, Cataudit 18 tests, 0 Checkstyle violations): `SharedSettings` (TableView) in
   catacommons; Catapulsar and Catametricas read their settings from the topic; `pulsario_settings` migrated to
   `catapulsar_settings` and dropped.
 - **2026-11-01, phase 2 of §15** (`mvn clean install` at `apps/` green: catacommons 17, Catapulsar 88,
@@ -690,14 +702,14 @@ Closed on 2026-10-30:
 1. **UI conventions** — G-17, G-18, G-20: frontend lint tooling, JSDoc, semantic and accessible markup,
    inline styles moved to CSS.
 2. **Tests** — G-6, G-11: Testcontainers integration tests (MongoDB, Pulsar), Playwright smoke test.
-3. **Delivery** — G-16, G-21: manifests for ArgoCD (Cataponte `replicas: 1`, Catametricas, probes, Secrets)
+3. **Delivery** — G-16, G-21: manifests for ArgoCD (Cataponte `replicas: 1`, Catametricas with N replicas, probes, Secrets)
    and a CI pipeline.
 
 ---
 
 ## 15. Target architecture (proposed — ADR 0008–0013)
 
-Status: **phases 1–3 implemented** (2026-10-31 – 2026-11-01); phases 4–6 proposed. Until a phase below is implemented, the
+Status: **phases 1–4 implemented** (2026-10-31 – 2026-11-01); phases 5–6 proposed. Until a phase below is implemented, the
 rules in sections 1–14 stay in force. When a phase lands, the rules it changes are updated in the same change
 and its ADRs become "Accepted".
 
@@ -737,8 +749,8 @@ Each phase ends with `mvn verify` green in every app, the docs updated and the a
 | 1 | Event foundations | Reactor + catacommons; tenant/namespaces/policies at start-up; CloudEvents publisher with retries in each app; events for every action already audited today (still writing `audit_logs` too); Catapulsar already publishes the settings topic | **Done** 2026-10-31 |
 | 2 | Cataudit | New service; each app registers its `audit-<app>` system bridge; `audit_logs` copied into `cataudit_events` and no longer written; Catapulsar's new audit view reads Cataudit | **Done** 2026-10-31 |
 | 3 | Settings topic | Catametricas and all Catapulsar replicas read the settings topic (`SharedSettings`, TableView); nobody reads settings from MongoDB; `pulsario_settings` → `catapulsar_settings` (copied, then dropped) | **Done** 2026-11-01 |
-| 4 | Catametricas API and tasks | Query API; Catapulsar overviews via BFF; collection tasks on Pulsar with claims and conditional snapshot updates; lease removed; `contario_*` → `catametricas_*` | Next |
-| 5 | Cataponte replicas | `Exclusive` rejected and migrated to `Failover`; Deployment with N replicas; ADR 0002 superseded; `bridges`, `bridge_traffic_*` → `cataponte_*` | Proposed |
+| 4 | Catametricas API and tasks | Query API (`topics`, `series`, `collector`); Catapulsar overviews built from it (Catametricas URL editable); collection tasks on Pulsar with claims and conditional snapshot updates; lease removed; `contario_*` → `catametricas_*` (renamed) | **Done** 2026-11-01 |
+| 5 | Cataponte replicas | `Exclusive` rejected and migrated to `Failover`; Deployment with N replicas; ADR 0002 superseded; `bridges`, `bridge_traffic_*` → `cataponte_*` | Next |
 | 6 | Prometheus source (later) | Once Prometheus/OpenMetrics/Loki run on MicroShift: short ranges from PromQL in Catametricas | Later |
 
 ### Decisions taken on 2026-10-31
@@ -796,3 +808,22 @@ Phase 3 decisions (2026-11-01):
     `catapulsar_settings` wins, and the old collection is kept (with a warning) if it holds an unknown id.
 27. Until the topic has been read, apps **use their configured defaults** (no waiting).
 28. Cataponte reads **no** shared setting yet; the reader is available in catacommons when it needs one.
+
+Phase 4 decisions (2026-11-01):
+
+29. Catametricas' API is **generic**: `GET /api/v1/topics` (current state and all-time traffic per topic or
+    partition), `GET /api/v1/series` (traffic and backlog per bucket, grouped by tenant, namespace or topic;
+    steps below an hour read minutes, whole hours read hours; at most 2000 buckets) and
+    `GET /api/v1/collector`. Catapulsar keeps building the overview rows, summary and chart buckets.
+30. The **Catametricas URL is editable in Catapulsar**, like the Cataponte and Cataudit URLs
+    (`catapulsar.catametricas-url`, default `CATAMETRICAS_URL`, check button, audited, published).
+31. `contario_*` collections are **renamed** (`renameCollection`, indexes kept) to `catametricas_*` at start-up;
+    `contario_locks` and `contario_status` are dropped. If both names exist, the old one is left with a warning.
+32. One collection task **per namespace and interval**, id `<tenant>/<namespace>@<interval start>`; intervals
+    are aligned to the epoch so every instance publishes the same ids. Claims live 6 h (TTL).
+33. **Every task is run, however late**: the conditional snapshot update makes a late or repeated task harmless.
+    A failed task releases its claim and is delivered again after 10 s, doubling up to 5 min.
+34. Overviews answer **`503` with an error in the panel** when Catametricas is down (`catametricas` health
+    component, not part of readiness).
+35. The first collection of a **namespace** (no snapshot of it yet) only sets the baseline; a namespace that no
+    longer exists marks its topics as gone. "Last collection" is the newest snapshot.

@@ -3,7 +3,6 @@ package com.catacumbas69.catametricas.service;
 import com.catacumbas69.catametricas.config.CatametricasProperties;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,9 +16,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * Lists every topic of every namespace of every tenant and reads its statistics, with at most
- * {@code catametricas.collect.concurrency} calls in flight (PERF-6). One failing namespace or topic does not
- * stop the others (RES-12); it is reported in the result instead.
+ * Reads Pulsar: the list of namespaces (for the task scheduler) and the statistics of every topic of one
+ * namespace (for one task), with at most {@code catametricas.collect.concurrency} calls in flight (PERF-6). One
+ * failing tenant or topic does not stop the others (RES-12); it is reported in the result instead.
  */
 @Component
 public class PulsarStatsReader {
@@ -43,23 +42,35 @@ public class PulsarStatsReader {
     }
 
     /**
-     * Reads the statistics of all topics.
+     * Lists every namespace of every tenant.
      *
-     * @return samples and what could not be read
+     * @return full namespace names ({@code tenant/namespace}), sorted; a tenant whose namespaces cannot be
+     *         listed is skipped with a warning
      * @throws PulsarAdminException if not even the tenant list can be read
      */
-    public PulsarReading read() throws PulsarAdminException {
-        List<String> topics = new ArrayList<>();
-        Set<String> listedNamespaces = new HashSet<>();
+    public List<String> namespaces() throws PulsarAdminException {
+        List<String> namespaces = new ArrayList<>();
         for (String tenant : admin.tenants().getTenants()) {
-            for (String namespace : namespacesOf(tenant)) {
-                List<String> listed = topicsOf(namespace);
-                if (listed != null) {
-                    listedNamespaces.add(namespace);
-                    listed.stream().filter(this::shouldCollect).forEach(topics::add);
-                }
+            try {
+                namespaces.addAll(admin.namespaces().getNamespaces(tenant));
+            } catch (PulsarAdminException | RuntimeException e) {
+                LOG.warn("Namespaces of tenant {} not read: {}", tenant, e.getMessage());
             }
         }
+        Collections.sort(namespaces);
+        return namespaces;
+    }
+
+    /**
+     * Reads the statistics of every topic of a namespace.
+     *
+     * @param namespace full namespace, {@code tenant/namespace}
+     * @return samples and the topics that could not be read
+     * @throws PulsarAdminException if the namespace's topics cannot be listed
+     */
+    public PulsarReading read(String namespace) throws PulsarAdminException {
+        List<String> listed = admin.topics().getList(namespace);
+        List<String> topics = listed == null ? List.of() : listed.stream().filter(this::shouldCollect).toList();
         List<TopicSample> samples = Collections.synchronizedList(new ArrayList<>());
         Set<String> failed = ConcurrentHashMap.newKeySet();
         Semaphore permits = new Semaphore(concurrency);
@@ -78,27 +89,7 @@ public class PulsarStatsReader {
                 });
             }
         }
-        return new PulsarReading(List.copyOf(samples), Set.copyOf(listedNamespaces), Set.copyOf(failed));
-    }
-
-    private List<String> namespacesOf(String tenant) {
-        try {
-            return admin.namespaces().getNamespaces(tenant);
-        } catch (PulsarAdminException | RuntimeException e) {
-            LOG.warn("Namespaces of tenant {} not read: {}", tenant, e.getMessage());
-            return List.of();
-        }
-    }
-
-    /** Returns the topics of a namespace, or {@code null} if they could not be listed. */
-    private List<String> topicsOf(String namespace) {
-        try {
-            List<String> topics = admin.topics().getList(namespace);
-            return topics == null ? List.of() : topics;
-        } catch (PulsarAdminException | RuntimeException e) {
-            LOG.warn("Topics of namespace {} not read: {}", namespace, e.getMessage());
-            return null;
-        }
+        return new PulsarReading(namespace, List.copyOf(samples), Set.copyOf(failed));
     }
 
     private boolean shouldCollect(String topic) {

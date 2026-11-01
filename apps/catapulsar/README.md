@@ -11,14 +11,14 @@ Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs
 | Area | What you can do |
 |---|---|
 | **Cluster tree** | Browse tenants → namespaces → topics; create and delete topics |
-| **Overviews** | Home = cluster (tenants); click a tenant = its namespaces; click a namespace = its topics. Backlog, rates, storage, counts, traffic in the last 1 h / 24 h / 7 d / 30 d, all-time traffic, chart and sparklines (published, delivered or backlog). Data from Catametricas (ADR 0007) |
+| **Overviews** | Home = cluster (tenants); click a tenant = its namespaces; click a namespace = its topics. Backlog, rates, storage, counts, traffic in the last 1 h / 24 h / 7 d / 30 d, all-time traffic, chart and sparklines (published, delivered or backlog). Data from Catametricas' API (ADR 0007, 0013) |
 | **Overview** | Message rates, throughput, backlog, producers, subscriptions, storage |
 | **Subscriptions** | List, create and delete subscriptions |
 | **Produce** | Send a message with an optional key |
 | **Subscription details** | Backlog per subscription in Overview, with **Clear backlog** (skips every message) |
 | **Backlog** | Subscriptions with backlog statistics (messages, size, consumers, type, rate out, unacked) refreshed automatically; one click peeks up to 100 messages without consuming them (audited); view, edit & re-produce, skip one or all |
 | **Bridges** | Create, edit, enable/disable and delete Cataponte bridges; running state, errors, loop blocks and all-time message counts per topic |
-| **Settings** | ⚙️ Connection Settings: Cataponte URL, Cataudit URL and Catametricas collection interval, changed at runtime (saved in MongoDB, audited, published on the settings topic) |
+| **Settings** | ⚙️ Connection Settings: Cataponte, Cataudit and Catametricas URLs and the Catametricas collection interval, changed at runtime (saved in MongoDB, audited, published on the settings topic) |
 | **Breadcrumb** | Cluster › tenant › namespace › topic, each part clickable |
 | **Auto-refresh** | Top bar "Auto N s": on/off per browser; ▾ sets the interval for everyone (2–300 s, default 10 s, saved in MongoDB, audited). Refreshes the sidebar, Overview, Subscriptions and Bridges; never repeats a backlog peek |
 | **Audit** | 🛡 Audit panel: the audit trail of every app, from Cataudit (ADR 0009). Filters by app, entity, action, subject prefix, actor and period. Each row expands into before/after and details; clicking a subject filters by it; refreshed automatically. Old `audit_logs` entries are tagged *legacy* |
@@ -33,7 +33,7 @@ Catapulsar  :8081  (Spring Boot)
     ├── /api/v1/tenants, /namespaces, /topics/**  ──► Pulsar admin API (HTTP)  +  Pulsar client (produce)
     ├── /api/v1/bridges/**  (BFF, ADR 0001)        ──► Cataponte (URL from settings, default CATAPONTE_URL)
     ├── /api/v1/settings/**                        ──► MongoDB catapulsar_settings + settings topic (ADR 0011)
-    ├── /api/v1/overview/**  (read-only, ADR 0007) ──► MongoDB catacumbas69.contario_*  (written by Catametricas)
+    ├── /api/v1/overview/**  (read-only, ADR 0013) ──► Catametricas API (URL from settings, default CATAMETRICAS_URL)
     ├── /api/v1/audit/**  (read-only, ADR 0009)     ──► Cataudit (URL from settings, default CATAUDIT_URL)
     └── /actuator/**, /swagger-ui.html
 
@@ -41,10 +41,14 @@ Events (ADR 0008, catacommons) ──► Pulsar catacumbas69/catapulsar/events  
 Settings (ADR 0011)            ──► Pulsar catacumbas69/catapulsar/settings  (compacted, key = setting key)
 ```
 
-- The browser never talks to Pulsar or Cataponte directly: no CORS, and Cataponte stays internal.
+- The browser never talks to Pulsar, Cataponte, Cataudit or Catametricas directly: no CORS, and they stay
+  internal.
+- **Overviews**: for each view Catapulsar asks Catametricas for the topics of the scope (`/api/v1/topics`), the
+  series of the period grouped by row (`/api/v1/series`) and the last collection (`/api/v1/collector`), then
+  builds the rows, the summary and the chart buckets. Catapulsar reads no Catametricas collection.
 - Producers are cached per topic and closed after 5 minutes idle (no producer per request).
-- Pulsar, Cataponte and MongoDB outages only affect the features that need them: the page keeps working
-  and shows a clear error (Problem Details) for the failing call.
+- Pulsar, Cataponte, Cataudit, Catametricas and MongoDB outages only affect the features that need them: the
+  page keeps working and shows a clear error (Problem Details) for the failing call.
 - **Audit = events** (orch.md §4.4): every audited action is published as a CloudEvent on
   `catacumbas69/catapulsar/events` (`topic.created`, `message.produced`, `subscription.backlog-cleared`,
   `setting.changed`, …), and every bridge change forwarded to Cataponte as `bridge.*-requested` with
@@ -66,6 +70,7 @@ All settings have in-cluster defaults in `application.properties`; override them
 | `PULSAR_LISTENER_NAME` | *(empty)* | `external` |
 | `CATAPONTE_URL` | `http://cataponte:8082` | `http://localhost:8082` |
 | `CATAUDIT_URL` | `http://cataudit:8084` | `http://localhost:8084` |
+| `CATAMETRICAS_URL` | `http://catametricas:8083` | `http://localhost:8083` |
 | `CATAPULSAR_REFRESH_INTERVAL_SECONDS` | `10` | `10` |
 | `CATAMETRICAS_COLLECT_INTERVAL_SECONDS` | `60` (same as Catametricas) | `60` |
 | `SPRING_DATA_MONGODB_URI` | in-cluster ReplicaSet URI (Secret) | NodePort `32017` + `authSource=admin&directConnection=true` |
@@ -80,7 +85,9 @@ seconds, ADR 0011) and recorded in the audit log (`setting.changed`). "Use defau
 `catapulsar_settings` once and drops it.
 
 `CATAUDIT_URL` works the same way: it is the default of the Cataudit URL, editable in ⚙️ Connection Settings or
-from the link in the Audit panel header, with a "Check Cataudit" button.
+from the link in the Audit panel header, with a "Check Cataudit" button. So does `CATAMETRICAS_URL`, the
+default of the Catametricas URL, with a "Check Catametricas" button; when the overviews cannot reach
+Catametricas the panel offers a link to it.
 
 ## Build, test, run
 
@@ -119,9 +126,10 @@ Full contract: <http://localhost:8081/swagger-ui.html>. Errors are RFC 9457 Prob
 | `*` | `/api/v1/bridges/**` | Bridges and their traffic counts, forwarded to Cataponte (see Cataponte's API) |
 | `GET` / `PUT` / `DELETE` | `/api/v1/settings/cataponte` | Cataponte URL in use / change `{url}` / back to default |
 | `GET` / `PUT` / `DELETE` | `/api/v1/settings/cataudit` | Cataudit URL in use / change `{url}` / back to default |
+| `GET` / `PUT` / `DELETE` | `/api/v1/settings/catametricas` | Catametricas URL in use / change `{url}` / back to default |
 | `GET` / `PUT` / `DELETE` | `/api/v1/settings/refresh-interval` | UI auto-refresh interval / change `{seconds}` (2–300) / back to default |
 | `GET` / `PUT` / `DELETE` | `/api/v1/settings/collect-interval` | Catametricas collection interval / change `{seconds}` (15–600) / back to default |
-| `GET` | `/api/v1/overview?period=` | Cluster overview, one row per tenant (`period` = `1h`, `24h`, `7d`, `30d`) |
+| `GET` | `/api/v1/overview?period=` | Cluster overview, one row per tenant (`period` = `1h`, `24h`, `7d`, `30d`; `503` if Catametricas is down) |
 | `GET` | `/api/v1/overview/{tenant}?period=` | Tenant overview, one row per namespace |
 | `GET` | `/api/v1/overview/{tenant}/{namespace}?period=` | Namespace overview, one row per topic (partitions summed) |
 | `GET` | `/api/v1/audit?app=&entity=&action=&subject=&actor=&from=&to=&page=0&size=50` | Audit trail from Cataudit, newest first, with `total` (`503` if Cataudit is down) |
@@ -133,7 +141,7 @@ Full contract: <http://localhost:8081/swagger-ui.html>. Errors are RFC 9457 Prob
 | `400` | Invalid name, count or body — `errors` lists each field |
 | `404` / `409` | Pulsar says the resource is missing / already exists |
 | `502` | Pulsar failed or is unreachable |
-| `503` | Cataponte is unreachable (Bridges panel only), or MongoDB is down while saving a setting |
+| `503` | Cataponte, Cataudit or Catametricas is unreachable (only its panel), or MongoDB is down while saving a setting |
 
 ## Operate
 
@@ -141,7 +149,7 @@ Full contract: <http://localhost:8081/swagger-ui.html>. Errors are RFC 9457 Prob
 |---|---|
 | `/actuator/health/liveness` | liveness probe |
 | `/actuator/health/readiness` | readiness probe (application state only — dependencies degrade per feature) |
-| `/actuator/health` | details: `pulsar`, `cataponte`, `mongo` components |
+| `/actuator/health` | details: `pulsar`, `cataponte`, `cataudit`, `catametricas`, `mongo` components |
 | `/actuator/prometheus` | HTTP, JVM and Pulsar client metrics |
 
 Container image: `Dockerfile` (multi-stage, layered jar, non-root), built from `apps/` (see above).

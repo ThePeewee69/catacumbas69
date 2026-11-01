@@ -1,6 +1,7 @@
 package com.catacumbas69.catametricas.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -38,20 +39,28 @@ class PulsarStatsReaderTest {
         when(admin.tenants()).thenReturn(tenants);
         when(admin.namespaces()).thenReturn(namespaces);
         when(admin.topics()).thenReturn(topics);
-        when(tenants.getTenants()).thenReturn(List.of("home"));
-        when(namespaces.getNamespaces("home")).thenReturn(List.of("home/media", "home/locked"));
         when(topics.getList("home/media")).thenReturn(List.of(ORDERS, BROKEN, SYSTEM));
-        when(topics.getList("home/locked")).thenThrow(mock(PulsarAdminException.NotAuthorizedException.class));
     }
 
     @Test
-    void readsEveryTopic_skipsSystemTopics_andReportsFailures() throws Exception {
+    void listsTheNamespacesOfEveryTenant_skippingTenantsThatFail() throws Exception {
+        when(tenants.getTenants()).thenReturn(List.of("work", "home", "locked"));
+        when(namespaces.getNamespaces("home")).thenReturn(List.of("home/media", "home/iot"));
+        when(namespaces.getNamespaces("work")).thenReturn(List.of("work/default"));
+        when(namespaces.getNamespaces("locked")).thenThrow(mock(PulsarAdminException.NotAuthorizedException.class));
+
+        assertThat(reader.namespaces()).containsExactly("home/iot", "home/media", "work/default");
+    }
+
+    @Test
+    void readsEveryTopicOfTheNamespace_skipsSystemTopics_andReportsFailures() throws Exception {
         TopicStats stats = stats();
         when(topics.getStats(ORDERS)).thenReturn(stats);
         when(topics.getStats(BROKEN)).thenThrow(mock(PulsarAdminException.class));
 
-        PulsarReading reading = reader.read();
+        PulsarReading reading = reader.read("home/media");
 
+        assertThat(reading.namespace()).isEqualTo("home/media");
         assertThat(reading.samples()).singleElement().satisfies(sample -> {
             assertThat(sample.topic()).isEqualTo(ORDERS);
             assertThat(sample.msgInCounter()).isEqualTo(500);
@@ -59,8 +68,22 @@ class PulsarStatsReaderTest {
             assertThat(sample.consumers()).isEqualTo(2);
         });
         assertThat(reading.failedTopics()).containsExactly(BROKEN);
-        assertThat(reading.listedNamespaces()).containsExactly("home/media");
         verify(topics, never()).getStats(SYSTEM);
+    }
+
+    @Test
+    void failsWhenTheTopicsCannotBeListed() throws Exception {
+        when(topics.getList("home/locked")).thenThrow(mock(PulsarAdminException.NotAuthorizedException.class));
+
+        assertThatThrownBy(() -> reader.read("home/locked")).isInstanceOf(PulsarAdminException.class);
+    }
+
+    @Test
+    void doesNotCallStats_whenNoTopicIsListed() throws Exception {
+        when(topics.getList("home/media")).thenReturn(List.of());
+
+        assertThat(reader.read("home/media").samples()).isEmpty();
+        verify(topics, never()).getStats(anyString());
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -74,13 +97,5 @@ class PulsarStatsReaderTest {
         when(stats.getSubscriptions()).thenReturn((Map) Map.of("s1", sub));
         when(stats.getPublishers()).thenReturn((List) List.of());
         return stats;
-    }
-
-    @Test
-    void doesNotCallStats_whenNoTopicIsListed() throws Exception {
-        when(topics.getList("home/media")).thenReturn(List.of());
-
-        assertThat(reader.read().samples()).isEmpty();
-        verify(topics, never()).getStats(anyString());
     }
 }

@@ -1,17 +1,20 @@
 package com.catacumbas69.catametricas.model;
 
+import java.util.Map;
+import java.util.Set;
+
 /**
- * Names of the MongoDB collections and fields Catametricas writes. Catapulsar reads the same collections
- * (ADR 0007), so a change here is a change of a shared contract (MONGO-2).
+ * Names of the MongoDB collections and fields Catametricas owns (ADR 0010). Nobody else reads them: other
+ * services use Catametricas' API ({@code /api/v1/topics}, {@code /api/v1/series}, {@code /api/v1/collector}).
  *
  * <ul>
- *   <li>{@value #SNAPSHOTS} — latest state of every topic ever seen, {@code _id} = full topic name.</li>
- *   <li>{@value #MINUTES} — traffic and backlog per topic and minute; removed after the minute retention
+ *   <li>{@value #SNAPSHOTS}: latest state of every topic ever seen, {@code _id} = full topic name.</li>
+ *   <li>{@value #MINUTES}: traffic and backlog per topic and minute; removed after the minute retention
  *       (TTL index, 30 days by default).</li>
- *   <li>{@value #HOURS} — the same per topic and hour, kept forever.</li>
- *   <li>{@value #TOTALS} — all-time traffic per topic, {@code _id} = full topic name, kept forever.</li>
- *   <li>{@value #STATUS} — the last collection run, {@code _id} = {@value #STATUS_ID}.</li>
- *   <li>{@value #LOCKS} — the collector lease, {@code _id} = {@value #LOCK_ID}.</li>
+ *   <li>{@value #HOURS}: the same per topic and hour, kept forever.</li>
+ *   <li>{@value #TOTALS}: all-time traffic per topic, {@code _id} = full topic name, kept forever.</li>
+ *   <li>{@value #TASK_RUNS}: claims of collection tasks, {@code _id} = task id (ADR 0012); removed after the
+ *       run retention (TTL index, 6 hours by default).</li>
  * </ul>
  *
  * <p>Traffic fields are deltas of Pulsar's counters: {@value #MSGS_IN} published, {@value #MSGS_OUT}
@@ -22,22 +25,25 @@ package com.catacumbas69.catametricas.model;
 public final class Schema {
 
     /** Latest state per topic. */
-    public static final String SNAPSHOTS = "contario_topic_snapshots";
+    public static final String SNAPSHOTS = "catametricas_topic_snapshots";
     /** Per-minute history. */
-    public static final String MINUTES = "contario_topic_minutes";
+    public static final String MINUTES = "catametricas_topic_minutes";
     /** Per-hour history. */
-    public static final String HOURS = "contario_topic_hours";
+    public static final String HOURS = "catametricas_topic_hours";
     /** All-time totals. */
-    public static final String TOTALS = "contario_topic_totals";
-    /** Last collection run. */
-    public static final String STATUS = "contario_status";
-    /** Collector lease. */
-    public static final String LOCKS = "contario_locks";
+    public static final String TOTALS = "catametricas_topic_totals";
+    /** Claims of collection tasks. */
+    public static final String TASK_RUNS = "catametricas_task_runs";
 
-    /** {@code _id} of the status document. */
-    public static final String STATUS_ID = "collector";
-    /** {@code _id} of the collector lease. */
-    public static final String LOCK_ID = "collector";
+    /** Collections before phase 4 → their names now; renamed once by {@code CatametricasMigration}. */
+    public static final Map<String, String> LEGACY_RENAMES = Map.of(
+            "contario_topic_snapshots", SNAPSHOTS,
+            "contario_topic_minutes", MINUTES,
+            "contario_topic_hours", HOURS,
+            "contario_topic_totals", TOTALS);
+
+    /** Collections before phase 4 that are no longer used (the lease and the last-run status); dropped. */
+    public static final Set<String> LEGACY_DROPS = Set.of("contario_locks", "contario_status");
 
     /** Full topic name, e.g. {@code persistent://home/media/orders-partition-0}. */
     public static final String TOPIC = "topic";
@@ -47,6 +53,10 @@ public final class Schema {
     public static final String NAMESPACE = "namespace";
     /** Local topic name without partition suffix, e.g. {@code orders}. */
     public static final String BASE_NAME = "baseName";
+    /** Whether the topic still exists (snapshots). */
+    public static final String ACTIVE = "active";
+    /** When the snapshot was read (snapshots). */
+    public static final String COLLECTED_AT = "collectedAt";
     /** Start of the minute bucket (UTC). */
     public static final String MINUTE = "minute";
     /** Start of the hour bucket (UTC). */
@@ -67,6 +77,8 @@ public final class Schema {
     public static final String FIRST_SEEN_AT = "firstSeenAt";
     /** Last time the topic was seen (totals). */
     public static final String LAST_SEEN_AT = "lastSeenAt";
+    /** When a task was claimed (task runs; TTL). */
+    public static final String CLAIMED_AT = "claimedAt";
 
     private Schema() {
     }

@@ -14,6 +14,7 @@ import org.springframework.validation.annotation.Validated;
  *
  * @param pulsar Pulsar admin and client settings
  * @param collect collection settings
+ * @param tasks collection tasks shared through Pulsar (ADR 0012)
  * @param mongo MongoDB client timeouts
  */
 @Validated
@@ -21,6 +22,7 @@ import org.springframework.validation.annotation.Validated;
 public record CatametricasProperties(
         @Valid @NotNull Pulsar pulsar,
         @Valid @NotNull Collect collect,
+        @Valid @NotNull Tasks tasks,
         @Valid @NotNull Mongo mongo) {
 
     /** Smallest accepted collection interval, in seconds. */
@@ -67,6 +69,25 @@ public record CatametricasProperties(
             @Min(1) @Max(64) int concurrency,
             @NotNull Duration minuteRetention,
             boolean skipSystemTopics) {
+    }
+
+    /**
+     * Collection tasks on {@code catacumbas69/catametricas/collect-tasks} (ADR 0012).
+     *
+     * @param subscription name of the {@code Shared} subscription every instance joins
+     * @param receiverQueueSize tasks an instance fetches ahead; keep it small so tasks spread over instances
+     * @param subscribeRetryInterval wait before subscribing again after a failure
+     * @param retryDelay first wait before a failed task is delivered again
+     * @param maxRetryDelay longest wait before a failed task is delivered again (the wait doubles up to this)
+     * @param runRetention how long task claims are kept (TTL index)
+     */
+    public record Tasks(
+            @NotBlank String subscription,
+            @Min(1) @Max(1_000) int receiverQueueSize,
+            @NotNull Duration subscribeRetryInterval,
+            @NotNull Duration retryDelay,
+            @NotNull Duration maxRetryDelay,
+            @NotNull Duration runRetention) {
     }
 
     /**

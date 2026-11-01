@@ -58,6 +58,7 @@ class SettingsPublisherTest {
         verify(sender).send(Setting.CATAPONTE_URL, null);
         verify(sender).send(Setting.REFRESH_INTERVAL_SECONDS, null);
         verify(sender).send(Setting.CATAUDIT_URL, null);
+        verify(sender).send(Setting.CATAMETRICAS_URL, null);
     }
 
     @Test

@@ -10,13 +10,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.catacumbas69.catapulsar.dto.OverviewResponse;
+import com.catacumbas69.catapulsar.service.CatametricasUnavailableException;
 import com.catacumbas69.catapulsar.service.OverviewPeriod;
 import com.catacumbas69.catapulsar.service.OverviewService;
+import java.io.IOException;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -54,10 +55,12 @@ class OverviewControllerTest {
     }
 
     @Test
-    void returns503_whenMongoIsDown() throws Exception {
-        when(overview.cluster(any())).thenThrow(new DataAccessResourceFailureException("down"));
+    void returns503_whenCatametricasIsDown() throws Exception {
+        when(overview.cluster(any())).thenThrow(new CatametricasUnavailableException(new IOException("refused")));
 
-        mvc.perform(get("/api/v1/overview")).andExpect(status().isServiceUnavailable());
+        mvc.perform(get("/api/v1/overview"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.title").value("Catametricas unavailable"));
     }
 
     private static OverviewResponse empty(String scope) {
