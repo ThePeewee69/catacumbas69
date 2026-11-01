@@ -44,8 +44,8 @@ succeeds. "Already exists" counts as success, and policies are set again on ever
 | `catacommons.events.send-timeout` | `10s` |
 | `catacommons.provisioning.enabled` | `true` |
 | `catacommons.provisioning.retry-interval` / `max-retry-interval` | `30s` / `5m` |
-| `catacommons.provisioning.events-retention-time` / `events-retention-size` | `7d` / `1GB` (namespace) |
-| `catacommons.provisioning.events-backlog-quota` | `1GB`, `producer_exception` (namespace) |
+| `catacommons.provisioning.events-retention-time` / `events-retention-size` | `7d` / `2GB` (namespace) |
+| `catacommons.provisioning.events-backlog-quota` | `1GB`, `producer_exception` (namespace); must be smaller than the retention size, or the app refuses to start (Pulsar refuses it with `412`) |
 | `catacommons.provisioning.compaction-threshold` | `1MB` (compacted topics, plus infinite retention) |
 | `catacommons.audit-bridge.enabled` | `true` (`false` in Cataudit) |
 | `catacommons.audit-bridge.cataponte-url` | `http://cataponte:8082`; set it from `CATAPONTE_URL` |

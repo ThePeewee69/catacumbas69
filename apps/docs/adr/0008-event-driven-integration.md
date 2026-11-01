@@ -60,8 +60,8 @@ replaced on their own. We already run Pulsar, so it can carry events between our
 - Schema: Pulsar JSON schema of the `CloudEvent` record. `data` = `{actor, before, after, details}` as
   **text maps**, so one schema fits every event; nested values are flattened (`source.topic`).
 - Publishing is asynchronous: 3 retries (1 s, 2 s, 4 s), then `ERROR` with the full event.
-- Event topics are non-partitioned. Namespace policies: retention 7 days / 1 GB, backlog quota 1 GB with
-  `producer_exception`.
+- Event topics are non-partitioned. Namespace policies: retention 7 days / 2 GB, backlog quota 1 GB with
+  `producer_exception` (Pulsar requires the quota to be below the retention size; orch.md decision 41).
 - Bridge changes produce two events: Catapulsar `bridge.<action>-requested` for every forwarded request
   (with Cataponte's HTTP status) and Cataponte `bridge.<action>` for the change it made.
 - Catametricas publishes only state changes: `collection.failed` and `collection.recovered`.

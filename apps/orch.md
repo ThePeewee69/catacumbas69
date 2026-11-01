@@ -112,7 +112,7 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 | `CATAMETRICAS_URL` | Catapulsar (default of the editable URL of the overviews) | `http://catametricas:8083` | `http://localhost:8083` |
 | `CATAPULSAR_REFRESH_INTERVAL_SECONDS` | Catapulsar | `10` | `10` |
 | `CATAMETRICAS_COLLECT_INTERVAL_SECONDS` | Catapulsar, Catametricas (same value) | `60` | `60` |
-| `CATACOMMONS_*` (optional) | all | see `CatacommonsProperties`: retries `1s,2s,4s`, retention `7d`/`1GB`, backlog quota `1GB` | same |
+| `CATACOMMONS_*` (optional) | all | see `CatacommonsProperties`: retries `1s,2s,4s`, retention `7d`/`2GB`, backlog quota `1GB` (must be below the retention) | same |
 | `CATAPONTE_STATUS_WRITEINTERVAL`, `CATAPONTE_STATUS_STALEAFTER` (optional) | Cataponte (status of each replica, ADR 0012) | `PT5S`, `PT30S` | same |
 | `CATAPONTE_CORS_ALLOWED_ORIGINS` (optional) | Cataponte | *(empty: CORS closed)* | *(empty)* |
 | `SERVER_PORT` | all (only for a second local instance) | Catapulsar `8081`, Cataponte `8082`, Catametricas `8083`, Cataudit `8084` | e.g. `8092`, `8093` |
@@ -382,8 +382,9 @@ Every package has a `package-info.java` (DOC-2). Dependencies point downwards on
 - **EVT-5 [MUST]** An app writes only to topics in its own namespace `catacumbas69/<app>`. Topics are
   declared as `TopicSpec` beans (the events topic is declared by catacommons) and created at start-up by
   `PulsarProvisioner`, never by hand; topics are non-partitioned.
-- **EVT-6 [MUST]** Namespace policies are set by the app on every start: retention 7 days / 1 GB, backlog
-  quota 1 GB with `producer_exception`. Compacted topics (settings) get topic policies: infinite retention
+- **EVT-6 [MUST]** Namespace policies are set by the app on every start: retention 7 days / 2 GB, backlog
+  quota 1 GB with `producer_exception`. The quota MUST be below the retention size (Pulsar answers `412`
+  otherwise); `CatacommonsProperties` refuses to start when it is not. Compacted topics (settings) get topic policies: infinite retention
   and a compaction threshold of 1 MB.
 
 Event catalogue (phase 1):
@@ -807,7 +808,7 @@ Phase 1 decisions (2026-10-31):
 8. catacommons is a Spring Boot **auto-configuration**; each app creates its own `PulsarClient` and
    `PulsarAdmin` (Cataponte gained the admin client, Catametricas the binary client).
 9. Event topics are **non-partitioned**; namespace retention 7 days / 1 GB and backlog quota 1 GB with
-   **`producer_exception`**.
+   **`producer_exception`**. *(Retention changed to 2 GB by 41.)*
 10. The event schema is a Pulsar JSON schema of `CloudEvent`, with **`data` as text maps**
     (`actor`, `before`, `after`, `details`).
 11. Publishing is **asynchronous** with 3 retries (1 s, 2 s, 4 s), then `ERROR` with the full event.
@@ -882,3 +883,10 @@ No backward compatibility (2026-11-01):
     `Exclusive` to `Failover`, missing versions, the single `destination` field and the `bridge.migrated` event
     (Cataponte). The old collections, and the `legacy-*` entries already copied into `cataudit_events`, are dropped
     by hand. MONGO-2 applies again once there is data worth keeping.
+
+Start-up fix (2026-11-01):
+
+41. Pulsar refuses (`412`) a backlog quota equal to or above the namespace retention size, so the 1 GB / 1 GB of
+    decision 9 stopped provisioning before the topics were created. Namespace retention is now **2 GB**, the backlog
+    quota stays **1 GB**, and `CatacommonsProperties` **refuses to start** when the quota is not below the retention
+    (compared in whole megabytes; a retention of zero or less is not checked).

@@ -1,6 +1,7 @@
 package com.catacumbas69.catacommons;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -51,7 +52,8 @@ public record CatacommonsProperties(
      * @param retryInterval first wait after a failed attempt; doubled after each failure
      * @param maxRetryInterval upper bound for the wait
      * @param eventsRetentionTime how long event messages are kept, consumed or not
-     * @param eventsRetentionSize retention size limit of each topic in the namespace
+     * @param eventsRetentionSize retention size limit of each topic in the namespace; must be larger than
+     *                            {@code eventsBacklogQuota}
      * @param eventsBacklogQuota unconsumed backlog allowed per topic; above it publishing fails
      *                           ({@code producer_exception})
      * @param compactionThreshold backlog size that triggers automatic compaction of compacted topics
@@ -61,9 +63,27 @@ public record CatacommonsProperties(
             @NotNull @DefaultValue("30s") Duration retryInterval,
             @NotNull @DefaultValue("5m") Duration maxRetryInterval,
             @NotNull @DefaultValue("7d") Duration eventsRetentionTime,
-            @NotNull @DefaultValue("1GB") DataSize eventsRetentionSize,
+            @NotNull @DefaultValue("2GB") DataSize eventsRetentionSize,
             @NotNull @DefaultValue("1GB") DataSize eventsBacklogQuota,
             @NotNull @DefaultValue("1MB") DataSize compactionThreshold) {
+
+        /**
+         * Tells whether Pulsar accepts the backlog quota: it refuses ({@code 412}) a quota equal to or above the
+         * namespace retention size, compared in whole megabytes as the retention is set. A retention size of zero
+         * or less (none, or infinite) is not checked; missing values are reported by {@code @NotNull}.
+         *
+         * @return {@code true} when the backlog quota is below the retention size
+         */
+        @AssertTrue(message = "events-backlog-quota must be smaller than events-retention-size; "
+                + "Pulsar refuses the backlog quota otherwise")
+        public boolean isBacklogQuotaBelowRetention() {
+            if (eventsRetentionSize == null || eventsBacklogQuota == null) {
+                return true;
+            }
+            long retentionMegabytes = eventsRetentionSize.toMegabytes();
+            return retentionMegabytes <= 0
+                    || eventsBacklogQuota.toBytes() < DataSize.ofMegabytes(retentionMegabytes).toBytes();
+        }
     }
 
     /**

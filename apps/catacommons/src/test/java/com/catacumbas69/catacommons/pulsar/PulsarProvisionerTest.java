@@ -102,7 +102,7 @@ class PulsarProvisionerTest {
         return new CatacommonsProperties("catapulsar",
                 new CatacommonsProperties.Events(true, List.of(Duration.ofSeconds(1)), Duration.ofSeconds(10)),
                 new CatacommonsProperties.Provisioning(true, Duration.ofSeconds(30), Duration.ofMinutes(5),
-                        Duration.ofDays(7), DataSize.ofGigabytes(1), DataSize.ofGigabytes(1),
+                        Duration.ofDays(7), DataSize.ofGigabytes(2), DataSize.ofGigabytes(1),
                         DataSize.ofMegabytes(1)),
                 new CatacommonsProperties.AuditBridge(true, "http://localhost:8082", Duration.ofSeconds(1),
                         Duration.ofSeconds(10), Duration.ofMinutes(5)),
