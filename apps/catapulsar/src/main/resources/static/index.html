@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Catapulsar</title>
 <link rel="icon" type="image/svg+xml" href="/catapulsar-icon.svg">
-<link rel="stylesheet" href="/catapulsar.css?v=17">
-<script src="/catapulsar.js?v=17" defer></script>
+<link rel="stylesheet" href="/catapulsar.css?v=18">
+<script src="/catapulsar.js?v=18" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
 </head>
 <body x-data="app()" x-init="init()">
@@ -1062,7 +1062,9 @@
                               <td x-text="fmt(sub.msgRateOut ?? 0)"></td>
                               <td x-text="(sub.consumers ?? []).length"></td>
                               <td class="cell-actions">
-                                <button class="btn btn-danger btn-xs"
+                                <span class="tag tag-binary" x-show="isSystemSub(name)"
+                                      title="Pulsar's own subscription: it can be peeked but not changed">system</span>
+                                <button class="btn btn-danger btn-xs" x-show="!isSystemSub(name)"
                                         :disabled="!(sub.msgBacklog > 0)"
                                         :title="sub.msgBacklog > 0 ? 'Skip all ' + fmtNum(sub.msgBacklog) + ' backlog message(s)' : 'Backlog is empty'"
                                         @click="clearBacklog(name, sub.msgBacklog)">Clear backlog</button>
@@ -1120,7 +1122,9 @@
               <template x-for="sub in subscriptions" :key="sub">
                 <div class="sub-item">
                   <div><div class="sub-name" x-text="sub"></div></div>
-                  <button class="btn btn-danger" style="font-size:12px;padding:5px 10px;"
+                  <span class="tag tag-binary" x-show="isSystemSub(sub)"
+                        title="Pulsar's own subscription: it can be peeked but not changed">system</span>
+                  <button class="btn btn-danger" style="font-size:12px;padding:5px 10px;" x-show="!isSystemSub(sub)"
                           @click="deleteSub(sub)">Delete</button>
                 </div>
               </template>
@@ -1158,6 +1162,8 @@
                       <span class="backlog-sub-head">
                         <span class="backlog-sub-name mono" x-text="item.name"></span>
                         <span class="tag tag-blue" x-show="item.stats?.type" x-text="item.stats?.type"></span>
+                        <span class="tag tag-binary" x-show="isSystemSub(item.name)"
+                              title="Pulsar's own subscription: it can be peeked but not changed">system</span>
                       </span>
                       <template x-if="item.stats">
                         <span class="backlog-sub-stats">
@@ -1212,6 +1218,7 @@
                   <span style="font-size:11px;color:var(--muted);font-weight:400;">— peek (non-destructive)</span>
                   <span style="margin-left:auto;">
                     <button class="btn btn-danger" style="font-size:11px;padding:4px 10px;"
+                            x-show="!isSystemSub(backlog.sub)"
                             @click="skipAll()"
                             :title="'Skip all ' + backlog.messages.length + ' peeked messages from subscription'">
                       Skip all
@@ -1252,7 +1259,8 @@
                             <div class="actions">
                               <button class="act" @click="openView(msg)">View</button>
                               <button class="act act-edit" @click="openEdit(msg)">Edit</button>
-                              <button class="act act-skip" @click="skipMessages(i+1)"
+                              <button class="act act-skip" x-show="!isSystemSub(backlog.sub)"
+                                      @click="skipMessages(i+1)"
                                       :title="'Skip ' + (i+1) + ' message(s) from cursor'">
                                 Skip
                               </button>

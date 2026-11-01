@@ -624,7 +624,11 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
   authentication (e.g. an OAuth proxy) — the UI can delete topics and skip backlog.
 - **SEC-3 [MUST]** Mongo users have least privilege: `readWrite` on `catacumbas69` only.
 - **SEC-4 [MUST]** Validate and bound all user input (topic names, counts, payload sizes); never build
-  Pulsar admin paths from unvalidated strings.
+  Pulsar admin paths from unvalidated strings. Names start with a letter, a digit or `_` (Pulsar's own names,
+  `__compaction`, `__change_events`), then letters, digits, `. _ = : -`.
+- **SEC-7 [MUST]** Pulsar's own subscriptions (names starting with `__`) are read-only in Catapulsar: they can be
+  listed and peeked, but creating, deleting, skipping or clearing them is refused with `400` and the UI hides
+  those actions. Skipping `__compaction` would break topic compaction.
 - **SEC-5 [MUST]** Containers run as non-root with a read-only root filesystem where possible
   (MicroShift `restricted-v2` SCC compatible: no fixed UID).
 

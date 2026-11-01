@@ -1335,7 +1335,13 @@ function app() {
     // ── Formatters ─────────────────────────────────────────────────────────
     fmt(n) { return n == null ? '—' : parseFloat(n).toFixed(2); },
     fmtNum(n) { return n == null ? '—' : parseInt(n).toLocaleString('en'); },
+    /**
+     * Formats a byte count; a negative or missing value (Pulsar's "not computed") is shown as "—".
+     * @param {?number} b bytes
+     * @returns {string} e.g. "1.5 KB"
+     */
     fmtBytes(b) {
+      if (b == null || b < 0) return '—';
       if (!b) return '0 B';
       const k = 1024, sizes = ['B','KB','MB','GB','TB'];
       const i = Math.floor(Math.log(b) / Math.log(k));
@@ -1344,6 +1350,14 @@ function app() {
     fmtDate(ts) {
       if (!ts) return '—';
       return new Date(ts).toLocaleString('en-GB', { dateStyle:'short', timeStyle:'medium' });
+    },
+    /**
+     * Tells whether a subscription is Pulsar's own (e.g. __compaction): it can be peeked but not changed.
+     * @param {?string} name subscription name
+     * @returns {boolean} true for names starting with "__"
+     */
+    isSystemSub(name) {
+      return typeof name === 'string' && name.startsWith('__');
     },
     sumBacklog(stats) {
       if (!stats?.subscriptions) return 0;

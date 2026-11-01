@@ -13,10 +13,10 @@ Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs
 | **Cluster tree** | Browse tenants → namespaces → topics; create and delete topics |
 | **Overviews** | Home = cluster (tenants); click a tenant = its namespaces; click a namespace = its topics. Backlog, rates, storage, counts, traffic in the last 1 h / 24 h / 7 d / 30 d, all-time traffic, chart and sparklines (published, delivered or backlog). Data from Catametricas' API (ADR 0007, 0013) |
 | **Overview** | Message rates, throughput, backlog, producers, subscriptions, storage |
-| **Subscriptions** | List, create and delete subscriptions |
+| **Subscriptions** | List, create and delete subscriptions. Pulsar's own subscriptions (`__compaction`, any name starting with `__`) get a *system* tag and can only be read and peeked |
 | **Produce** | Send a message with an optional key |
 | **Subscription details** | Backlog per subscription in Overview, with **Clear backlog** (skips every message) |
-| **Backlog** | Subscriptions with backlog statistics (messages, size, consumers, type, rate out, unacked) refreshed automatically; one click peeks up to 100 messages without consuming them (audited); view, edit & re-produce, skip one or all |
+| **Backlog** | Subscriptions with backlog statistics (messages, size as computed by Pulsar on request, consumers, type, rate out, unacked) refreshed automatically; one click peeks up to 100 messages without consuming them (audited); view, edit & re-produce, skip one or all |
 | **Bridges** | Create, edit, enable/disable and delete Cataponte bridges (subscription `Shared`, `Failover` or `Key_Shared`); running state over every Cataponte replica ("1/3 replicas active"), errors, loop blocks and all-time message counts per topic |
 | **Settings** | ⚙️ Connection Settings: Cataponte, Cataudit and Catametricas URLs and the Catametricas collection interval, changed at runtime (saved in MongoDB, audited, published on the settings topic) |
 | **Breadcrumb** | Cluster › tenant › namespace › topic, each part clickable |
@@ -150,7 +150,7 @@ Full contract: <http://localhost:8081/swagger-ui.html>. Errors are RFC 9457 Prob
 
 | Status | Meaning |
 |---|---|
-| `400` | Invalid name, count or body — `errors` lists each field |
+| `400` | Invalid name, count or body — `errors` lists each field. Names start with a letter, a digit or `_`. Also returned when creating, deleting, skipping or clearing a Pulsar system subscription (`__*`) |
 | `404` / `409` | Pulsar says the resource is missing / already exists |
 | `502` | Pulsar failed or is unreachable |
 | `503` | Cataponte, Cataudit or Catametricas is unreachable (only its panel), or MongoDB is down while saving a setting |

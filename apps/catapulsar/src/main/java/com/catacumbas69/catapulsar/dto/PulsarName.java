@@ -13,8 +13,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * A tenant, namespace, topic or subscription name: letters, digits, {@code . _ = : -}, at most 200
- * characters (API-5, SEC-4).
+ * A tenant, namespace, topic or subscription name: starts with a letter, a digit or {@code _}, then letters,
+ * digits, {@code . _ = : -}, at most 200 characters (API-5, SEC-4).
  */
 @NotBlank
 @Size(max = 200)

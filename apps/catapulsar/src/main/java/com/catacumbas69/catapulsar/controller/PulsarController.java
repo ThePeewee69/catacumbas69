@@ -32,10 +32,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Pulsar administration for the UI: tenants, namespaces, topics, subscriptions and messages. Every
- * name in the path is validated before it reaches Pulsar (SEC-4); mutations are audited (OBS-6).
+ * name in the path is validated before it reaches Pulsar (SEC-4); mutations are audited (OBS-6). Pulsar's own
+ * subscriptions (names starting with {@code __}, e.g. {@code __compaction}) can be read and peeked but are never
+ * created, deleted or skipped from here.
  */
 @Tag(name = "Pulsar")
 @RestController
@@ -44,6 +47,7 @@ public class PulsarController {
 
     private static final String TOPIC_PATH = "/topics/{tenant}/{namespace}/{topic}";
     private static final String SUBSCRIPTION_PATH = TOPIC_PATH + "/subscriptions/{subscription}";
+    private static final String SYSTEM_PREFIX = "__";
 
     private final PulsarAdminService admin;
     private final MessageService messages;
@@ -204,6 +208,7 @@ public class PulsarController {
             @PathVariable @PulsarName String subscription,
             HttpServletRequest request) throws PulsarAdminException {
         String fullTopic = persistentTopic(tenant, namespace, topic);
+        refuseSystemSubscription(subscription);
         admin.createSubscription(fullTopic, subscription);
         audit.record(ClientAddress.of(request), AuditAction.CREATE_SUBSCRIPTION, fullTopic,
                 Map.of("subscription", subscription));
@@ -229,6 +234,7 @@ public class PulsarController {
             @PathVariable @PulsarName String subscription,
             HttpServletRequest request) throws PulsarAdminException {
         String fullTopic = persistentTopic(tenant, namespace, topic);
+        refuseSystemSubscription(subscription);
         admin.deleteSubscription(fullTopic, subscription);
         audit.record(ClientAddress.of(request), AuditAction.DELETE_SUBSCRIPTION, fullTopic,
                 Map.of("subscription", subscription));
@@ -315,6 +321,7 @@ public class PulsarController {
             @PathVariable @Min(1) @Max(10_000) long count,
             HttpServletRequest request) throws PulsarAdminException {
         String fullTopic = persistentTopic(tenant, namespace, topic);
+        refuseSystemSubscription(subscription);
         messages.skip(fullTopic, subscription, count);
         audit.record(ClientAddress.of(request), AuditAction.SKIP_MESSAGES, fullTopic,
                 Map.of("subscription", subscription, "count", count));
@@ -340,8 +347,20 @@ public class PulsarController {
             @PathVariable @PulsarName String subscription,
             HttpServletRequest request) throws PulsarAdminException {
         String fullTopic = persistentTopic(tenant, namespace, topic);
+        refuseSystemSubscription(subscription);
         messages.clearBacklog(fullTopic, subscription);
         audit.record(ClientAddress.of(request), AuditAction.CLEAR_BACKLOG, fullTopic,
                 Map.of("subscription", subscription));
+    }
+
+    /**
+     * Refuses changes to Pulsar's own subscriptions: skipping or deleting {@code __compaction} would break the
+     * compaction of the topic.
+     */
+    private static void refuseSystemSubscription(String subscription) {
+        if (subscription.startsWith(SYSTEM_PREFIX)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "'" + subscription
+                    + "' is a Pulsar system subscription (it starts with '__'): it can be peeked but not changed");
+        }
     }
 }

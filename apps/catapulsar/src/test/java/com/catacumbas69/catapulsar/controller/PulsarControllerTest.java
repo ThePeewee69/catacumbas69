@@ -1,13 +1,16 @@
 package com.catacumbas69.catapulsar.controller;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -121,6 +124,49 @@ class PulsarControllerTest {
         mvc.perform(post("/api/v1/topics/home/media/events/subscriptions/bad name/clear-backlog"))
                 .andExpect(status().isBadRequest());
         verify(messages, never()).clearBacklog(any(), any());
+    }
+
+    @Test
+    void peek_acceptsPulsarSystemSubscription() throws Exception {
+        when(messages.peek(TOPIC, "__compaction", 10)).thenReturn(List.of());
+
+        mvc.perform(get("/api/v1/topics/home/media/events/peek/__compaction"))
+                .andExpect(status().isOk());
+        verify(messages).peek(TOPIC, "__compaction", 10);
+    }
+
+    @Test
+    void stats_acceptsPulsarSystemTopic() throws Exception {
+        mvc.perform(get("/api/v1/topics/home/media/__change_events/stats"))
+                .andExpect(status().isOk());
+        verify(admin).getTopicStats("persistent://home/media/__change_events");
+    }
+
+    @Test
+    void systemSubscription_isNeverChanged() throws Exception {
+        String base = "/api/v1/topics/home/media/events/subscriptions/__compaction";
+
+        mvc.perform(post(base + "/clear-backlog"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail").value(containsString("Pulsar system subscription")));
+        mvc.perform(post(base + "/skip/1")).andExpect(status().isBadRequest());
+        mvc.perform(delete(base)).andExpect(status().isBadRequest());
+        mvc.perform(post(base)).andExpect(status().isBadRequest());
+
+        verify(messages, never()).clearBacklog(any(), any());
+        verify(messages, never()).skip(any(), any(), anyLong());
+        verify(admin, never()).deleteSubscription(any(), any());
+        verify(admin, never()).createSubscription(any(), any());
+        verify(audit, never()).record(any(), any(), any(), any());
+    }
+
+    @Test
+    void rejectsNamesStartingWithOtherPunctuation() throws Exception {
+        mvc.perform(get("/api/v1/topics/home/media/events/peek/.hidden"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(containsString("must start with a letter, a digit or '_'")));
+        verify(messages, never()).peek(any(), any(), anyInt());
     }
 
     @Test

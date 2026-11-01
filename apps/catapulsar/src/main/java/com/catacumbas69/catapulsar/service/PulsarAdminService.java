@@ -95,7 +95,8 @@ public class PulsarAdminService {
      * @throws PulsarAdminException if Pulsar rejects the request
      */
     public TopicStats getTopicStats(String topic) throws PulsarAdminException {
-        return admin.topics().getStats(topic);
+        // the backlog size of each subscription is only computed when asked for; otherwise Pulsar returns -1
+        return admin.topics().getStats(topic, false, true, false);
     }
 
     /**
