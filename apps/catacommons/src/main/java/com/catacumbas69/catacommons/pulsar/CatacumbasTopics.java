@@ -20,6 +20,12 @@ public final class CatacumbasTopics {
     /** App that owns {@link #SETTINGS}. */
     public static final String SETTINGS_OWNER = "catapulsar";
 
+    /** Local name of Cataudit's input topic, fed by the {@code audit-<app>} bridges (ADR 0009). */
+    public static final String AUDIT = "audit";
+
+    /** App that owns {@link #AUDIT}. */
+    public static final String AUDIT_OWNER = "cataudit";
+
     private CatacumbasTopics() {
     }
 
@@ -61,5 +67,14 @@ public final class CatacumbasTopics {
      */
     public static String settings() {
         return topic(SETTINGS_OWNER, SETTINGS);
+    }
+
+    /**
+     * Returns Cataudit's input topic.
+     *
+     * @return {@code persistent://catacumbas69/cataudit/audit}
+     */
+    public static String audit() {
+        return topic(AUDIT_OWNER, AUDIT);
     }
 }

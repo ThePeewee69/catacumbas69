@@ -30,8 +30,10 @@ Engineering rules: [`../orch.md`](../orch.md). Design: [ADR 0007](../docs/adr/00
   over when the lease expires (three intervals) or immediately when the holder shuts down.
 - Catapulsar reads these collections directly to draw the cluster, tenant and namespace overviews.
 - **Events** (ADR 0008, orch.md §4.4): only changes of state are published on
-  `catacumbas69/catametricas/events` — `collection.failed` the first time collecting fails (MongoDB lease or
-  Pulsar) and `collection.recovered` on the next success. The namespace and topic are created at start-up.
+  `catacumbas69/catametricas/events`: `collection.failed` the first time collecting fails (MongoDB lease or
+  Pulsar) and `collection.recovered` on the next success. The namespace and topic are created at start-up,
+  and the `audit-catametricas` system bridge is registered in Cataponte (`CATAPONTE_URL`) so they reach
+  Cataudit (ADR 0009).
 
 ## Run locally (IntelliJ on necromancer)
 
@@ -40,6 +42,7 @@ Engineering rules: [`../orch.md`](../orch.md). Design: [ADR 0007](../docs/adr/00
 | `PULSAR_SERVICE_URL` | `http://192.168.86.35:31080` |
 | `PULSAR_BROKER_URL` | `pulsar://192.168.86.35:31650` (events) |
 | `PULSAR_LISTENER_NAME` | `external` |
+| `CATAPONTE_URL` | `http://localhost:8082` (audit bridge registration) |
 | `SPRING_DATA_MONGODB_URI` | `mongodb://<user>:<password>@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true` |
 | `CATAMETRICAS_COLLECT_INTERVAL_SECONDS` | *(optional)* default interval, `60` |
 

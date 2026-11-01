@@ -1,5 +1,9 @@
 package com.catacumbas69.catacommons;
 
+import com.catacumbas69.catacommons.audit.AuditBridgeRegistrar;
+import com.catacumbas69.catacommons.audit.CataponteLocation;
+import com.catacumbas69.catacommons.audit.HttpSystemBridgeRegistry;
+import com.catacumbas69.catacommons.audit.SystemBridgeRegistry;
 import com.catacumbas69.catacommons.events.CloudEvent;
 import com.catacumbas69.catacommons.events.EventPublisher;
 import com.catacumbas69.catacommons.pulsar.CatacumbasTopics;
@@ -16,6 +20,7 @@ import org.apache.pulsar.client.api.PulsarClient;
 import org.apache.pulsar.client.api.Schema;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -28,7 +33,10 @@ import org.springframework.context.annotation.Bean;
  *   <li>{@link EventPublisher} for its events topic;</li>
  *   <li>{@link RetryingSenderFactory} for any other topic it writes to;</li>
  *   <li>{@link PulsarProvisioner}, which creates the tenant, its namespace and every {@link TopicSpec} bean
- *       (the events topic is always one) once the app has started.</li>
+ *       (the events topic is always one) once the app has started;</li>
+ *   <li>{@link AuditBridgeRegistrar}, which registers the app's {@code audit-<app>} bridge in Cataponte
+ *       (ADR 0009) through a {@link SystemBridgeRegistry}; an app can provide its own registry (Cataponte
+ *       does, in-process) or its own {@link CataponteLocation} (Catapulsar does).</li>
  * </ul>
  */
 @AutoConfiguration
@@ -120,5 +128,50 @@ public class CatacommonsAutoConfiguration {
     public PulsarProvisioner pulsarProvisioner(PulsarAdmin admin, CatacommonsProperties properties,
                                                ObjectProvider<TopicSpec> topics, CatacommonsScheduler scheduler) {
         return new PulsarProvisioner(admin, properties, topics.orderedStream().toList(), scheduler.executor());
+    }
+
+    /**
+     * Cataponte's URL from {@code catacommons.audit-bridge.cataponte-url}, unless the app provides one.
+     *
+     * @param properties catacommons configuration
+     * @return the location
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public CataponteLocation cataponteLocation(CatacommonsProperties properties) {
+        String url = properties.auditBridge().cataponteUrl().strip();
+        String base = url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
+        return () -> base;
+    }
+
+    /**
+     * Registers system bridges through Cataponte's API, unless the app provides another registry.
+     *
+     * @param location Cataponte's URL
+     * @param properties catacommons configuration
+     * @return the registry
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public SystemBridgeRegistry systemBridgeRegistry(CataponteLocation location, CatacommonsProperties properties) {
+        return new HttpSystemBridgeRegistry(location, properties.app(), properties.auditBridge().timeout());
+    }
+
+    /**
+     * Registers the app's audit bridge once the app has started.
+     *
+     * @param registry where bridges are registered
+     * @param properties catacommons configuration
+     * @param scheduler runs the attempts
+     * @return the registrar
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "catacommons.audit-bridge", name = "enabled", havingValue = "true",
+            matchIfMissing = true)
+    public AuditBridgeRegistrar auditBridgeRegistrar(SystemBridgeRegistry registry, CatacommonsProperties properties,
+                                                     CatacommonsScheduler scheduler) {
+        CatacommonsProperties.AuditBridge settings = properties.auditBridge();
+        return new AuditBridgeRegistrar(registry, properties.app(), scheduler.executor(), settings.retryInterval(),
+                settings.maxRetryInterval());
     }
 }

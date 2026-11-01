@@ -2,6 +2,7 @@ package com.catacumbas69.catapulsar.controller;
 
 import com.catacumbas69.catapulsar.service.InvalidSettingException;
 import com.catacumbas69.catapulsar.service.CataponteUnavailableException;
+import com.catacumbas69.catapulsar.service.CatauditUnavailableException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.ElementKind;
@@ -144,6 +145,18 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     public ProblemDetail handlePulsarClient(PulsarClientException ex) {
         LOG.warn("Pulsar client call failed: {}", ex.getMessage());
         return problem(HttpStatus.BAD_GATEWAY, "Pulsar unavailable", ex.getMessage());
+    }
+
+    /**
+     * Cataudit cannot be reached (RES-12): only the audit view is affected.
+     *
+     * @param ex the exception
+     * @return {@code 503}
+     */
+    @ExceptionHandler(CatauditUnavailableException.class)
+    public ProblemDetail handleCatauditUnavailable(CatauditUnavailableException ex) {
+        LOG.warn("{}", ex.getMessage());
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "Cataudit unavailable", ex.getMessage());
     }
 
     /**

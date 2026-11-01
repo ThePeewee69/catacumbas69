@@ -1,7 +1,7 @@
 package com.catacumbas69.cataponte.service;
 
 /**
- * Configuration changes recorded in {@code audit_logs}. Names match Catapulsar's {@code AuditAction}. Each
+ * Bridge configuration changes. Names match Catapulsar's {@code AuditAction}. Each
  * change is also published as {@code com.catacumbas69.cataponte.bridge.<verb>.v1} (ADR 0008).
  */
 public enum AuditAction {

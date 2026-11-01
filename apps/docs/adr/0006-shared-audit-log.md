@@ -1,6 +1,6 @@
 # 6. One audit log for every configuration change
 
-Date: 2026-10-30 · Status: Accepted
+Date: 2026-10-30 · Status: Superseded by ADR 0009 (2026-10-31)
 
 ## Context
 

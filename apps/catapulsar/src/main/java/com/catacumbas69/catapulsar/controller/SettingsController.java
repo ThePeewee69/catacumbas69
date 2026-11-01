@@ -1,11 +1,12 @@
 package com.catacumbas69.catapulsar.controller;
 
-import com.catacumbas69.catapulsar.dto.CataponteSettingRequest;
-import com.catacumbas69.catapulsar.dto.CataponteSettingResponse;
 import com.catacumbas69.catapulsar.dto.IntervalSettingRequest;
 import com.catacumbas69.catapulsar.dto.IntervalSettingResponse;
-import com.catacumbas69.catapulsar.service.CollectIntervalService;
+import com.catacumbas69.catapulsar.dto.UrlSettingRequest;
+import com.catacumbas69.catapulsar.dto.UrlSettingResponse;
 import com.catacumbas69.catapulsar.service.CataponteEndpoint;
+import com.catacumbas69.catapulsar.service.CatauditEndpoint;
+import com.catacumbas69.catapulsar.service.CollectIntervalService;
 import com.catacumbas69.catapulsar.service.RefreshIntervalService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class SettingsController {
 
     private final CataponteEndpoint cataponte;
+    private final CatauditEndpoint cataudit;
     private final RefreshIntervalService refresh;
     private final CollectIntervalService collect;
 
@@ -34,12 +36,14 @@ public class SettingsController {
      * Creates the controller.
      *
      * @param cataponte Cataponte base URL holder
+     * @param cataudit Cataudit base URL holder
      * @param refresh UI auto-refresh interval
      * @param collect Catametricas collection interval
      */
-    public SettingsController(CataponteEndpoint cataponte, RefreshIntervalService refresh,
+    public SettingsController(CataponteEndpoint cataponte, CatauditEndpoint cataudit, RefreshIntervalService refresh,
                               CollectIntervalService collect) {
         this.cataponte = cataponte;
+        this.cataudit = cataudit;
         this.refresh = refresh;
         this.collect = collect;
     }
@@ -125,8 +129,8 @@ public class SettingsController {
      */
     @Operation(summary = "Cataponte URL in use")
     @GetMapping("/cataponte")
-    public CataponteSettingResponse cataponte() {
-        return response();
+    public UrlSettingResponse cataponte() {
+        return UrlSettingResponse.of(cataponte);
     }
 
     /**
@@ -138,10 +142,10 @@ public class SettingsController {
      */
     @Operation(summary = "Change the Cataponte URL")
     @PutMapping("/cataponte")
-    public CataponteSettingResponse changeCataponte(@Valid @RequestBody CataponteSettingRequest request,
-                                                  HttpServletRequest http) {
+    public UrlSettingResponse changeCataponte(@Valid @RequestBody UrlSettingRequest request,
+                                              HttpServletRequest http) {
         cataponte.change(request.url(), ClientAddress.of(http));
-        return response();
+        return UrlSettingResponse.of(cataponte);
     }
 
     /**
@@ -152,12 +156,47 @@ public class SettingsController {
      */
     @Operation(summary = "Reset the Cataponte URL to its configured default")
     @DeleteMapping("/cataponte")
-    public CataponteSettingResponse resetCataponte(HttpServletRequest http) {
+    public UrlSettingResponse resetCataponte(HttpServletRequest http) {
         cataponte.reset(ClientAddress.of(http));
-        return response();
+        return UrlSettingResponse.of(cataponte);
     }
 
-    private CataponteSettingResponse response() {
-        return new CataponteSettingResponse(cataponte.url(), cataponte.defaultUrl(), cataponte.isCustom());
+    /**
+     * Returns the Cataudit base URL in use.
+     *
+     * @return current and default URL
+     */
+    @Operation(summary = "Cataudit URL in use")
+    @GetMapping("/cataudit")
+    public UrlSettingResponse cataudit() {
+        return UrlSettingResponse.of(cataudit);
+    }
+
+    /**
+     * Changes the Cataudit base URL. Takes effect immediately.
+     *
+     * @param request new URL
+     * @param http current request, for the audit log
+     * @return current and default URL
+     */
+    @Operation(summary = "Change the Cataudit URL")
+    @PutMapping("/cataudit")
+    public UrlSettingResponse changeCataudit(@Valid @RequestBody UrlSettingRequest request,
+                                             HttpServletRequest http) {
+        cataudit.change(request.url(), ClientAddress.of(http));
+        return UrlSettingResponse.of(cataudit);
+    }
+
+    /**
+     * Goes back to the configured Cataudit base URL ({@code CATAUDIT_URL}).
+     *
+     * @param http current request, for the audit log
+     * @return current and default URL
+     */
+    @Operation(summary = "Reset the Cataudit URL to its configured default")
+    @DeleteMapping("/cataudit")
+    public UrlSettingResponse resetCataudit(HttpServletRequest http) {
+        cataudit.reset(ClientAddress.of(http));
+        return UrlSettingResponse.of(cataudit);
     }
 }

@@ -27,8 +27,8 @@ import org.springframework.web.util.UriComponentsBuilder;
  * Backend-for-frontend for bridges (ARCH-2, ADR 0001): forwards bridge calls from the browser to Cataponte
  * at the URL held by {@link CataponteEndpoint}.
  *
- * <p>Cataponte owns validation, the bridge model and the audit of bridge changes (it records before and
- * after in {@code audit_logs}), so bodies are passed through unchanged, including Cataponte's Problem
+ * <p>Cataponte owns validation, the bridge model and the audit of bridge changes (its {@code bridge.*} events
+ * carry before and after), so bodies are passed through unchanged, including Cataponte's Problem
  * Details on errors. The browser's address is sent as {@code X-Forwarded-For} so Cataponte can record who
  * made the change. If Cataponte cannot be reached a {@link CataponteUnavailableException} is thrown, which
  * the API maps to {@code 503} (RES-12).

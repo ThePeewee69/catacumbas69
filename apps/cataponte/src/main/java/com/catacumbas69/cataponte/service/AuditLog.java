@@ -2,88 +2,51 @@ package com.catacumbas69.cataponte.service;
 
 import com.catacumbas69.catacommons.events.EventData;
 import com.catacumbas69.catacommons.events.EventPublisher;
-import com.catacumbas69.cataponte.model.AuditRecord;
 import com.catacumbas69.cataponte.model.BridgeDocument;
 import com.catacumbas69.cataponte.model.BridgeSource;
-import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * Records every bridge configuration change in {@code audit_logs} (OBS-6), whichever client made it.
+ * Records every bridge configuration change, whichever client made it (OBS-6), by publishing a
+ * {@code bridge.<verb>} event on {@code catacumbas69/cataponte/events} (ADR 0008). The {@code audit-cataponte}
+ * bridge carries it to Cataudit, which owns the audit trail (ADR 0009).
  *
- * <p>The entry is written right after the change is stored. A failed audit write does not undo the
- * change (it is already applied); it is logged at {@code ERROR} with the full entry so it can be
- * recovered from the logs.
- *
- * <p>Every change is also published as a {@code bridge.<verb>} event on {@code catacumbas69/cataponte/events}
- * (ADR 0008): subject = bridge id, {@code before}/{@code after} = the definitions, flattened. Until Cataudit
- * exists (phase 2) both are written.
+ * <p>The event is published right after the change is stored, asynchronously and with retries; it never
+ * fails the change. Subject = bridge id; {@code before}/{@code after} = the definitions, flattened.
  */
 @Slf4j
 @Component
 public class AuditLog {
 
-    /** User recorded for changes Cataponte makes on its own, such as schema migration. */
-    public static final String SYSTEM_USER = AuditRecord.APPLICATION;
+    /** Actor for changes Cataponte makes on its own, such as schema migration or system bridges. */
+    public static final String SYSTEM_USER = "cataponte";
 
-    /** Actor in events for changes Cataponte makes on its own. */
-    public static final String SYSTEM_ACTOR = "cataponte";
-
-    private final MongoTemplate mongoTemplate;
     private final EventPublisher events;
-    private final Clock clock;
 
     /**
      * Creates the audit log.
      *
-     * @param mongoTemplate template for inserts
-     * @param events publishes the matching events
-     * @param clock time source
+     * @param events publishes the events
      */
-    public AuditLog(MongoTemplate mongoTemplate, EventPublisher events, Clock clock) {
-        this.mongoTemplate = mongoTemplate;
+    public AuditLog(EventPublisher events) {
         this.events = events;
-        this.clock = clock;
     }
 
     /**
      * Records a change of one bridge.
      *
-     * @param user client IP address, or {@link #SYSTEM_USER}
+     * @param user client IP address, the calling app's name, or {@link #SYSTEM_USER}
      * @param action what was done
      * @param before definition before the change, or {@code null} when created
      * @param after definition after the change, or {@code null} when deleted
      */
     public void bridgeChanged(String user, AuditAction action, BridgeDocument before, BridgeDocument after) {
         BridgeDocument subject = after != null ? after : before;
-        Map<String, Object> details = new LinkedHashMap<>();
-        details.put("bridgeId", subject.getId());
-        details.put("name", subject.getName());
-        if (before != null) {
-            details.put("before", snapshot(before));
-        }
-        if (after != null) {
-            details.put("after", snapshot(after));
-        }
-        String topic = subject.getSource() != null ? subject.getSource().getTopic() : null;
-        AuditRecord entry = new AuditRecord(clock.instant(), user, action.name(), topic, details);
         try {
-            mongoTemplate.insert(entry);
-        } catch (RuntimeException e) {
-            log.error("Audit entry not stored: {} {} by {} details={}", action, subject.getId(), user, details, e);
-        }
-        publish(user, action, subject, before, after);
-    }
-
-    private void publish(String user, AuditAction action, BridgeDocument subject, BridgeDocument before,
-                         BridgeDocument after) {
-        try {
-            String actor = SYSTEM_USER.equals(user) ? SYSTEM_ACTOR : user;
-            events.publish(AuditAction.ENTITY, action.verb(), subject.getId(), EventData.change(actor,
+            events.publish(AuditAction.ENTITY, action.verb(), subject.getId(), EventData.change(user,
                     before == null ? null : snapshot(before), after == null ? null : snapshot(after), null));
         } catch (RuntimeException e) {
             log.warn("Event not published: {} {}: {}", action, subject.getId(), e.getMessage());
@@ -114,6 +77,7 @@ public class AuditLog {
         definition.put("maxInFlight", bridge.getMaxInFlight());
         definition.put("preserveKey", bridge.isPreserveKey());
         definition.put("preserveProperties", bridge.isPreserveProperties());
+        definition.put("system", bridge.isSystem());
         definition.put("version", bridge.getVersion());
         return definition;
     }

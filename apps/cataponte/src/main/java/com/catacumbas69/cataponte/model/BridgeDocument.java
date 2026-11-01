@@ -59,6 +59,12 @@ public class BridgeDocument {
     /** Maximum unacknowledged messages for this bridge. {@code null} means the service default. */
     private Integer maxInFlight;
 
+    /**
+     * Registered by an app for its own needs (e.g. {@code audit-<app>}, ADR 0009) rather than by a user. Shown
+     * with a badge; otherwise a normal bridge. Not part of the user-editable definition.
+     */
+    private boolean system;
+
     /** Optimistic-locking version (RES-9); also used to detect configuration changes. */
     @Version
     private Long version;

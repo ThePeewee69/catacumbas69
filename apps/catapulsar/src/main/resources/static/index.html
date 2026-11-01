@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Catapulsar</title>
 <link rel="icon" type="image/svg+xml" href="/catapulsar-icon.svg">
-<link rel="stylesheet" href="/catapulsar.css?v=13">
-<script src="/catapulsar.js?v=13" defer></script>
+<link rel="stylesheet" href="/catapulsar.css?v=15">
+<script src="/catapulsar.js?v=15" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
 </head>
 <body x-data="app()" x-init="init()">
@@ -75,6 +75,36 @@
       <div class="divider"></div>
 
       <div class="field" style="margin-bottom:6px;">
+        <label for="cataudit-url">Cataudit URL</label>
+        <input id="cataudit-url" type="url" x-model.trim="audit.settings.draft"
+               placeholder="http://cataudit:8084" autocomplete="off" @keydown.enter="saveSettings()">
+      </div>
+      <p class="settings-hint">
+        Default (<span class="mono">CATAUDIT_URL</span>): <span class="mono" x-text="audit.settings.defaultUrl"></span>
+        <template x-if="audit.settings.custom">
+          <button type="button" class="link-btn" :disabled="audit.settings.saving"
+                  @click="resetCatauditUrl()">use default</button>
+        </template>
+        <br>Where the Audit panel reads the audit trail. Applies to every user immediately, is saved in MongoDB
+        and recorded in the audit log.
+      </p>
+      <div class="health-row">
+        <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px;" @click="checkCataudit()">
+          <template x-if="audit.settings.healthState==='checking'"><span class="spinner" style="width:12px;height:12px;"></span></template>
+          <template x-if="audit.settings.healthState!=='checking'"><span>🩺</span></template>
+          Check Cataudit
+        </button>
+        <template x-if="audit.settings.healthState==='ok'">
+          <span class="health-msg ok">✓ <span x-text="audit.settings.healthMsg"></span></span>
+        </template>
+        <template x-if="audit.settings.healthState==='error'">
+          <span class="health-msg error">✕ <span x-text="audit.settings.healthMsg"></span></span>
+        </template>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="field" style="margin-bottom:6px;">
         <label for="collect-seconds">Catametricas collection interval (seconds)</label>
         <input id="collect-seconds" type="number" step="1" :min="collect.min" :max="collect.max"
                x-model.number="collect.draft" @keydown.enter="saveSettings()">
@@ -92,7 +122,8 @@
 
       <div style="display:flex;gap:8px;justify-content:flex-end;">
         <button class="btn btn-secondary" @click="settings.open=false">Cancel</button>
-        <button class="btn btn-primary" :disabled="bridges.settings.saving" @click="saveSettings()">Save</button>
+        <button class="btn btn-primary" :disabled="bridges.settings.saving || audit.settings.saving"
+                @click="saveSettings()">Save</button>
       </div>
     </div>
   </div>
@@ -419,10 +450,175 @@
       </svg>
       Bridges
     </button>
+    <button class="btn btn-ghost bridges-btn" :class="{'active': auditView}"
+            @click="auditView ? closeAudit() : openAudit()" title="Audit trail (Cataudit)">
+      <span aria-hidden="true">🛡</span>
+      Audit
+    </button>
     <button class="btn btn-ghost" style="font-size:13px;padding:7px 10px;" @click="openSettings()" title="Settings">⚙️</button>
   </div>
 
   <div id="content">
+
+    <!-- ─ Audit panel: the audit trail of every app, read from Cataudit (ADR 0009) ─ -->
+    <template x-if="auditView">
+      <div class="audit-panel">
+        <div class="bridges-header">
+          <div>
+            <div style="font-size:16px;font-weight:700;color:var(--accent2);">Audit trail</div>
+            <div class="muted" style="font-size:12px;">
+              Every audited action of every app. New entries appear within seconds.
+            </div>
+            <button class="cataponte-url" @click="openSettings()" title="Change the Cataudit URL">
+              <span>Cataudit:</span>
+              <span class="mono" x-text="audit.settings.url || '…'"></span>
+              <template x-if="audit.settings.custom"><span class="tag tag-blue">custom</span></template>
+              <span aria-hidden="true">✎</span>
+            </button>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span class="muted" style="font-size:12px;" x-show="audit.total > 0"
+                  x-text="audit.total.toLocaleString() + ' entr' + (audit.total === 1 ? 'y' : 'ies')"></span>
+            <button class="btn btn-ghost" style="font-size:12px;" @click="loadAuditFacets();loadAudit()" title="Refresh">↺</button>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <form class="audit-filters card" @submit.prevent="applyAuditFilters()">
+          <div class="field">
+            <label for="audit-app">App</label>
+            <select id="audit-app" x-model="audit.filters.app" @change="applyAuditFilters()">
+              <option value="">All</option>
+              <template x-for="a in audit.facets.apps" :key="a"><option :value="a" x-text="a"></option></template>
+            </select>
+          </div>
+          <div class="field">
+            <label for="audit-entity">About</label>
+            <select id="audit-entity" x-model="audit.filters.entity" @change="applyAuditFilters()">
+              <option value="">All</option>
+              <template x-for="e in audit.facets.entities" :key="e"><option :value="e" x-text="e"></option></template>
+            </select>
+          </div>
+          <div class="field">
+            <label for="audit-action">Action</label>
+            <select id="audit-action" x-model="audit.filters.action" @change="applyAuditFilters()">
+              <option value="">All</option>
+              <template x-for="a in audit.facets.actions" :key="a"><option :value="a" x-text="a"></option></template>
+            </select>
+          </div>
+          <div class="field audit-filter-wide">
+            <label for="audit-subject">Subject starts with</label>
+            <input id="audit-subject" type="text" x-model="audit.filters.subject"
+                   placeholder="persistent://tenant/namespace/ · bridge id · setting key">
+          </div>
+          <div class="field">
+            <label for="audit-actor">Actor</label>
+            <input id="audit-actor" type="text" x-model="audit.filters.actor" placeholder="IP or app">
+          </div>
+          <div class="field">
+            <label for="audit-period">Period</label>
+            <select id="audit-period" x-model="audit.filters.period" @change="applyAuditFilters()">
+              <option value="1h">Last hour</option>
+              <option value="24h">Last 24 hours</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="all">Everything</option>
+            </select>
+          </div>
+          <div class="audit-filter-actions">
+            <button type="submit" class="btn btn-primary" style="font-size:12px;">Search</button>
+            <button type="button" class="btn btn-ghost" style="font-size:12px;" @click="clearAuditFilters()">Clear</button>
+          </div>
+        </form>
+
+        <template x-if="audit.loading">
+          <div style="text-align:center;padding:60px"><div class="spinner"></div></div>
+        </template>
+
+        <template x-if="!audit.loading && audit.error">
+          <div class="card empty">
+            <div class="big" aria-hidden="true">🛡</div>
+            <p style="font-weight:600;color:var(--danger);">Audit trail unavailable</p>
+            <p class="muted" style="font-size:13px;margin-top:6px;" x-text="audit.error"></p>
+          </div>
+        </template>
+
+        <template x-if="!audit.loading && !audit.error && audit.items.length === 0">
+          <div class="card empty">
+            <div class="big" aria-hidden="true">🛡</div>
+            <p>No audit entries for these filters.</p>
+          </div>
+        </template>
+
+        <template x-if="!audit.loading && !audit.error && audit.items.length > 0">
+          <div>
+            <div class="table-wrap">
+              <table class="audit-table">
+                <thead>
+                  <tr><th>When</th><th>App</th><th>Event</th><th>Subject</th><th>Actor</th></tr>
+                </thead>
+                <template x-for="e in audit.items" :key="e.id">
+                  <tbody>
+                    <tr class="audit-row" :class="{'expanded': audit.expanded === e.id}" @click="toggleAuditEntry(e.id)">
+                      <td class="muted audit-when" x-text="auditTime(e.time)"></td>
+                      <td><span class="tag tag-blue" x-text="e.app"></span></td>
+                      <td>
+                        <span class="mono" x-text="e.entity + '.' + e.action"></span>
+                        <template x-if="e.legacy"><span class="tag tag-binary" title="Copied from the old audit_logs">legacy</span></template>
+                      </td>
+                      <td>
+                        <button type="button" class="audit-subject mono" :title="'Show only ' + e.subject"
+                                x-show="e.subject" x-text="e.subject" @click.stop="filterAuditSubject(e.subject)"></button>
+                      </td>
+                      <td class="mono" x-text="e.actor || '—'"></td>
+                    </tr>
+                    <tr x-show="audit.expanded === e.id" class="audit-detail-row">
+                      <td colspan="5">
+                        <div class="audit-detail">
+                          <template x-if="auditChangedKeys(e).length > 0">
+                            <table class="audit-kv">
+                              <thead><tr><th>Field</th><th>Before</th><th>After</th></tr></thead>
+                              <tbody>
+                                <template x-for="k in auditChangedKeys(e)" :key="k">
+                                  <tr :class="{'changed': (e.before || {})[k] !== (e.after || {})[k]}">
+                                    <td class="mono" x-text="k"></td>
+                                    <td class="payload" x-text="(e.before || {})[k] ?? '—'"></td>
+                                    <td class="payload" x-text="(e.after || {})[k] ?? '—'"></td>
+                                  </tr>
+                                </template>
+                              </tbody>
+                            </table>
+                          </template>
+                          <template x-if="auditPairs(e.details).length > 0">
+                            <table class="audit-kv">
+                              <thead><tr><th>Detail</th><th>Value</th></tr></thead>
+                              <tbody>
+                                <template x-for="[k, v] in auditPairs(e.details)" :key="k">
+                                  <tr><td class="mono" x-text="k"></td><td class="payload" x-text="v"></td></tr>
+                                </template>
+                              </tbody>
+                            </table>
+                          </template>
+                          <div class="muted audit-meta">
+                            <span>Type <span class="mono" x-text="e.type"></span></span>
+                            <span>Id <span class="mono" x-text="e.id"></span></span>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </template>
+              </table>
+            </div>
+            <div class="audit-pager">
+              <button class="btn btn-ghost" style="font-size:12px;" :disabled="audit.page === 0" @click="auditGo(-1)">← Newer</button>
+              <span class="muted" x-text="'Page ' + (audit.page + 1) + ' of ' + auditPages()"></span>
+              <button class="btn btn-ghost" style="font-size:12px;" :disabled="audit.page + 1 >= auditPages()" @click="auditGo(1)">Older →</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </template>
 
     <!-- ─ Bridges panel ─ -->
     <template x-if="bridgesView">
@@ -495,6 +691,9 @@
                   </div>
                   <div class="bridge-card-title">
                     <span class="bridge-name" x-text="bridge.name"></span>
+                    <template x-if="bridge.system">
+                      <span class="tag tag-orange" title="Registered by an app at start-up (e.g. its audit bridge, ADR 0009)">system</span>
+                    </template>
                     <template x-if="bridge.description">
                       <span class="bridge-description" x-text="bridge.description"></span>
                     </template>
@@ -580,7 +779,7 @@
     </template>
 
     <!-- ─ Overview: cluster (tenants), tenant (namespaces) or namespace (topics) — Catametricas statistics ─ -->
-    <template x-if="!bridgesView && !sel.topic">
+    <template x-if="!bridgesView && !auditView && !sel.topic">
       <section class="overview" aria-labelledby="overview-title">
         <header class="overview-head">
           <div>
@@ -759,7 +958,7 @@
     </template>
 
     <!-- ─ Topic view ─ -->
-    <template x-if="!bridgesView && sel.topic">
+    <template x-if="!bridgesView && !auditView && sel.topic">
       <div>
         <div class="tabs">
           <button class="tab" :class="{active:tab==='stats'}"  @click="tab='stats'">📊 Overview</button>

@@ -8,6 +8,7 @@ import com.catacumbas69.cataponte.dto.TrafficMinuteResponse;
 import com.catacumbas69.cataponte.dto.TrafficTotalResponse;
 import com.catacumbas69.cataponte.service.BridgeManager;
 import com.catacumbas69.cataponte.service.BridgeService;
+import com.catacumbas69.cataponte.service.BridgeValidationException;
 import com.catacumbas69.cataponte.service.TrafficService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -40,6 +41,9 @@ import org.springframework.web.util.UriComponentsBuilder;
 @RestController
 @RequestMapping("/api/v1/bridges")
 public class BridgeController {
+
+    /** Header in which an app names itself when registering a system bridge. */
+    static final String APP_HEADER = "X-Catacumbas69-App";
 
     private final BridgeService service;
     private final BridgeManager manager;
@@ -116,6 +120,28 @@ public class BridgeController {
                                  HttpServletRequest http) {
         return mapper.toResponse(service.update(id, mapper.toDocument(request), request.version(),
                 ClientAddress.of(http)));
+    }
+
+    /**
+     * Creates or updates a system bridge by name (ADR 0009). Apps call this at start-up to register their own
+     * bridges, such as {@code audit-<app>}; it is idempotent and keeps an enabled state changed by a user. The
+     * calling app names itself in {@code X-Catacumbas69-App}, which becomes the actor of the audit event.
+     *
+     * @param name bridge name; must match {@code name} in the body
+     * @param request the definition
+     * @param http current request, for the actor
+     * @return the stored bridge
+     */
+    @Operation(summary = "Create or update a system bridge by name")
+    @PutMapping("/system/{name}")
+    public BridgeResponse registerSystem(@PathVariable String name, @Valid @RequestBody BridgeRequest request,
+                                         HttpServletRequest http) {
+        if (!name.equals(request.name())) {
+            throw new BridgeValidationException("name", "must match the name in the path");
+        }
+        String app = http.getHeader(APP_HEADER);
+        String actor = app != null && !app.isBlank() ? app.strip() : ClientAddress.of(http);
+        return mapper.toResponse(service.registerSystem(mapper.toDocument(request), actor));
     }
 
     /**

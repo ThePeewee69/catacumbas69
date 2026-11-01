@@ -23,13 +23,18 @@ Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs
   MongoDB every 5 s with `$inc` bulk upserts — `bridge_traffic_minutes` (history) and
   `bridge_traffic_totals` (all time), both kept forever. `SOURCE` counts messages delivered to every
   destination; `DESTINATION` counts each accepted send. If MongoDB is down the counts wait in memory.
-- **Audit**: every bridge change is inserted into `audit_logs` with the definition before and after and
-  the client address (`X-Forwarded-For` from Catapulsar), see ADR 0006. Schema migrations are recorded
-  too (`MIGRATE_BRIDGE`, user `passario`).
-- **Events** (ADR 0008, orch.md §4.4): every audited change is also published as
+- **Audit = events** (ADR 0008/0009, orch.md §4.4): every bridge change is published as
   `com.catacumbas69.cataponte.bridge.<created|updated|deleted|enabled|disabled|migrated>.v1` on
-  `catacumbas69/cataponte/events`, keyed by bridge id, with the definition before and after (flattened).
-  The namespace and topic are created at start-up through the Pulsar admin API (`PULSAR_SERVICE_URL`).
+  `catacumbas69/cataponte/events`, keyed by bridge id. Each event carries the definition before and after
+  (flattened) and the actor: the client address from Catapulsar's `X-Forwarded-For`, the app name for system
+  bridges, or `cataponte` for its own migrations. Nothing is written to `audit_logs` any more; Cataudit
+  owns the trail. The namespace and topic are created at start-up through the Pulsar admin API
+  (`PULSAR_SERVICE_URL`).
+- **System bridges** (ADR 0009): each app registers its `audit-<app>` bridge
+  (`<app>/events` → `cataudit/audit`) at start-up with `PUT /api/v1/bridges/system/{name}`. Cataponte
+  registers its own `audit-cataponte` in-process. The call is idempotent: nothing changes when the definition
+  already matches, and an enabled state a user changed is kept. System bridges have `system: true` (a
+  badge in the UI) and are otherwise normal bridges.
 - Run **one replica** only (see ADR 0002).
 
 ## Run locally (IntelliJ on necromancer)
@@ -65,6 +70,7 @@ Unit tests need no Docker, MongoDB or Pulsar.
 | `GET` / `POST` | `/api/v1/bridges` | List / create (`201` + `Location`) |
 | `GET` / `PUT` / `DELETE` | `/api/v1/bridges/{id}` | Get / replace (send `version`) / delete (`204`) |
 | `POST` | `/api/v1/bridges/{id}/enable`, `/disable` | Idempotent |
+| `PUT` | `/api/v1/bridges/system/{name}` | Create or update a system bridge by name (apps at start-up; header `X-Catacumbas69-App` = actor) |
 | `GET` | `/api/v1/bridges/status` | Runtime state per bridge: `RUNNING`, `STARTING`, `FAILED`, `BLOCKED` |
 | `GET` | `/api/v1/bridges/traffic` | All-time messages/bytes of every bridge, per role and topic |
 | `GET` | `/api/v1/bridges/{id}/traffic` | All-time counts of one bridge |

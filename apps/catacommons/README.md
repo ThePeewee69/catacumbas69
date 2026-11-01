@@ -12,6 +12,7 @@ Engineering rules: [`../orch.md`](../orch.md) §4.4 Events. Decisions: [`../docs
 | `EventPublisher` | `publish(entity, verb, subject, EventData)`: builds a CloudEvent 1.0 (`com.catacumbas69.<app>.<entity>.<verb>.v1`, source `/catacumbas69/<app>`) and sends it to `catacumbas69/<app>/events`, key = subject |
 | `RetryingSenderFactory` | Senders for the app's other topics, with the same retries (Catapulsar uses it for the settings topic) |
 | `PulsarProvisioner` | Once the app is ready, creates the tenant `catacumbas69` (if missing), the namespace `catacumbas69/<app>` with its policies, and every `TopicSpec` bean (the events topic is always one), with its schema |
+| `AuditBridgeRegistrar` | Once the app is ready, registers its system bridge `audit-<app>` (`<app>/events` → `cataudit/audit`) in Cataponte through a `SystemBridgeRegistry`. The default registry calls `PUT /api/v1/bridges/system/{name}` at a `CataponteLocation`. Catapulsar provides its own location (the editable URL), Cataponte its own in-process registry (ADR 0009) |
 
 The app must provide a `PulsarClient`, a `PulsarAdmin` and `catacommons.app=<app>`.
 
@@ -44,6 +45,9 @@ succeeds. "Already exists" counts as success, and policies are set again on ever
 | `catacommons.provisioning.events-retention-time` / `events-retention-size` | `7d` / `1GB` (namespace) |
 | `catacommons.provisioning.events-backlog-quota` | `1GB`, `producer_exception` (namespace) |
 | `catacommons.provisioning.compaction-threshold` | `1MB` (compacted topics, plus infinite retention) |
+| `catacommons.audit-bridge.enabled` | `true` (`false` in Cataudit) |
+| `catacommons.audit-bridge.cataponte-url` | `http://cataponte:8082`; set it from `CATAPONTE_URL` |
+| `catacommons.audit-bridge.timeout` / `retry-interval` / `max-retry-interval` | `5s` / `10s` / `5m` |
 
 Metric: `catacommons_messages_total{topic, outcome=sent|retried|failed}`.
 

@@ -54,6 +54,7 @@ class SettingsPublisherTest {
         verify(sender).send(Setting.COLLECT_INTERVAL_SECONDS_KEY, new SettingValue("30"));
         verify(sender).send(Setting.CATAPONTE_URL_KEY, null);
         verify(sender).send(Setting.REFRESH_INTERVAL_SECONDS_KEY, null);
+        verify(sender).send(Setting.CATAUDIT_URL, null);
     }
 
     @Test

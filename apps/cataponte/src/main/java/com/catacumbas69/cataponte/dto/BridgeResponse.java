@@ -16,6 +16,7 @@ import java.util.List;
  * @param preserveProperties whether message properties are copied
  * @param ordered whether source order is kept (effective value)
  * @param maxInFlight unconfirmed messages allowed (effective value)
+ * @param system registered by an app at start-up (e.g. an audit bridge, ADR 0009)
  * @param version version to send back on update
  * @param createdAt creation time
  * @param updatedAt last change time
@@ -31,6 +32,7 @@ public record BridgeResponse(
         boolean preserveProperties,
         boolean ordered,
         int maxInFlight,
+        boolean system,
         Long version,
         Instant createdAt,
         Instant updatedAt) {

@@ -5,7 +5,9 @@ import com.catacumbas69.cataponte.model.BridgeDocument;
 import com.catacumbas69.cataponte.repository.BridgeRepository;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Sort;
@@ -13,8 +15,8 @@ import org.springframework.stereotype.Service;
 
 /**
  * Creates, changes and deletes bridge definitions. Only the stored definition changes here; the
- * {@link BridgeManager} applies it to the running workers (ARCH-4). Every change is recorded in
- * {@code audit_logs} by {@link AuditLog}.
+ * {@link BridgeManager} applies it to the running workers (ARCH-4). Every change is published as an event
+ * by {@link AuditLog}.
  */
 @Service
 public class BridgeService {
@@ -80,6 +82,47 @@ public class BridgeService {
             rejectLoops(draft);
             BridgeDocument saved = save(draft);
             audit.bridgeChanged(user, AuditAction.CREATE_BRIDGE, null, saved);
+            return saved;
+        }
+    }
+
+    /**
+     * Creates or updates a system bridge by name (ADR 0009), for apps registering their own bridges at
+     * start-up. Idempotent: nothing is written when the stored definition already matches. An enabled state
+     * changed by a user is kept on update.
+     *
+     * @param draft the definition; its name identifies the bridge
+     * @param user the calling app's name, for the audit trail
+     * @return the stored bridge
+     * @throws BridgeValidationException if a cross-field rule is broken or the bridge would close a loop
+     */
+    public BridgeDocument registerSystem(BridgeDocument draft, String user) {
+        normalize(draft);
+        validate(draft);
+        draft.setSystem(true);
+        synchronized (topologyLock) {
+            Optional<BridgeDocument> existing = repository.findByName(draft.getName());
+            if (existing.isEmpty()) {
+                try {
+                    return create(draft, user);
+                } catch (BridgeConflictException e) {
+                    existing = repository.findByName(draft.getName());
+                    if (existing.isEmpty()) {
+                        throw e;
+                    }
+                }
+            }
+            BridgeDocument current = existing.get();
+            draft.setEnabled(current.isEnabled());
+            if (current.isSystem() && sameDefinition(current, draft)) {
+                return current;
+            }
+            BridgeDocument before = copyOf(current);
+            current.copyDefinitionFrom(draft);
+            current.setSystem(true);
+            rejectLoops(current);
+            BridgeDocument saved = save(current);
+            audit.bridgeChanged(user, AuditAction.UPDATE_BRIDGE, before, saved);
             return saved;
         }
     }
@@ -160,7 +203,19 @@ public class BridgeService {
         copy.copyDefinitionFrom(bridge);
         copy.setId(bridge.getId());
         copy.setVersion(bridge.getVersion());
+        copy.setSystem(bridge.isSystem());
         return copy;
+    }
+
+    /** Same user-visible definition, ignoring identity, version and the system flag. */
+    private static boolean sameDefinition(BridgeDocument a, BridgeDocument b) {
+        Map<String, Object> left = AuditLog.snapshot(a);
+        Map<String, Object> right = AuditLog.snapshot(b);
+        left.remove("version");
+        right.remove("version");
+        left.remove("system");
+        right.remove("system");
+        return left.equals(right);
     }
 
     /** Collapses legacy and duplicate destinations into the {@code destinations} list (MONGO-2). */

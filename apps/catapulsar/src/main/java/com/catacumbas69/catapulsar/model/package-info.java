@@ -1,4 +1,4 @@
 /**
- * MongoDB documents owned by Catapulsar (ARCH-1): the {@code audit_logs} collection.
+ * MongoDB documents of Catapulsar (ARCH-1): its settings, and the names of Catametricas' collections it reads.
  */
 package com.catacumbas69.catapulsar.model;

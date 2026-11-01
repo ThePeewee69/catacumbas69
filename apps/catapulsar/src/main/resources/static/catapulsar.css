@@ -357,3 +357,24 @@ td .payload { font-family: var(--mono); font-size: 12px; max-width: 320px; word-
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ── Audit panel (Cataudit, ADR 0009) ── */
+.audit-panel { padding: 24px; max-width: 1180px; margin: 0 auto; }
+.audit-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; padding: 14px 16px; }
+.audit-filters .field { min-width: 130px; margin: 0; }
+.audit-filters .audit-filter-wide { flex: 1; min-width: 240px; }
+.audit-filter-actions { display: flex; gap: 8px; }
+.audit-table .audit-row { cursor: pointer; }
+.audit-table .audit-row.expanded td { background: rgba(99,102,241,.08); }
+.audit-table .audit-when { white-space: nowrap; }
+.audit-table .tag { margin-left: 6px; }
+.audit-table td:nth-child(2) .tag { margin-left: 0; }
+.audit-subject { background: none; border: none; padding: 0; cursor: pointer; text-align: left; font-family: var(--mono); font-size: 12px; color: var(--accent2); word-break: break-all; }
+.audit-subject:hover { text-decoration: underline; }
+.audit-detail-row td { background: var(--sidebar); }
+.audit-detail { display: flex; flex-direction: column; gap: 12px; padding: 4px 0; }
+.audit-kv { width: auto; min-width: 50%; border: 1px solid var(--border); border-radius: 6px; }
+.audit-kv th, .audit-kv td { padding: 6px 10px; }
+.audit-kv tr.changed td { color: var(--warn); }
+.audit-meta { display: flex; gap: 18px; flex-wrap: wrap; font-size: 11px; }
+.audit-pager { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 14px; }

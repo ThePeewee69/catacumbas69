@@ -18,6 +18,7 @@ import org.springframework.validation.annotation.Validated;
  * @param mongo MongoDB client timeouts
  * @param ui web UI defaults
  * @param catametricas Catametricas defaults shared through {@code pulsario_settings}
+ * @param cataudit Cataudit HTTP client settings (audit view, ADR 0009)
  */
 @Validated
 @ConfigurationProperties(prefix = "catapulsar")
@@ -26,7 +27,8 @@ public record CatapulsarProperties(
         @Valid @NotNull Cataponte cataponte,
         @Valid @NotNull Mongo mongo,
         @Valid @NotNull Ui ui,
-        @Valid @NotNull Catametricas catametricas) {
+        @Valid @NotNull Catametricas catametricas,
+        @Valid @NotNull Cataudit cataudit) {
 
     /** Smallest auto-refresh interval the UI may use, in seconds. */
     public static final int MIN_REFRESH_SECONDS = 2;
@@ -83,6 +85,19 @@ public record CatapulsarProperties(
             @NotNull Duration producerIdleTimeout,
             @Min(1) @Max(1_000) int maxCachedProducers,
             @Min(1) @Max(1_000) int maxPeekCount) {
+    }
+
+    /**
+     * Cataudit client settings (ADR 0009, RES-2).
+     *
+     * @param url Cataudit base URL
+     * @param connectTimeout HTTP connect timeout
+     * @param readTimeout HTTP read timeout
+     */
+    public record Cataudit(
+            @NotBlank String url,
+            @NotNull Duration connectTimeout,
+            @NotNull Duration readTimeout) {
     }
 
     /**

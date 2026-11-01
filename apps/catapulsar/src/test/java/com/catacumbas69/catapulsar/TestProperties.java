@@ -24,6 +24,8 @@ public final class TestProperties {
                         Duration.ofSeconds(1)),
                 new CatapulsarProperties.Mongo(Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(1)),
                 new CatapulsarProperties.Ui(10),
-                new CatapulsarProperties.Catametricas(60));
+                new CatapulsarProperties.Catametricas(60),
+                new CatapulsarProperties.Cataudit("http://localhost:8084", Duration.ofSeconds(1),
+                        Duration.ofSeconds(1)));
     }
 }

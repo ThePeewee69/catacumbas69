@@ -17,6 +17,9 @@ public class Setting {
     /** Id of the Cataponte base URL setting. */
     public static final String CATAPONTE_URL = "passario.url";
 
+    /** Id of the Cataudit base URL setting (ADR 0009); new, so it already uses the owner's name. */
+    public static final String CATAUDIT_URL = "catapulsar.cataudit-url";
+
     /** Id of the UI auto-refresh interval setting, in seconds. */
     public static final String REFRESH_INTERVAL_SECONDS = "ui.refresh-interval-seconds";
 
@@ -34,6 +37,7 @@ public class Setting {
 
     private static final Map<String, String> TOPIC_KEYS = Map.of(
             CATAPONTE_URL, CATAPONTE_URL_KEY,
+            CATAUDIT_URL, CATAUDIT_URL,
             REFRESH_INTERVAL_SECONDS, REFRESH_INTERVAL_SECONDS_KEY,
             COLLECT_INTERVAL_SECONDS, COLLECT_INTERVAL_SECONDS_KEY);
 

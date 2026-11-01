@@ -68,6 +68,7 @@ public class BridgeMapper {
                 bridge.isPreserveProperties(),
                 bridge.isOrderedEffective(),
                 bridge.getMaxInFlight() != null ? bridge.getMaxInFlight() : defaultMaxInFlight,
+                bridge.isSystem(),
                 bridge.getVersion(),
                 bridge.getCreatedAt(),
                 bridge.getUpdatedAt());

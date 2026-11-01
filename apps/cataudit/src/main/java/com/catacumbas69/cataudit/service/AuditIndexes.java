@@ -1,6 +1,6 @@
-package com.catacumbas69.catapulsar.service;
+package com.catacumbas69.cataudit.service;
 
-import com.catacumbas69.catapulsar.model.AuditEntry;
+import com.catacumbas69.cataudit.model.AuditEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Sort;
@@ -11,8 +11,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Creates the {@code audit_logs} indexes (MONGO-3). Retries every 30 s until it succeeds, so the
- * application starts even when MongoDB is down (RES-1). Index creation is idempotent.
+ * Creates the {@code cataudit_events} indexes (MONGO-3), one per filter of the query API, each ending with the
+ * time so pages come out in order. Retries every 30 s until it succeeds, so Cataudit starts while MongoDB is
+ * down (RES-1). Index creation is idempotent.
  */
 @Component
 public class AuditIndexes {
@@ -38,16 +39,21 @@ public class AuditIndexes {
             return;
         }
         try {
-            IndexOperations indexes = mongoTemplate.indexOps(AuditEntry.class);
-            indexes.createIndex(new Index().on("timestamp", Sort.Direction.DESC).named("audit_timestamp"));
-            indexes.createIndex(new Index().on("topic", Sort.Direction.ASC)
-                    .on("timestamp", Sort.Direction.DESC).named("audit_topic_timestamp"));
-            indexes.createIndex(new Index().on("action", Sort.Direction.ASC)
-                    .on("timestamp", Sort.Direction.DESC).named("audit_action_timestamp"));
+            IndexOperations indexes = mongoTemplate.indexOps(AuditEvent.class);
+            indexes.createIndex(new Index().on("time", Sort.Direction.DESC).named("time"));
+            indexes.createIndex(byTime("app"));
+            indexes.createIndex(byTime("subject"));
+            indexes.createIndex(byTime("actor"));
+            indexes.createIndex(new Index().on("entity", Sort.Direction.ASC).on("action", Sort.Direction.ASC)
+                    .on("time", Sort.Direction.DESC).named("entity_action_time"));
             created = true;
             LOG.info("Audit indexes ready");
         } catch (RuntimeException e) {
             LOG.warn("Audit indexes pending, will retry: {}", e.getMessage());
         }
+    }
+
+    private static Index byTime(String field) {
+        return new Index().on(field, Sort.Direction.ASC).on("time", Sort.Direction.DESC).named(field + "_time");
     }
 }

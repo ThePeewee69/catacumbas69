@@ -1,6 +1,6 @@
 # 9. Cataudit owns the audit trail, fed by Cataponte bridges
 
-Date: 2026-10-31 · Status: Proposed · Supersedes: ADR 0006 (once implemented)
+Date: 2026-10-31 · Status: Accepted (implemented 2026-10-31) · Supersedes: ADR 0006
 
 ## Context
 
@@ -31,3 +31,28 @@ know the collection's shape and be able to write to it.
   auditing that app, so they are marked as system bridges in the UI.
 - Because events are only published after commit (ADR 0008), an action whose event could not be published
   is missing from the audit trail; the `ERROR` log with the full event is the fallback.
+
+## Implementation (phase 2, 2026-10-31)
+
+- Registration lives in catacommons (`AuditBridgeRegistrar`). It runs after start-up and is retried with
+  back-off (10 s doubling to 5 min). It calls Cataponte's new
+  **`PUT /api/v1/bridges/system/{name}`**, which creates or updates the bridge by name and does nothing when
+  the definition already matches. Catametricas uses `CATAPONTE_URL`. Catapulsar uses its editable Cataponte
+  URL. Cataponte registers in-process. Cataudit registers nothing.
+- An audit bridge reads with subscription `cataponte-audit-<app>`, type `Failover`, ordered. It is stored
+  with `system: true`. The UI shows a badge, and otherwise it is an ordinary bridge: it can be edited,
+  disabled and deleted. Registering again keeps an enabled state a user changed. A deleted bridge comes back
+  at the app's next start.
+- Cataudit consumes with a `Shared` subscription `cataudit` and reads messages as bytes into the `CloudEvent`
+  record. It inserts with `_id` = event id; a duplicate key counts as success. When MongoDB fails the message
+  is negatively acknowledged and redelivered after 10 s. A message that is not a CloudEvent is logged at
+  `ERROR` and acknowledged.
+- `cataudit_events` keeps the event and also stores `app`, `entity` and `action` split out of the type, and
+  `receivedAt`. Indexes: `time`, and `app`/`subject`/`actor`/`entity+action` each with `time`. Events are
+  kept **forever**.
+- API: `GET /api/v1/audit?app&entity&action&subject(prefix)&actor&from&to&page&size` returns newest first
+  with the total. Also `GET /api/v1/audit/{id}` and `GET /api/v1/audit/facets`. Catapulsar forwards these
+  at `/api/v1/audit/**` to its new audit view.
+- `audit_logs` is copied at every start, with ids `legacy-<ObjectId>` and each old action mapped to today's
+  event type. The collection is **kept**, read-only, until it is deleted by hand. Catapulsar and Cataponte no
+  longer write it; that code is removed.

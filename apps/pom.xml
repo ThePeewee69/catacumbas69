@@ -16,12 +16,13 @@
     <version>1.0.0</version>
     <packaging>pom</packaging>
     <name>catacumbas69 apps</name>
-    <description>Reactor for catacommons, Catapulsar, Cataponte and Catametricas</description>
+    <description>Reactor for catacommons, Catapulsar, Cataponte, Catametricas and Cataudit</description>
 
     <modules>
         <module>catacommons</module>
         <module>catapulsar</module>
         <module>cataponte</module>
         <module>catametricas</module>
+        <module>cataudit</module>
     </modules>
 </project>

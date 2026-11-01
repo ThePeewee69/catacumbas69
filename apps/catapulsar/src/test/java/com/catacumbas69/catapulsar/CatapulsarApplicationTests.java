@@ -17,6 +17,7 @@ import org.springframework.context.ApplicationContext;
         "PULSAR_SERVICE_URL=http://127.0.0.1:1",
         "PULSAR_BROKER_URL=pulsar://127.0.0.1:1",
         "CATAPONTE_URL=http://127.0.0.1:1",
+        "CATAUDIT_URL=http://127.0.0.1:1",
         "spring.data.mongodb.uri=mongodb://127.0.0.1:1/test",
         // The driver logs every failed connection attempt with a stack trace; expected here, so keep it quiet.
         "logging.level.org.mongodb.driver=ERROR"

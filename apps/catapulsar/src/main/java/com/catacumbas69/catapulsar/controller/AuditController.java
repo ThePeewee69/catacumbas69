@@ -1,47 +1,82 @@
 package com.catacumbas69.catapulsar.controller;
 
-import com.catacumbas69.catapulsar.dto.AuditEntryResponse;
-import com.catacumbas69.catapulsar.service.AuditService;
+import com.catacumbas69.catapulsar.service.AuditProxyService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
-import java.util.List;
+import java.util.Set;
+import org.springframework.http.ResponseEntity;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Read access to the audit log, newest first and paginated (API-8).
+ * The audit trail for the UI, read from Cataudit (ADR 0009). Same paths and payloads as Cataudit's
+ * {@code /api/v1/audit}; see Cataudit's OpenAPI for the model.
  */
 @Tag(name = "Audit")
 @RestController
 @RequestMapping("/api/v1/audit")
 public class AuditController {
 
-    private final AuditService audit;
+    /** Query parameters passed on to Cataudit; anything else is dropped. */
+    static final Set<String> FILTERS = Set.of("app", "entity", "action", "subject", "actor", "from", "to", "page",
+            "size");
+
+    private final AuditProxyService audit;
 
     /**
      * Creates the controller.
      *
-     * @param audit audit log
+     * @param audit Cataudit client
      */
-    public AuditController(AuditService audit) {
+    public AuditController(AuditProxyService audit) {
         this.audit = audit;
     }
 
     /**
-     * Returns one page of audit entries.
+     * Searches the audit trail, newest first: {@code app}, {@code entity}, {@code action}, {@code subject}
+     * (prefix), {@code actor}, {@code from}/{@code to} (ISO-8601), {@code page}, {@code size}.
      *
-     * @param page zero-based page number
-     * @param size entries per page (1–100)
-     * @return the entries, newest first
+     * @param params query parameters
+     * @return Cataudit's response
      */
-    @Operation(summary = "Recent audit entries")
+    @Operation(summary = "Search the audit trail (Cataudit)")
     @GetMapping
-    public List<AuditEntryResponse> recent(@RequestParam(defaultValue = "0") @Min(0) int page,
-                                           @RequestParam(defaultValue = "50") @Min(1) @Max(100) int size) {
-        return audit.recent(page, size).stream().map(AuditEntryResponse::from).toList();
+    public ResponseEntity<byte[]> search(@RequestParam MultiValueMap<String, String> params) {
+        MultiValueMap<String, String> filters = new LinkedMultiValueMap<>();
+        params.forEach((name, values) -> {
+            if (FILTERS.contains(name)) {
+                values.stream().filter(value -> value != null && !value.isBlank())
+                        .forEach(value -> filters.add(name, value));
+            }
+        });
+        return audit.search(filters);
+    }
+
+    /**
+     * Returns the apps, entities and actions in use, for the filter lists.
+     *
+     * @return Cataudit's response
+     */
+    @Operation(summary = "Values in use, for filters (Cataudit)")
+    @GetMapping("/facets")
+    public ResponseEntity<byte[]> facets() {
+        return audit.facets();
+    }
+
+    /**
+     * Returns one audit entry.
+     *
+     * @param id event id
+     * @return Cataudit's response
+     */
+    @Operation(summary = "Get one audit entry (Cataudit)")
+    @GetMapping("/{id}")
+    public ResponseEntity<byte[]> get(@PathVariable String id) {
+        return audit.get(id);
     }
 }

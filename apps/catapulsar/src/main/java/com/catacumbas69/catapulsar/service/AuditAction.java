@@ -1,9 +1,9 @@
 package com.catacumbas69.catapulsar.service;
 
 /**
- * Actions recorded in the audit log. The enum name is what is stored in {@code audit_logs}; the entity and
- * verb make the type of the matching event, {@code com.catacumbas69.catapulsar.<entity>.<verb>.v1}
- * (ADR 0008, orch.md §15).
+ * Audited actions. The entity and verb make the type of the event that records them,
+ * {@code com.catacumbas69.catapulsar.<entity>.<verb>.v1} (ADR 0008, orch.md §4.4); the enum names are the
+ * actions of the old {@code audit_logs}.
  */
 public enum AuditAction {
     /** A message was produced. */
@@ -25,8 +25,8 @@ public enum AuditAction {
     /** A runtime setting was changed (details: setting, from, to). */
     CHANGE_SETTING("setting", "changed"),
     /**
-     * A bridge was created. Recorded in {@code audit_logs} by Cataponte since 2026-10-30 (details: bridgeId,
-     * after); Catapulsar publishes {@code bridge.create-requested} events for the requests it forwards.
+     * A bridge creation was requested through Catapulsar ({@code bridge.create-requested}); Cataponte records the
+     * change itself ({@code bridge.created}).
      */
     CREATE_BRIDGE("bridge", "create-requested"),
     /** A bridge was changed. */

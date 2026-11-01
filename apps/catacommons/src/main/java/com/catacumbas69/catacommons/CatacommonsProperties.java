@@ -19,13 +19,15 @@ import org.springframework.validation.annotation.Validated;
  *            events have source {@code /catacumbas69/<app>}
  * @param events event publishing
  * @param provisioning start-up creation of the tenant, namespace and topics
+ * @param auditBridge start-up registration of the app's audit bridge in Cataponte (ADR 0009)
  */
 @Validated
 @ConfigurationProperties(prefix = "catacommons")
 public record CatacommonsProperties(
         @NotBlank @Pattern(regexp = "[a-z][a-z0-9-]*") String app,
         @Valid @NotNull @DefaultValue Events events,
-        @Valid @NotNull @DefaultValue Provisioning provisioning) {
+        @Valid @NotNull @DefaultValue Provisioning provisioning,
+        @Valid @NotNull @DefaultValue AuditBridge auditBridge) {
 
     /**
      * Event publishing (ADR 0008).
@@ -60,5 +62,23 @@ public record CatacommonsProperties(
             @NotNull @DefaultValue("1GB") DataSize eventsRetentionSize,
             @NotNull @DefaultValue("1GB") DataSize eventsBacklogQuota,
             @NotNull @DefaultValue("1MB") DataSize compactionThreshold) {
+    }
+
+    /**
+     * Registration of the {@code audit-<app>} bridge (ADR 0009). Runs in the background and is retried until
+     * Cataponte accepts it.
+     *
+     * @param enabled {@code false} skips it (Cataudit itself has nothing to audit)
+     * @param cataponteUrl Cataponte's base URL ({@code CATAPONTE_URL}); Catapulsar uses its own setting instead
+     * @param timeout connect and read timeout of one attempt
+     * @param retryInterval first wait after a failed attempt; doubled after each failure
+     * @param maxRetryInterval upper bound for the wait
+     */
+    public record AuditBridge(
+            @DefaultValue("true") boolean enabled,
+            @NotBlank @DefaultValue("http://cataponte:8082") String cataponteUrl,
+            @NotNull @DefaultValue("5s") Duration timeout,
+            @NotNull @DefaultValue("10s") Duration retryInterval,
+            @NotNull @DefaultValue("5m") Duration maxRetryInterval) {
     }
 }

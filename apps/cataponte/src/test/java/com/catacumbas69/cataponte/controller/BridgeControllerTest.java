@@ -163,4 +163,23 @@ class BridgeControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.activeCount").value(2));
     }
+
+    @Test
+    void registerSystem_usesTheAppHeaderAsActor() throws Exception {
+        BridgeDocument stored = TestBridges.ordered("b1", DEST_A);
+        stored.setName("orders-fanout");
+        stored.setSystem(true);
+        when(service.registerSystem(any(), eq("catametricas"))).thenReturn(stored);
+
+        mvc.perform(put("/api/v1/bridges/system/orders-fanout").contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Catacumbas69-App", "catametricas").content(VALID_BODY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.system").value(true));
+    }
+
+    @Test
+    void registerSystem_returns400_whenPathAndBodyNamesDiffer() throws Exception {
+        mvc.perform(put("/api/v1/bridges/system/other").contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+                .andExpect(status().isBadRequest());
+    }
 }

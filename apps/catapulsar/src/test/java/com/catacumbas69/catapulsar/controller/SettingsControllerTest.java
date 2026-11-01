@@ -16,6 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.catacumbas69.catapulsar.service.CollectIntervalService;
 import com.catacumbas69.catapulsar.service.InvalidSettingException;
 import com.catacumbas69.catapulsar.service.CataponteEndpoint;
+import com.catacumbas69.catapulsar.service.CatauditEndpoint;
 import com.catacumbas69.catapulsar.service.RefreshIntervalService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,9 @@ class SettingsControllerTest {
 
     @MockitoBean
     private CataponteEndpoint cataponte;
+
+    @MockitoBean
+    private CatauditEndpoint cataudit;
 
     @MockitoBean
     private RefreshIntervalService refresh;
@@ -187,5 +191,23 @@ class SettingsControllerTest {
                 .andExpect(status().isOk());
 
         verify(cataponte).reset(any());
+    }
+
+    @Test
+    void cataudit_getChangeAndReset() throws Exception {
+        when(cataudit.url()).thenReturn("http://localhost:8084");
+        when(cataudit.defaultUrl()).thenReturn("http://cataudit:8084");
+        when(cataudit.isCustom()).thenReturn(true);
+
+        mvc.perform(get("/api/v1/settings/cataudit"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.url").value("http://localhost:8084"))
+                .andExpect(jsonPath("$.defaultUrl").value("http://cataudit:8084"));
+        mvc.perform(put("/api/v1/settings/cataudit").header("X-Forwarded-For", "10.0.0.9")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"url\":\"http://localhost:8084\"}"))
+                .andExpect(status().isOk());
+        verify(cataudit).change("http://localhost:8084", "10.0.0.9");
+        mvc.perform(delete("/api/v1/settings/cataudit")).andExpect(status().isOk());
+        verify(cataudit).reset(any());
     }
 }

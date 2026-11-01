@@ -5,6 +5,13 @@ const AUTO_REFRESH_KEY = 'autoRefresh';
 /** Re-read the shared refresh interval from the server every this many ticks. */
 const INTERVAL_RELOAD_TICKS = 6;
 
+/** Audit trail API, served by Catapulsar and forwarded to Cataudit (ADR 0009). */
+const AUDIT_API = '/api/v1/audit';
+/** Audit period choices: label → milliseconds back from now (null = everything). */
+const AUDIT_PERIODS = { '1h': 3600e3, '24h': 86400e3, '7d': 7 * 86400e3, '30d': 30 * 86400e3, all: null };
+/** Audit entries per page. */
+const AUDIT_PAGE_SIZE = 50;
+
 /** Overview choices remembered per browser. */
 const OVERVIEW_PERIODS = ['1h', '24h', '7d', '30d'];
 const OVERVIEW_METRICS = { in: 'Published', out: 'Delivered', backlog: 'Backlog' };
@@ -86,6 +93,16 @@ function app() {
       dstFilter: '',
     },
 
+    // ── Audit trail (Cataudit, ADR 0009) ───────────────────────────────────
+    auditView: false,
+    audit: {
+      items: [], total: 0, page: 0, loading: false, error: '', expanded: null,
+      settings: { url: '', defaultUrl: '', custom: false, draft: '', saving: false, healthState: null, healthMsg: '' },
+      facets: { apps: [], entities: [], actions: [] },
+      filters: { app: '', entity: '', action: '', subject: '', actor: '',
+                 period: storedChoice('auditPeriod', '24h', Object.keys(AUDIT_PERIODS)) },
+    },
+
     // ── Init ───────────────────────────────────────────────────────────────
     async init() {
       await this.loadRefreshInterval();
@@ -117,7 +134,8 @@ function app() {
 
     /**
      * Refreshes everything on screen that only reads: the sidebar lists, Overview statistics, the
-     * subscription list, and in the Bridges panel the bridge list, status and traffic counts. Backlog
+     * subscription list, in the Bridges panel the bridge list, status and traffic counts, and in the Audit
+     * panel the current page. Backlog
      * peek is never repeated automatically because each peek is written to the audit log. Nothing is
      * cleared and no spinner is shown; errors are ignored and the next tick retries. Skipped while
      * switched off, while the browser tab is hidden, or while the previous refresh is still running.
@@ -130,6 +148,8 @@ function app() {
         const work = [this.refreshSidebar()];
         if (this.bridgesView) {
           work.push(this.refreshBridgeList(), this.loadBridgeStatus());
+        } else if (this.auditView) {
+          work.push(this.loadAudit(true));
         } else if (this.sel.topic && this.tab === 'stats' && this.stats) {
           work.push(this.refreshStats());
         } else if (this.sel.topic && this.tab === 'subs') {
@@ -227,7 +247,7 @@ function app() {
 
     /** Shows the whole-cluster overview (logo and first breadcrumb). */
     showCluster() {
-      if (this.bridgesView) this.closeBridges();
+      this.closePanels();
       this.sel = { tenant: null, namespace: null, topic: null };
       this.namespaces = []; this.topics = []; this.stats = null; this.subscriptions = [];
       this.loadOverview();
@@ -420,14 +440,16 @@ function app() {
     async openSettings() {
       this.settings.open = true;
       this.bridges.settings.healthState = null;
-      await Promise.all([this.loadCataponteSettings(), this.loadCollectInterval()]);
+      this.audit.settings.healthState = null;
+      await Promise.all([this.loadCataponteSettings(), this.loadCatauditSettings(), this.loadCollectInterval()]);
       this.bridges.settings.draft = this.bridges.settings.url;
+      this.audit.settings.draft = this.audit.settings.url;
       this.collect.draft = this.collect.seconds;
     },
 
     /**
-     * Saves the Pulsar label (this browser) and whatever changed on the server (Cataponte URL, Catametricas
-     * interval; both audited). The dialog stays open if a server change is refused.
+     * Saves the Pulsar label (this browser) and whatever changed on the server (Cataponte and Cataudit URLs,
+     * Catametricas interval; all audited). The dialog stays open if a server change is refused.
      */
     async saveSettings() {
       try { localStorage.setItem('pulsarUrl', this.settings.pulsarUrl); } catch { /* label not remembered */ }
@@ -435,6 +457,11 @@ function app() {
       let changed = false;
       if (s.draft && s.draft !== s.url) {
         if (!await this.changeCataponteUrl('PUT', { url: s.draft })) return;
+        changed = true;
+      }
+      const a = this.audit.settings;
+      if (a.draft && a.draft !== a.url) {
+        if (!await this.changeCatauditUrl('PUT', { url: a.draft })) return;
         changed = true;
       }
       if (Number(this.collect.draft) !== this.collect.seconds) {
@@ -481,6 +508,20 @@ function app() {
         const status = await this.bridgesApi(`${BRIDGES_API}/status`);
         s.healthState = 'ok';
         s.healthMsg = `${s.url} · ${status.running ?? 0} bridge(s) running`;
+      } catch (e) {
+        s.healthState = 'error';
+        s.healthMsg = e.message;
+      }
+    },
+
+    /** Calls Cataudit through Catapulsar at the URL in use (save first to test a new one). */
+    async checkCataudit() {
+      const s = this.audit.settings;
+      s.healthState = 'checking'; s.healthMsg = '';
+      try {
+        const facets = await this.api(`${AUDIT_API}/facets`);
+        s.healthState = 'ok';
+        s.healthMsg = `${s.url} · apps: ${(facets.apps || []).join(', ') || 'none yet'}`;
       } catch (e) {
         s.healthState = 'error';
         s.healthMsg = e.message;
@@ -596,7 +637,7 @@ function app() {
     },
 
     async selectTenant(t) {
-      if (this.bridgesView) this.closeBridges();
+      this.closePanels();
       this.sel = { tenant: t, namespace: null, topic: null };
       this.loadOverview();
       this.namespaces = []; this.topics = [];
@@ -608,7 +649,7 @@ function app() {
     },
 
     async selectNamespace(ns) {
-      if (this.bridgesView) this.closeBridges();
+      this.closePanels();
       this.sel = { ...this.sel, namespace: ns, topic: null };
       this.loadOverview();
       this.topics = []; this.stats = null; this.subscriptions = [];
@@ -619,7 +660,7 @@ function app() {
     },
 
     async selectTopic(t) {
-      if (this.bridgesView) this.closeBridges();   // leaving the Bridges panel
+      this.closePanels();   // leaving the Bridges or Audit panel
       this.sel = { ...this.sel, topic: t };
       this.tab = 'stats'; this.stats = null;
       this.produce = { payload: '', key: '', lastId: null };
@@ -769,8 +810,185 @@ function app() {
       finally { if (this.backlog.sub === sub) this.loading.backlog = false; }
     },
 
+    /** Leaves the Bridges or Audit panel, e.g. when a tenant, namespace or topic is selected. */
+    closePanels() {
+      if (this.bridgesView) this.closeBridges();
+      if (this.auditView) this.closeAudit();
+    },
+
+    // ── Audit trail ────────────────────────────────────────────────────────
+    openAudit() {
+      if (this.bridgesView) this.closeBridges();
+      this.auditView = true;
+      this.loadCatauditSettings();
+      this.audit.page = 0;
+      this.audit.expanded = null;
+      this.loadAuditFacets();
+      this.loadAudit();
+    },
+
+    // ── Cataudit URL (stored in MongoDB, audited) ───────────────────────────
+    async loadCatauditSettings() {
+      try {
+        Object.assign(this.audit.settings, await this.api('/api/v1/settings/cataudit'));
+      } catch (e) { this.notify('Settings: ' + e.message, 'error'); }
+    },
+
+    async resetCatauditUrl() {
+      if (!confirm(`Go back to the default Cataudit URL ${this.audit.settings.defaultUrl}?`)) return;
+      if (await this.changeCatauditUrl('DELETE')) this.audit.settings.draft = this.audit.settings.url;
+    },
+
+    /**
+     * Saves or resets the Cataudit URL, then reloads the audit trail from the new address.
+     * @param {'PUT'|'DELETE'} method PUT saves `body.url`, DELETE goes back to the default
+     * @param {{url: string}} [body] new URL
+     * @returns {Promise<boolean>} whether the change was saved
+     */
+    async changeCatauditUrl(method, body) {
+      const s = this.audit.settings;
+      s.saving = true;
+      try {
+        const options = { method };
+        if (body) options.body = JSON.stringify(body);
+        Object.assign(s, await this.api('/api/v1/settings/cataudit', options));
+        s.healthState = null;
+        this.notify(`Cataudit URL set to ${s.url}`);
+        if (this.auditView) await Promise.all([this.loadAuditFacets(), this.loadAudit()]);
+        return true;
+      } catch (e) {
+        this.notify('Cataudit URL not saved: ' + e.message, 'error');
+        return false;
+      } finally {
+        s.saving = false;
+      }
+    },
+
+    closeAudit() {
+      this.auditView = false;
+      this.audit.expanded = null;
+    },
+
+    /** Loads the apps, entities and actions in use for the filter lists; failures are ignored. */
+    async loadAuditFacets() {
+      try { this.audit.facets = await this.api(`${AUDIT_API}/facets`); } catch { /* lists stay as they are */ }
+    },
+
+    /**
+     * Query string of the current filters and page.
+     * @returns {string} e.g. `app=catapulsar&from=…&page=0&size=50`
+     */
+    auditQuery() {
+      const f = this.audit.filters;
+      const q = new URLSearchParams();
+      for (const k of ['app', 'entity', 'action', 'actor']) if (f[k]) q.set(k, f[k]);
+      if (f.subject.trim()) q.set('subject', f.subject.trim());
+      const back = AUDIT_PERIODS[f.period];
+      if (back) q.set('from', new Date(Date.now() - back).toISOString());
+      q.set('page', String(this.audit.page));
+      q.set('size', String(AUDIT_PAGE_SIZE));
+      return q.toString();
+    },
+
+    /**
+     * Loads the current page. Silent loads (auto-refresh) show no spinner and keep the list on errors.
+     * @param {boolean} silent true for auto-refresh
+     */
+    async loadAudit(silent = false) {
+      const a = this.audit;
+      const key = JSON.stringify([a.filters, a.page]);
+      if (!silent) a.loading = true;
+      try {
+        const r = await this.api(`${AUDIT_API}?${this.auditQuery()}`);
+        if (key !== JSON.stringify([a.filters, a.page])) return;   // filters or page changed meanwhile
+        if (JSON.stringify(r.items) !== JSON.stringify(a.items)) a.items = r.items;
+        a.total = r.total;
+        a.error = '';
+      } catch (e) {
+        if (!silent) a.error = e.message;
+      } finally {
+        if (!silent) a.loading = false;
+      }
+    },
+
+    /** Applies the filters from the first page and remembers the period in this browser. */
+    applyAuditFilters() {
+      this.audit.page = 0;
+      this.audit.expanded = null;
+      try { localStorage.setItem('auditPeriod', this.audit.filters.period); } catch { /* not persisted */ }
+      this.loadAudit();
+    },
+
+    clearAuditFilters() {
+      Object.assign(this.audit.filters, { app: '', entity: '', action: '', subject: '', actor: '' });
+      this.applyAuditFilters();
+    },
+
+    /**
+     * Shows the entries about one subject (click on a subject in the list).
+     * @param {string} subject topic, bridge id, setting key…
+     */
+    filterAuditSubject(subject) {
+      this.audit.filters.subject = subject;
+      this.applyAuditFilters();
+    },
+
+    /** @returns {number} number of pages for the current filters */
+    auditPages() {
+      return Math.max(1, Math.ceil(this.audit.total / AUDIT_PAGE_SIZE));
+    },
+
+    /**
+     * Moves to another page.
+     * @param {number} delta -1 for newer, +1 for older
+     */
+    auditGo(delta) {
+      const page = this.audit.page + delta;
+      if (page < 0 || page >= this.auditPages()) return;
+      this.audit.page = page;
+      this.audit.expanded = null;
+      this.loadAudit();
+    },
+
+    /**
+     * @param {string} id entry id
+     */
+    toggleAuditEntry(id) {
+      this.audit.expanded = this.audit.expanded === id ? null : id;
+    },
+
+    /**
+     * @param {string} iso ISO-8601 instant
+     * @returns {string} local date and time, to the second
+     */
+    auditTime(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      return d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
+    },
+
+    /**
+     * Rows of a before/after/details map, sorted by key.
+     * @param {Object<string, string>|null} values the map
+     * @returns {Array<[string, string]>} key/value pairs
+     */
+    auditPairs(values) {
+      return values ? Object.entries(values).sort(([a], [b]) => a.localeCompare(b)) : [];
+    },
+
+    /**
+     * Keys of before and after together, for the change table.
+     * @param {Object} entry audit entry
+     * @returns {string[]} sorted keys
+     */
+    auditChangedKeys(entry) {
+      const keys = new Set([...Object.keys(entry.before || {}), ...Object.keys(entry.after || {})]);
+      return [...keys].sort();
+    },
+
     // ── Bridges ────────────────────────────────────────────────────────────
     openBridges() {
+      if (this.auditView) this.closeAudit();
       this.bridgesView = true;
       this.loadCataponteSettings();
       this.loadBridges();

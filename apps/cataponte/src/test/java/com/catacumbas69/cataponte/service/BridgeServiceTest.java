@@ -242,4 +242,67 @@ class BridgeServiceTest {
         assertThatThrownBy(() -> service.delete("x", USER)).isInstanceOf(BridgeNotFoundException.class);
         verify(repository, never()).deleteById(any());
     }
+
+    @Test
+    void registerSystem_createsTheBridge_whenMissing() {
+        when(repository.findByName("audit-catapulsar")).thenReturn(Optional.empty());
+        BridgeDocument draft = systemDraft();
+
+        BridgeDocument saved = service.registerSystem(draft, "catapulsar");
+
+        assertThat(saved.isSystem()).isTrue();
+        verify(audit).bridgeChanged(eq("catapulsar"), eq(AuditAction.CREATE_BRIDGE), any(), any());
+    }
+
+    @Test
+    void registerSystem_writesNothing_whenTheDefinitionMatches() {
+        BridgeDocument stored = systemDraft();
+        stored.setId("b1");
+        stored.setSystem(true);
+        when(repository.findByName("audit-catapulsar")).thenReturn(Optional.of(stored));
+
+        BridgeDocument result = service.registerSystem(systemDraft(), "catapulsar");
+
+        assertThat(result).isSameAs(stored);
+        verify(repository, never()).save(any());
+        verify(audit, never()).bridgeChanged(any(), any(), any(), any());
+    }
+
+    @Test
+    void registerSystem_updatesTheDefinition_butKeepsADisabledState() {
+        BridgeDocument stored = systemDraft();
+        stored.setId("b1");
+        stored.setSystem(true);
+        stored.setEnabled(false);
+        stored.setDestinations(List.of(new BridgeDestination(DEST_B)));
+        when(repository.findByName("audit-catapulsar")).thenReturn(Optional.of(stored));
+
+        BridgeDocument saved = service.registerSystem(systemDraft(), "catapulsar");
+
+        assertThat(saved.isEnabled()).isFalse();
+        assertThat(saved.isSystem()).isTrue();
+        assertThat(saved.resolveDestinationTopics()).containsExactly(DEST_A);
+        verify(audit).bridgeChanged(eq("catapulsar"), eq(AuditAction.UPDATE_BRIDGE), any(), any());
+    }
+
+    @Test
+    void registerSystem_treatsAConcurrentCreateAsExisting() {
+        BridgeDocument stored = systemDraft();
+        stored.setId("b1");
+        stored.setSystem(true);
+        when(repository.findByName("audit-catapulsar")).thenReturn(Optional.empty(), Optional.of(stored));
+        when(repository.existsByName("audit-catapulsar")).thenReturn(true);
+
+        BridgeDocument result = service.registerSystem(systemDraft(), "catapulsar");
+
+        assertThat(result.getId()).isEqualTo("b1");
+    }
+
+    private static BridgeDocument systemDraft() {
+        BridgeDocument draft = TestBridges.ordered("x", DEST_A);
+        draft.setId(null);
+        draft.setName("audit-catapulsar");
+        draft.setOrdered(true);
+        return draft;
+    }
 }

@@ -1,6 +1,7 @@
 package com.catacumbas69.cataponte.repository;
 
 import com.catacumbas69.cataponte.model.BridgeDocument;
+import java.util.Optional;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
 /**
@@ -24,4 +25,12 @@ public interface BridgeRepository extends MongoRepository<BridgeDocument, String
      * @return {@code true} if another bridge uses the name
      */
     boolean existsByNameAndIdNot(String name, String id);
+
+    /**
+     * Finds a bridge by its unique name.
+     *
+     * @param name bridge name
+     * @return the bridge, if any
+     */
+    Optional<BridgeDocument> findByName(String name);
 }
