@@ -88,6 +88,19 @@ from the link in the Audit panel header, with a "Check Cataudit" button. So does
 default of the Catametricas URL, with a "Check Catametricas" button; when the overviews cannot reach
 Catametricas the panel offers a link to it.
 
+## Run locally (IntelliJ on necromancer)
+
+Run `CatapulsarApplication` (port **8081**). Paste this line into the run configuration's *Environment
+variables* and replace `<user>` and `<password>`; `.idea/` stays out of Git (CFG-2):
+
+```
+PULSAR_SERVICE_URL=http://192.168.86.35:31080;PULSAR_BROKER_URL=pulsar://192.168.86.35:31650;PULSAR_LISTENER_NAME=external;SPRING_DATA_MONGODB_URI=mongodb://<user>:<password>@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true;CATAPONTE_URL=http://localhost:8082;CATAUDIT_URL=http://localhost:8084;CATAMETRICAS_URL=http://localhost:8083
+```
+
+Start it **last**: Cataponte → Cataudit → Catametricas → Catapulsar. Catapulsar calls the other three, so its
+health and panels are fine from the start instead of answering `503` until they are up. The reasons for the
+whole order are in [orch.md §2.1](../orch.md#21-configuration-contract). Open <http://localhost:8081>.
+
 ## Build, test, run
 
 The app is a module of the Maven reactor in `apps/` (with the shared library `catacommons`). From `apps/`:

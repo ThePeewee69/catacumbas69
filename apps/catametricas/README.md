@@ -69,6 +69,20 @@ overviews.
 | `SPRING_DATA_MONGODB_URI` | `mongodb://<user>:<password>@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true` |
 | `CATAMETRICAS_COLLECT_INTERVAL_SECONDS` | *(optional)* default interval, `60` |
 
+IntelliJ *Environment variables* (replace `<user>` and `<password>`; `.idea/` stays out of Git, CFG-2):
+
+```
+PULSAR_SERVICE_URL=http://192.168.86.35:31080;PULSAR_BROKER_URL=pulsar://192.168.86.35:31650;PULSAR_LISTENER_NAME=external;SPRING_DATA_MONGODB_URI=mongodb://<user>:<password>@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true;CATAPONTE_URL=http://localhost:8082
+```
+
+Start it **third**: Cataponte → Cataudit → Catametricas → Catapulsar. It registers its audit bridge in
+Cataponte, and starting it before Catapulsar gives the overviews data sooner (reasons in
+[orch.md §2.1](../orch.md#21-configuration-contract)).
+
+**Second instance**: copy the run configuration, add `;SERVER_PORT=8093` and allow multiple instances (*Modify
+options*). Both collect; each task is claimed by one of them (`catametricas_task_runs`), so nothing is counted
+twice.
+
 Run `CatametricasApplication` (port **8083**). In Catapulsar set `CATAMETRICAS_URL=http://localhost:8083`, or
 change the Catametricas URL in ⚙️ Connection Settings. Settings live in `application.properties` under
 `catametricas.*` (`catametricas.tasks.*` for the task topic).

@@ -113,11 +113,37 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 | `CATAPULSAR_REFRESH_INTERVAL_SECONDS` | Catapulsar | `10` | `10` |
 | `CATAMETRICAS_COLLECT_INTERVAL_SECONDS` | Catapulsar, Catametricas (same value) | `60` | `60` |
 | `CATACOMMONS_*` (optional) | all | see `CatacommonsProperties`: retries `1s,2s,4s`, retention `7d`/`1GB`, backlog quota `1GB` | same |
+| `CATAPONTE_STATUS_WRITEINTERVAL`, `CATAPONTE_STATUS_STALEAFTER` (optional) | Cataponte (status of each replica, ADR 0012) | `PT5S`, `PT30S` | same |
+| `CATAPONTE_CORS_ALLOWED_ORIGINS` (optional) | Cataponte | *(empty: CORS closed)* | *(empty)* |
+| `SERVER_PORT` | all (only for a second local instance) | Catapulsar `8081`, Cataponte `8082`, Catametricas `8083`, Cataudit `8084` | e.g. `8092`, `8093` |
 
 `CATAPONTE_URL`, `CATAUDIT_URL` and `CATAMETRICAS_URL` are defaults; each can be changed at runtime from
 Catapulsar's Connection Settings (`PUT /api/v1/settings/cataponte|cataudit|catametricas`), which stores them in
 `catapulsar_settings`, audits the change and publishes it on the settings topic. Deleting the setting goes back
 to the env var.
+
+**Running locally.** Each app's README has the line to paste into the IntelliJ run configuration's
+*Environment variables* (`KEY=value;KEY=value`, with `<user>` and `<password>` to replace). For a second
+instance, copy the run configuration, add `;SERVER_PORT=…` and allow multiple instances.
+
+**Start order (local): Cataponte → Cataudit → Catametricas → Catapulsar**; second instances at any time after.
+Every app starts alone and retries what it needs, so no order is required; this one avoids gaps and warnings:
+
+1. **Cataponte first.** Every other app registers its `audit-<app>` bridge there at start-up. Without Cataponte
+   the registration is retried after 10 s, doubling up to 5 min, so a late Cataponte delays it by minutes.
+   The first time a bridge runs, its subscription starts at the latest message, so events published before
+   that never reach Cataudit; afterwards the durable subscription keeps them until the bridge runs again.
+2. **Cataudit second.** It consumes `catacumbas69/cataudit/audit`, where every audit bridge writes. Its
+   subscription likewise starts at the latest message the first time and keeps what arrives while it is down
+   afterwards; started early, the audit view also works from the first action.
+3. **Catametricas third.** It registers its own audit bridge in Cataponte, and starting it before Catapulsar
+   gives the overviews data sooner (the first interval of each namespace only sets the starting point).
+4. **Catapulsar last.** It is the UI and calls the other three; started last, its health and panels are fine
+   from the start instead of answering `503` until the others are up. Catametricas uses its default interval
+   until it has read the settings topic Catapulsar publishes (decision 27).
+
+In the cluster there is no start order: the same retries cover it, and after the first deployment the durable
+subscriptions exist.
 
 - **CFG-1 [MUST]** Bind config with `@ConfigurationProperties` records (validated with `@Validated`), not
   scattered `@Value` fields.
