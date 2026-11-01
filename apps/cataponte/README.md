@@ -57,6 +57,23 @@ Run `CataponteApplication` with these environment variables:
 | `PULSAR_LISTENER_NAME` | `external` |
 | `PULSAR_SERVICE_URL` | `http://192.168.86.35:31080` (admin API, namespace creation) |
 | `SPRING_DATA_MONGODB_URI` | `mongodb://<user>:<password>@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true` |
+| `CATAPONTE_STATUS_WRITEINTERVAL` | *(optional)* how often each replica writes its workers' status, `PT5S` |
+| `CATAPONTE_STATUS_STALEAFTER` | *(optional)* reports of other replicas older than this are ignored, `PT30S` |
+| `CATAPONTE_CORS_ALLOWED_ORIGINS` | *(optional)* empty = CORS closed; the browser goes through Catapulsar |
+
+IntelliJ *Environment variables* (replace `<user>` and `<password>`; `.idea/` stays out of Git, CFG-2):
+
+```
+PULSAR_SERVICE_URL=http://192.168.86.35:31080;PULSAR_BROKER_URL=pulsar://192.168.86.35:31650;PULSAR_LISTENER_NAME=external;SPRING_DATA_MONGODB_URI=mongodb://<user>:<password>@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true
+```
+
+Port **8082**. Start it **first**: Cataponte → Cataudit → Catametricas → Catapulsar. Every other app registers its
+`audit-<app>` bridge here at start-up and retries for minutes if Cataponte is not up yet (reasons in
+[orch.md §2.1](../orch.md#21-configuration-contract)).
+
+**Second replica**: copy the run configuration, add `;SERVER_PORT=8092` and allow multiple instances (*Modify
+options*). The Bridges panel then shows "2/2 replicas active" on a `Shared` bridge and "1/2" on a `Failover` one;
+stop one and within 30 s (`stale-after`) it shows "1/1", the other taking over a `Failover` bridge.
 
 In the cluster leave `PULSAR_LISTENER_NAME` empty, use the in-cluster MongoDB URI from a Secret, and set
 `LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs` for JSON logs.

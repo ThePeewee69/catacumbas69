@@ -49,6 +49,17 @@ Errors are RFC 9457 Problem Details (`503` when MongoDB is down). Full contract:
 | `PULSAR_LISTENER_NAME` | `external` |
 | `SPRING_DATA_MONGODB_URI` | `mongodb://<user>:<password>@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true` |
 
+IntelliJ *Environment variables* (replace `<user>` and `<password>`; `.idea/` stays out of Git, CFG-2):
+
+```
+PULSAR_SERVICE_URL=http://192.168.86.35:31080;PULSAR_BROKER_URL=pulsar://192.168.86.35:31650;PULSAR_LISTENER_NAME=external;SPRING_DATA_MONGODB_URI=mongodb://<user>:<password>@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true
+```
+
+Start it **second**, after Cataponte: Cataponte → Cataudit → Catametricas → Catapulsar. Every audit bridge writes
+to `cataudit/audit`; the first time, Cataudit's subscription starts at the latest message, so starting it early
+loses nothing and the audit view works from the first action (reasons in
+[orch.md §2.1](../orch.md#21-configuration-contract)).
+
 Run `CatauditApplication` (port **8084**). In Catapulsar set `CATAUDIT_URL=http://localhost:8084`, or change the
 Cataudit URL in ⚙️ Connection Settings. Settings are
 under `cataudit.*` in `application.properties`.
