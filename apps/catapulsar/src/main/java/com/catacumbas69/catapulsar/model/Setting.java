@@ -1,8 +1,6 @@
 package com.catacumbas69.catapulsar.model;
 
 import java.time.Instant;
-import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -15,11 +13,8 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @Document(collection = Setting.COLLECTION)
 public class Setting {
 
-    /** Catapulsar's settings collection (ADR 0010; {@code pulsario_settings} before phase 3). */
+    /** Catapulsar's settings collection (ADR 0010). */
     public static final String COLLECTION = "catapulsar_settings";
-
-    /** The collection before phase 3, copied and dropped by {@code SettingsMigration}. */
-    public static final String LEGACY_COLLECTION = "pulsario_settings";
 
     /** Cataponte base URL. */
     public static final String CATAPONTE_URL = "catapulsar.cataponte-url";
@@ -35,13 +30,6 @@ public class Setting {
 
     /** Catametricas' collection interval, in seconds; Catametricas reads it from the settings topic. */
     public static final String COLLECT_INTERVAL_SECONDS = "catametricas.collect-interval-seconds";
-
-    /** Ids in {@value #LEGACY_COLLECTION} → ids now. */
-    private static final Map<String, String> LEGACY_IDS = Map.of(
-            "passario.url", CATAPONTE_URL,
-            CATAUDIT_URL, CATAUDIT_URL,
-            "ui.refresh-interval-seconds", REFRESH_INTERVAL_SECONDS,
-            "contario.collect-interval-seconds", COLLECT_INTERVAL_SECONDS);
 
     /** Every shared setting. */
     private static final Set<String> IDS = Set.of(CATAPONTE_URL, CATAUDIT_URL, CATAMETRICAS_URL,
@@ -119,15 +107,5 @@ public class Setting {
      */
     public static Set<String> ids() {
         return IDS;
-    }
-
-    /**
-     * Maps an id of {@value #LEGACY_COLLECTION} to the id it has now.
-     *
-     * @param legacyId id in the old collection
-     * @return the current id, or empty for an unknown id
-     */
-    public static Optional<String> fromLegacyId(String legacyId) {
-        return Optional.ofNullable(LEGACY_IDS.get(legacyId));
     }
 }

@@ -20,7 +20,7 @@ replaced on their own. We already run Pulsar, so it can carry events between our
   |---|---|---|
   | `persistent://catacumbas69/catapulsar/events` | Catapulsar | topic, subscription, backlog, produce, peek, settings actions |
   | `persistent://catacumbas69/catapulsar/settings` | Catapulsar | current value of every shared setting (compacted, ADR 0011) |
-  | `persistent://catacumbas69/cataponte/events` | Cataponte | bridge created/updated/deleted/enabled/disabled/blocked/migrated |
+  | `persistent://catacumbas69/cataponte/events` | Cataponte | bridge created/updated/deleted/enabled/disabled |
   | `persistent://catacumbas69/catametricas/events` | Catametricas | collection completed/failed |
   | `persistent://catacumbas69/catametricas/collect-tasks` | Catametricas | work items shared by all instances (ADR 0012) |
   | `persistent://catacumbas69/cataudit/audit` | Cataponte bridges | everything to be audited (ADR 0009) |

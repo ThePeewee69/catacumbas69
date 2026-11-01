@@ -14,9 +14,7 @@ public enum AuditAction {
     /** A bridge was enabled. */
     ENABLE_BRIDGE("enabled"),
     /** A bridge was disabled. */
-    DISABLE_BRIDGE("disabled"),
-    /** A stored bridge was rewritten to the current schema at start-up (details: before, after). */
-    MIGRATE_BRIDGE("migrated");
+    DISABLE_BRIDGE("disabled");
 
     /** Entity of every event Cataponte publishes for these actions. */
     public static final String ENTITY = "bridge";

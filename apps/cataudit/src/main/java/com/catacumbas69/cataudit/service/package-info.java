@@ -1,4 +1,4 @@
 /**
- * Consuming, storing and searching audit events, and the one-off copy of {@code audit_logs}.
+ * Consuming, storing and searching audit events.
  */
 package com.catacumbas69.cataudit.service;

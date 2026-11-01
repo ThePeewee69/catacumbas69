@@ -22,8 +22,7 @@ class SettingsPublisherTest {
     @SuppressWarnings("unchecked")
     private final RetryingSender<SettingValue> sender = mock(RetryingSender.class);
     private final SettingRepository settings = mock(SettingRepository.class);
-    private final SettingsMigration migration = mock(SettingsMigration.class);
-    private final SettingsPublisher publisher = new SettingsPublisher(sender, settings, migration);
+    private final SettingsPublisher publisher = new SettingsPublisher(sender, settings);
 
     @Test
     void changed_sendsTheValue_underItsId() {
@@ -53,7 +52,6 @@ class SettingsPublisherTest {
 
         assertThat(publisher.publishAll()).isTrue();
 
-        verify(migration).migrate();
         verify(sender).send(Setting.COLLECT_INTERVAL_SECONDS, new SettingValue("30"));
         verify(sender).send(Setting.CATAPONTE_URL, null);
         verify(sender).send(Setting.REFRESH_INTERVAL_SECONDS, null);

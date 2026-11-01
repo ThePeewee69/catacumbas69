@@ -29,6 +29,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import org.apache.pulsar.client.api.Consumer;
 import org.apache.pulsar.client.api.ConsumerBuilder;
+import org.apache.pulsar.client.api.ConsumerEventListener;
 import org.apache.pulsar.client.api.Message;
 import org.apache.pulsar.client.api.MessageId;
 import org.apache.pulsar.client.api.Producer;
@@ -236,6 +237,27 @@ class BridgeWorkerTest {
         verify(producerA).flushAsync();
         verify(producerA).closeAsync();
         verify(consumer).closeAsync();
+    }
+
+    @Test
+    void failoverReplica_isActiveOnlyWhileTheBrokerSaysSo() throws Exception {
+        worker = start(TestBridges.ordered("1", DEST_A));
+
+        ArgumentCaptor<ConsumerEventListener> listener = ArgumentCaptor.forClass(ConsumerEventListener.class);
+        verify(consumerBuilder).consumerEventListener(listener.capture());
+        assertThat(worker.getStatus().active()).isFalse();
+        listener.getValue().becameActive(consumer, -1);
+        assertThat(worker.getStatus().active()).isTrue();
+        listener.getValue().becameInactive(consumer, -1);
+        assertThat(worker.getStatus().active()).isFalse();
+    }
+
+    @Test
+    void sharedReplica_isActiveWhileRunning() throws Exception {
+        worker = start(TestBridges.unordered("1", DEST_A));
+
+        verify(consumerBuilder, never()).consumerEventListener(any());
+        assertThat(worker.getStatus().active()).isTrue();
     }
 
     private BridgeWorker start(BridgeDocument bridge) throws Exception {

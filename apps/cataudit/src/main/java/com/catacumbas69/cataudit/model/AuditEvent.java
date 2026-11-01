@@ -10,7 +10,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * parts of its type split out for querying. {@code _id} is the CloudEvent {@code id}, so a redelivered or
  * duplicated event is stored once (ADR 0012).
  *
- * @param id CloudEvent id; {@code legacy-<ObjectId>} for entries copied from {@code audit_logs}
+ * @param id CloudEvent id
  * @param source CloudEvent source, {@code /catacumbas69/<app>}
  * @param type CloudEvent type, {@code com.catacumbas69.<app>.<entity>.<action>.v1}
  * @param app app that published it
@@ -23,7 +23,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param after state after, or {@code null}
  * @param details other values, or {@code null}
  * @param receivedAt when Cataudit stored it
- * @param legacy {@code true} for entries copied from {@code audit_logs}
  */
 @Document(collection = AuditEvent.COLLECTION)
 public record AuditEvent(
@@ -39,8 +38,7 @@ public record AuditEvent(
         Map<String, String> before,
         Map<String, String> after,
         Map<String, String> details,
-        Instant receivedAt,
-        boolean legacy) {
+        Instant receivedAt) {
 
     /** Collection owned by Cataudit. */
     public static final String COLLECTION = "cataudit_events";

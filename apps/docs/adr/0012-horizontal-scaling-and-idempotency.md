@@ -1,7 +1,7 @@
 # 12. Every service scales horizontally; all writes are idempotent
 
-Date: 2026-10-31 · Status: Accepted for Catapulsar, Cataudit and Catametricas (phase 4, 2026-11-01); Cataponte in
-phase 5 · Supersedes: the collector lease of ADR 0007; ADR 0002 once phase 5 is done
+Date: 2026-10-31 · Status: Accepted (every service; Cataponte in phase 5, 2026-11-01) · Supersedes: ADR 0002 and
+the collector lease of ADR 0007
 
 ## Context
 
@@ -23,8 +23,7 @@ bridge's subscription type, so no lock or leader election is needed:
 | `Shared` | messages spread round-robin | unordered |
 | `Exclusive` | only one replica can subscribe — **not allowed any more** | — |
 
-Existing `Exclusive` bridges are migrated to `Failover`. Traffic counters stay correct because each replica
-adds (`$inc`) only what it relayed itself.
+Traffic counters stay correct because each replica adds (`$inc`) only what it relayed itself.
 
 **Catametricas** shares the collection work through Pulsar instead of a lease:
 
@@ -72,3 +71,15 @@ adds (`$inc`) only what it relayed itself.
   delivers it again after 10 s, doubling up to 5 min. A namespace that no longer exists marks its topics as
   gone.
 - The lease and its collection are removed.
+
+## Implementation for Cataponte (phase 5, 2026-11-01)
+
+- Every replica runs every enabled bridge. The API refuses `Exclusive` (`400`).
+- On a `Failover` subscription each worker follows the broker's consumer events (`becameActive` /
+  `becameInactive`), so it knows whether it receives or stands by.
+- Each replica writes its workers' status to `cataponte_worker_status` every 5 s (`_id` = `<bridge>@<instance>`,
+  TTL 5 min) and removes its reports on shutdown. `GET /api/v1/bridges/status` merges this replica's live status
+  with the other replicas' reports from the last 30 s: the most advanced state, summed counters, `replicas` and
+  `activeReplicas`. Without MongoDB a replica answers for itself.
+- The loop check on writes stays in-process; a loop created by two simultaneous writes on different replicas is
+  blocked by the reconciler (ADR 0005).

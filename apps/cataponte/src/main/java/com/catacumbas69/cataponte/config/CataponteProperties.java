@@ -18,6 +18,7 @@ import org.springframework.validation.annotation.Validated;
  * @param bridge bridge runtime tuning
  * @param mongo MongoDB client timeouts
  * @param cors CORS settings for browser clients
+ * @param status how replicas share their worker status (ADR 0012)
  */
 @Validated
 @ConfigurationProperties(prefix = "cataponte")
@@ -25,7 +26,8 @@ public record CataponteProperties(
         @Valid @NotNull Pulsar pulsar,
         @Valid @NotNull Bridge bridge,
         @Valid @NotNull Mongo mongo,
-        @Valid @NotNull Cors cors) {
+        @Valid @NotNull Cors cors,
+        @Valid @NotNull Status status) {
 
     /**
      * Pulsar client settings (RES-2, RES-3).
@@ -113,5 +115,16 @@ public record CataponteProperties(
             allowedOrigins = allowedOrigins == null ? List.of()
                     : allowedOrigins.stream().filter(origin -> !origin.isBlank()).toList();
         }
+    }
+
+    /**
+     * Worker status shared between replicas through MongoDB ({@code cataponte_worker_status}).
+     *
+     * @param writeInterval how often each replica writes the status of its workers
+     * @param staleAfter reports older than this are ignored (a replica that stopped writing is gone)
+     */
+    public record Status(
+            @NotNull Duration writeInterval,
+            @NotNull Duration staleAfter) {
     }
 }

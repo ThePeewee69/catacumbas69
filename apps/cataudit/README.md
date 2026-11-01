@@ -24,9 +24,6 @@ Catametricas┘                       └─ audit-catametricas┘        (Share
 - **Storage**: `cataudit_events` holds the CloudEvent fields plus `app`, `entity` and `action` taken from the
   type `com.catacumbas69.<app>.<entity>.<action>.v1`, and `receivedAt`. Events are kept **forever**. Indexes
   cover `time` and `app`, `subject`, `actor` and `entity+action`, each with `time`.
-- **Old `audit_logs`**: copied at every start, with ids `legacy-<ObjectId>` (copying again only skips them)
-  and each old action mapped to today's event type. Copied entries have `legacy: true`. `audit_logs` itself is
-  not changed; delete it by hand when you no longer need it.
 - **Pulsar**: at start-up catacommons creates the namespace `catacumbas69/cataudit` and the topic `audit`, with
   the CloudEvent schema. Cataudit registers no audit bridge of its own.
 - **Several replicas are safe**: the `Shared` subscription and the id-keyed inserts make that so.

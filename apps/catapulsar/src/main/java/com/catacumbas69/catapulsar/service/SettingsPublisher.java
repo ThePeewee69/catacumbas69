@@ -19,9 +19,8 @@ import org.springframework.stereotype.Service;
  * its default. Every service reads the topic through catacommons' {@code SharedSettings}.
  *
  * <p>Every value is published when it changes and once at start-up, so the topic always matches
- * {@code catapulsar_settings}. At start-up the old {@code pulsario_settings} is migrated first
- * ({@link SettingsMigration}); both are retried every 30 s while MongoDB is down. Publishing is asynchronous and
- * retried; it never fails the caller.
+ * {@code catapulsar_settings}; the start-up publication is retried every 30 s while MongoDB is down. Publishing is
+ * asynchronous and retried; it never fails the caller.
  */
 @Service
 public class SettingsPublisher {
@@ -31,20 +30,16 @@ public class SettingsPublisher {
 
     private final RetryingSender<SettingValue> sender;
     private final SettingRepository settings;
-    private final SettingsMigration migration;
 
     /**
      * Creates the publisher.
      *
      * @param sender sends to the settings topic
      * @param settings stored settings, read at start-up
-     * @param migration moves {@code pulsario_settings} to {@code catapulsar_settings} first
      */
-    public SettingsPublisher(RetryingSender<SettingValue> sender, SettingRepository settings,
-                             SettingsMigration migration) {
+    public SettingsPublisher(RetryingSender<SettingValue> sender, SettingRepository settings) {
         this.sender = sender;
         this.settings = settings;
-        this.migration = migration;
     }
 
     /**
@@ -61,7 +56,7 @@ public class SettingsPublisher {
         sender.send(id, value == null ? null : new SettingValue(value));
     }
 
-    /** Migrates and publishes every setting once the application has started, in the background. */
+    /** Publishes every setting once the application has started, in the background. */
     @EventListener(ApplicationReadyEvent.class)
     public void publishAllInBackground() {
         Thread.ofVirtual().name("settings-publisher").start(this::publishAllUntilDone);
@@ -79,15 +74,13 @@ public class SettingsPublisher {
     }
 
     /**
-     * Migrates the old collection, then publishes the stored value, or a tombstone, of every shared setting.
-     * Never throws.
+     * Publishes the stored value, or a tombstone, of every shared setting. Never throws.
      *
      * @return {@code false} if MongoDB could not be read (nothing was published)
      */
     boolean publishAll() {
         Map<String, String> stored = new HashMap<>();
         try {
-            migration.migrate();
             settings.findAll().forEach(setting -> stored.put(setting.getId(), setting.getValue()));
         } catch (RuntimeException e) {
             LOG.warn("Settings not published yet, MongoDB not read; retrying in {} s: {}", RETRY.toSeconds(),

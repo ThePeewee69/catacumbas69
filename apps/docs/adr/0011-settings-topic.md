@@ -62,3 +62,9 @@ replica's memory, so other replicas miss changes.
   them and drops the old collection. The old collection is kept, with a warning, if it holds an unknown id.
 - Catametricas no longer reads Catapulsar's collection; its interval comes from
   `catametricas.collect-interval-seconds` on the topic.
+
+## No backward compatibility (2026-11-01)
+
+The data in MongoDB was test data, so every migration was removed from the code and the old collections were
+dropped by hand (orch.md decision 40). Catapulsar no longer reads `pulsario_settings` or maps its old ids;
+`catapulsar_settings` is the only store.

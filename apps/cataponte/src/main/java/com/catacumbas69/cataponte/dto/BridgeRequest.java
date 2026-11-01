@@ -42,8 +42,8 @@ public record BridgeRequest(
      *
      * @param topic fully-qualified topic
      * @param subscription subscription name
-     * @param subscriptionType Exclusive, Shared, Failover or Key_Shared; defaults to Failover when ordered,
-     *                         Shared otherwise
+     * @param subscriptionType Shared, Failover or Key_Shared ({@code Exclusive} is refused, ADR 0012); defaults
+     *                         to Failover when ordered, Shared otherwise
      */
     public record Source(
             @NotBlank @Pattern(regexp = ValidationPatterns.TOPIC,
@@ -51,7 +51,8 @@ public record BridgeRequest(
             @NotBlank @Size(max = 100) @Pattern(regexp = ValidationPatterns.NAME,
                     message = "may contain only letters, digits, '.', '-' and '_'") String subscription,
             @Pattern(regexp = ValidationPatterns.SUBSCRIPTION_TYPE,
-                    message = "must be Exclusive, Shared, Failover or Key_Shared") String subscriptionType) {
+                    message = "must be Shared, Failover or Key_Shared (Exclusive is not allowed)")
+            String subscriptionType) {
     }
 
     /**

@@ -7,13 +7,16 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 /**
- * All-time message count for one topic of one bridge ({@code bridge_traffic_totals}). Unique on
- * {@code (bridgeId, role, topic)}. Kept when the bridge is deleted.
+ * All-time message count for one topic of one bridge ({@code cataponte_traffic_totals}). Unique on
+ * {@code (bridgeId, role, topic)}. Kept when the bridge is deleted. Every replica adds what it relayed itself.
  */
 @Getter
 @Setter
-@Document(collection = "bridge_traffic_totals")
+@Document(collection = BridgeTrafficTotal.COLLECTION)
 public class BridgeTrafficTotal {
+
+    /** Collection name. */
+    public static final String COLLECTION = "cataponte_traffic_totals";
 
     @Id
     private String id;

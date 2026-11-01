@@ -22,9 +22,8 @@ import org.springframework.data.mongodb.core.index.IndexOperations;
 import org.springframework.stereotype.Component;
 
 /**
- * Prepares Catametricas' collections before the first write: runs {@link CatametricasMigration} (the old
- * {@code contario_*} names), then creates the indexes (MONGO-3). Tried once in the background when the app is
- * ready, so the API finds the renamed collections, and again before every task until it succeeds. The
+ * Creates the indexes of Catametricas' collections (MONGO-3). Tried once in the background when the app is ready,
+ * and again before every task until it succeeds. The
  * per-minute collection has a TTL index that deletes minutes older than {@code catametricas.collect.minute-retention};
  * task claims are deleted after {@code catametricas.tasks.run-retention}.
  */
@@ -34,7 +33,6 @@ public class CatametricasIndexes implements ApplicationListener<ApplicationReady
     private static final Logger LOG = LoggerFactory.getLogger(CatametricasIndexes.class);
 
     private final MongoTemplate mongoTemplate;
-    private final CatametricasMigration migration;
     private final Duration minuteRetention;
     private final Duration runRetention;
     private volatile boolean created;
@@ -43,13 +41,10 @@ public class CatametricasIndexes implements ApplicationListener<ApplicationReady
      * Creates the index initializer.
      *
      * @param mongoTemplate template for index operations
-     * @param migration renames the collections from before phase 4
      * @param properties application properties, for the retentions
      */
-    public CatametricasIndexes(MongoTemplate mongoTemplate, CatametricasMigration migration,
-                               CatametricasProperties properties) {
+    public CatametricasIndexes(MongoTemplate mongoTemplate, CatametricasProperties properties) {
         this.mongoTemplate = mongoTemplate;
-        this.migration = migration;
         this.minuteRetention = properties.collect().minuteRetention();
         this.runRetention = properties.tasks().runRetention();
     }
@@ -70,12 +65,11 @@ public class CatametricasIndexes implements ApplicationListener<ApplicationReady
         });
     }
 
-    /** Migrates and creates the indexes once; later calls do nothing. Throws if MongoDB fails. */
+    /** Creates the indexes once; later calls do nothing. Throws if MongoDB fails. */
     public synchronized void ensure() {
         if (created) {
             return;
         }
-        migration.migrate();
 
         IndexOperations minutes = mongoTemplate.indexOps(Schema.MINUTES);
         minutes.createIndex(key(TOPIC, MINUTE).unique().named("minutes_topic_minute"));

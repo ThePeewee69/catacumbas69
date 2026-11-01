@@ -7,14 +7,17 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 /**
- * Messages that crossed one topic of one bridge during one minute ({@code bridge_traffic_minutes}).
- * Only minutes with traffic are stored. Kept forever (no TTL). Unique on
- * {@code (bridgeId, role, topic, minute)}.
+ * Messages that crossed one topic of one bridge during one minute ({@code cataponte_traffic_minutes}). Only
+ * minutes with traffic are stored. Kept forever (no TTL). Unique on {@code (bridgeId, role, topic, minute)}.
+ * Every replica adds ({@code $inc}) what it relayed itself.
  */
 @Getter
 @Setter
-@Document(collection = "bridge_traffic_minutes")
+@Document(collection = BridgeTrafficMinute.COLLECTION)
 public class BridgeTrafficMinute {
+
+    /** Collection name. */
+    public static final String COLLECTION = "cataponte_traffic_minutes";
 
     @Id
     private String id;

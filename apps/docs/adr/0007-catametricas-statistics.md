@@ -50,3 +50,9 @@ These two cross-service reads are explicit exceptions to ARCH-1. The field names
 - The collections are renamed to `catametricas_*`; `contario_status` is dropped ("last collection" is the
   newest snapshot). The baseline is now per namespace: a namespace's first collection only sets the starting
   point.
+
+## No backward compatibility (2026-11-01)
+
+The data in MongoDB was test data, so every migration was removed from the code and the old collections were
+dropped by hand (orch.md decision 40). Catametricas no longer renames `contario_*`; the collections are created as
+`catametricas_*`.

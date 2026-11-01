@@ -40,11 +40,11 @@ class AuditLogTest {
 
     @Test
     void bridgeChanged_bySystem_publishesCataponteAsActor() {
-        audit.bridgeChanged(AuditLog.SYSTEM_USER, AuditAction.MIGRATE_BRIDGE, TestBridges.unordered("1", DEST_A),
+        audit.bridgeChanged(AuditLog.SYSTEM_USER, AuditAction.UPDATE_BRIDGE, TestBridges.unordered("1", DEST_A),
                 TestBridges.unordered("1", DEST_A));
 
         ArgumentCaptor<EventData> data = ArgumentCaptor.forClass(EventData.class);
-        verify(events).publish(eq("bridge"), eq("migrated"), eq("1"), data.capture());
+        verify(events).publish(eq("bridge"), eq("updated"), eq("1"), data.capture());
         assertThat(data.getValue().actor()).isEqualTo("cataponte");
     }
 

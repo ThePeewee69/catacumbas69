@@ -31,7 +31,6 @@ class AuditEventsTest {
         assertThat(stored.actor()).isEqualTo("10.0.0.1");
         assertThat(stored.details()).containsEntry("subscription", "s1");
         assertThat(stored.receivedAt()).isEqualTo(NOW);
-        assertThat(stored.legacy()).isFalse();
     }
 
     @Test

@@ -1,6 +1,6 @@
 # 2. Cataponte runs a single replica
 
-Date: 2026-10-30 · Status: Accepted
+Date: 2026-10-30 · Status: Superseded by ADR 0012 (phase 5, 2026-11-01)
 
 ## Context
 
@@ -17,3 +17,9 @@ not from more pods.
 
 - Restarts cause a short gap (seconds); unacknowledged messages are redelivered, nothing is lost.
 - Horizontal scaling needs leader election or bridge sharding first — a future ADR.
+
+## Superseded (2026-11-01)
+
+Cataponte now runs any number of replicas (ADR 0012, orch.md ARCH-5). Every replica runs every enabled bridge and
+Pulsar spreads the messages through the subscription type; `Exclusive`, the one type that cannot have several
+consumers, is no longer allowed and existing bridges were moved to `Failover`.

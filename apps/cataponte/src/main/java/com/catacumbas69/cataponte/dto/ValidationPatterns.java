@@ -11,8 +11,11 @@ public final class ValidationPatterns {
     /** Bridge and subscription names: letters, digits, dot, dash and underscore. */
     public static final String NAME = "^[A-Za-z0-9][A-Za-z0-9._-]*$";
 
-    /** Pulsar subscription types. */
-    public static final String SUBSCRIPTION_TYPE = "^(Exclusive|Shared|Failover|Key_Shared)$";
+    /**
+     * Pulsar subscription types a bridge may use. {@code Exclusive} is not one: every Cataponte replica runs
+     * every bridge, and only one consumer may join an exclusive subscription (ADR 0012).
+     */
+    public static final String SUBSCRIPTION_TYPE = "^(Shared|Failover|Key_Shared)$";
 
     private ValidationPatterns() {
     }

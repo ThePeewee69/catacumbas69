@@ -5,7 +5,7 @@ import java.util.List;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
 /**
- * Read access to {@code bridge_traffic_totals}. Writes go through {@code TrafficWriter} bulk upserts.
+ * Read access to {@code cataponte_traffic_totals}. Writes go through {@code TrafficWriter} bulk upserts.
  */
 public interface BridgeTrafficTotalRepository extends MongoRepository<BridgeTrafficTotal, String> {
 

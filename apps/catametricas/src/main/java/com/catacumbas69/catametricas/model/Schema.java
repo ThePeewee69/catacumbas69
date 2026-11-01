@@ -1,8 +1,5 @@
 package com.catacumbas69.catametricas.model;
 
-import java.util.Map;
-import java.util.Set;
-
 /**
  * Names of the MongoDB collections and fields Catametricas owns (ADR 0010). Nobody else reads them: other
  * services use Catametricas' API ({@code /api/v1/topics}, {@code /api/v1/series}, {@code /api/v1/collector}).
@@ -34,16 +31,6 @@ public final class Schema {
     public static final String TOTALS = "catametricas_topic_totals";
     /** Claims of collection tasks. */
     public static final String TASK_RUNS = "catametricas_task_runs";
-
-    /** Collections before phase 4 → their names now; renamed once by {@code CatametricasMigration}. */
-    public static final Map<String, String> LEGACY_RENAMES = Map.of(
-            "contario_topic_snapshots", SNAPSHOTS,
-            "contario_topic_minutes", MINUTES,
-            "contario_topic_hours", HOURS,
-            "contario_topic_totals", TOTALS);
-
-    /** Collections before phase 4 that are no longer used (the lease and the last-run status); dropped. */
-    public static final Set<String> LEGACY_DROPS = Set.of("contario_locks", "contario_status");
 
     /** Full topic name, e.g. {@code persistent://home/media/orders-partition-0}. */
     public static final String TOPIC = "topic";

@@ -16,14 +16,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.catacumbas69.cataponte.TestBridges;
+import com.catacumbas69.cataponte.dto.BridgeRuntimeStatus;
+import com.catacumbas69.cataponte.dto.BridgeStatusResponse;
 import com.catacumbas69.cataponte.dto.BridgeMapper;
 import com.catacumbas69.cataponte.model.BridgeDocument;
 import com.catacumbas69.cataponte.model.BridgeTrafficTotal;
 import com.catacumbas69.cataponte.model.TrafficRole;
 import com.catacumbas69.cataponte.service.BridgeConflictException;
-import com.catacumbas69.cataponte.service.BridgeManager;
 import com.catacumbas69.cataponte.service.BridgeNotFoundException;
 import com.catacumbas69.cataponte.service.BridgeService;
+import com.catacumbas69.cataponte.service.BridgeStatusService;
 import com.catacumbas69.cataponte.service.BridgeValidationException;
 import com.catacumbas69.cataponte.service.TrafficService;
 import java.util.List;
@@ -54,7 +56,8 @@ class BridgeControllerTest {
     private BridgeService service;
 
     @MockitoBean
-    private BridgeManager manager;
+    private BridgeStatusService statuses;
+
 
     @MockitoBean
     private TrafficService traffic;
@@ -155,13 +158,25 @@ class BridgeControllerTest {
     }
 
     @Test
-    void status_reportsRunningCount() throws Exception {
-        when(manager.getRunningCount()).thenReturn(2);
-        when(manager.getStatuses()).thenReturn(List.of());
+    void status_reportsEveryReplica() throws Exception {
+        when(statuses.status()).thenReturn(new BridgeStatusResponse(1, List.of(new BridgeRuntimeStatus("abc",
+                "orders-fanout", "RUNNING", true, 7, 0, 0, null, TestBridges.SOURCE, List.of(DEST_A), true, null,
+                null, 3, 1))));
 
         mvc.perform(get("/api/v1/bridges/status"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.activeCount").value(2));
+                .andExpect(jsonPath("$.activeCount").value(1))
+                .andExpect(jsonPath("$.workers[0].replicas").value(3))
+                .andExpect(jsonPath("$.workers[0].activeReplicas").value(1));
+    }
+
+    @Test
+    void create_refusesExclusiveSubscriptions() throws Exception {
+        String exclusive = VALID_BODY.replace("\"subscription\":", "\"subscriptionType\": \"Exclusive\", \"subscription\":");
+
+        mvc.perform(post("/api/v1/bridges").contentType(MediaType.APPLICATION_JSON).content(exclusive))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[*].field", hasItem("source.subscriptionType")));
     }
 
     @Test

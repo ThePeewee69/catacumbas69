@@ -6,7 +6,7 @@ import com.catacumbas69.cataponte.dto.BridgeResponse;
 import com.catacumbas69.cataponte.dto.BridgeStatusResponse;
 import com.catacumbas69.cataponte.dto.TrafficMinuteResponse;
 import com.catacumbas69.cataponte.dto.TrafficTotalResponse;
-import com.catacumbas69.cataponte.service.BridgeManager;
+import com.catacumbas69.cataponte.service.BridgeStatusService;
 import com.catacumbas69.cataponte.service.BridgeService;
 import com.catacumbas69.cataponte.service.BridgeValidationException;
 import com.catacumbas69.cataponte.service.TrafficService;
@@ -46,7 +46,7 @@ public class BridgeController {
     static final String APP_HEADER = "X-Catacumbas69-App";
 
     private final BridgeService service;
-    private final BridgeManager manager;
+    private final BridgeStatusService statuses;
     private final BridgeMapper mapper;
     private final TrafficService traffic;
 
@@ -54,14 +54,14 @@ public class BridgeController {
      * Creates the controller.
      *
      * @param service bridge definitions
-     * @param manager bridge runtime
+     * @param statuses runtime status of the bridges over every replica
      * @param mapper API ↔ model mapping
      * @param traffic stored message counts
      */
-    public BridgeController(BridgeService service, BridgeManager manager, BridgeMapper mapper,
+    public BridgeController(BridgeService service, BridgeStatusService statuses, BridgeMapper mapper,
                             TrafficService traffic) {
         this.service = service;
-        this.manager = manager;
+        this.statuses = statuses;
         this.mapper = mapper;
         this.traffic = traffic;
     }
@@ -226,13 +226,13 @@ public class BridgeController {
     }
 
     /**
-     * Returns the runtime status of every running, starting or failed bridge.
+     * Returns the runtime status of every running, starting, failed or blocked bridge, over every replica.
      *
      * @return runtime status
      */
     @Operation(summary = "Runtime status of the bridges")
     @GetMapping("/status")
     public BridgeStatusResponse status() {
-        return new BridgeStatusResponse(manager.getRunningCount(), manager.getStatuses());
+        return statuses.status();
     }
 }

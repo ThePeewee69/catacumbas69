@@ -23,7 +23,8 @@ public final class TestProperties {
                         "http://localhost:8080", Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(1)),
                 bridge(defaultMaxInFlight),
                 new CataponteProperties.Mongo(Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(1)),
-                new CataponteProperties.Cors(List.of()));
+                new CataponteProperties.Cors(List.of()),
+                new CataponteProperties.Status(Duration.ofSeconds(5), Duration.ofSeconds(30)));
     }
 
     public static CataponteProperties.Bridge bridge(int defaultMaxInFlight) {

@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class AuditLog {
 
-    /** Actor for changes Cataponte makes on its own, such as schema migration or system bridges. */
+    /** Actor for changes Cataponte makes on its own, such as registering its system bridge. */
     public static final String SYSTEM_USER = "cataponte";
 
     private final EventPublisher events;

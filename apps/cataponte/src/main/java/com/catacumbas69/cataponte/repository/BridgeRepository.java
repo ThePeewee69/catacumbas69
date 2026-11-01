@@ -5,7 +5,7 @@ import java.util.Optional;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
 /**
- * Access to the {@code bridges} collection.
+ * Access to the {@code cataponte_bridges} collection.
  */
 public interface BridgeRepository extends MongoRepository<BridgeDocument, String> {
 

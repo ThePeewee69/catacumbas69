@@ -39,7 +39,7 @@ class AuditControllerTest {
 
     private static final AuditEvent EVENT = new AuditEvent("e1", "/catacumbas69/catapulsar",
             "com.catacumbas69.catapulsar.topic.created.v1", "catapulsar", "topic", "created", "persistent://a/b/c",
-            Instant.parse("2026-10-31T19:00:00Z"), "10.0.0.1", null, null, Map.of(), Instant.EPOCH, false);
+            Instant.parse("2026-10-31T19:00:00Z"), "10.0.0.1", null, null, Map.of(), Instant.EPOCH);
 
     @Autowired
     private MockMvc mvc;

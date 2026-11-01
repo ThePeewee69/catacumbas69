@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Catapulsar</title>
 <link rel="icon" type="image/svg+xml" href="/catapulsar-icon.svg">
-<link rel="stylesheet" href="/catapulsar.css?v=16">
-<script src="/catapulsar.js?v=16" defer></script>
+<link rel="stylesheet" href="/catapulsar.css?v=17">
+<script src="/catapulsar.js?v=17" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
 </head>
 <body x-data="app()" x-init="init()">
@@ -262,7 +262,6 @@
           <label>Type</label>
           <select x-model="bridges.form.source.subscriptionType">
             <option value="Shared">Shared</option>
-            <option value="Exclusive">Exclusive</option>
             <option value="Failover">Failover</option>
             <option value="Key_Shared">Key_Shared</option>
           </select>
@@ -313,12 +312,12 @@
         <label class="checkbox-label">
           <input type="checkbox" x-model="bridges.form.enabled"> Enabled on save
         </label>
-        <label class="checkbox-label" title="Keep source order on every destination (needs Exclusive, Failover or Key_Shared)">
+        <label class="checkbox-label" title="Keep source order on every destination (needs Failover or Key_Shared)">
           <input type="checkbox" x-model="bridges.form.ordered" @change="onOrderedChange()"> Keep message order
         </label>
       </div>
       <div class="warn-note" x-show="orderedOnShared()">
-        Ordered bridges need an Exclusive, Failover or Key_Shared subscription — a Shared subscription cannot keep order.
+        Ordered bridges need a Failover or Key_Shared subscription — a Shared subscription cannot keep order.
       </div>
 
       <div class="divider"></div>
@@ -594,7 +593,6 @@
                       <td><span class="tag tag-blue" x-text="e.app"></span></td>
                       <td>
                         <span class="mono" x-text="e.entity + '.' + e.action"></span>
-                        <template x-if="e.legacy"><span class="tag tag-binary" title="Copied from the old audit_logs">legacy</span></template>
                       </td>
                       <td>
                         <button type="button" class="audit-subject mono" :title="'Show only ' + e.subject"
@@ -779,6 +777,13 @@
                   <div class="bridge-stats">
                     <template x-if="bridges.status[bridge.id]?.running">
                       <span class="tag tag-blue" x-text="(bridges.status[bridge.id].messagesForwarded || 0).toLocaleString('en') + ' forwarded'"></span>
+                    </template>
+                    <template x-if="bridges.status[bridge.id]?.replicas > 1">
+                      <span class="tag" style="background:rgba(100,116,139,.15);color:var(--muted);"
+                            :title="bridge.source?.subscriptionType === 'Failover'
+                              ? 'Failover: one replica receives, the others stand by'
+                              : 'Every running replica receives a share of the messages'"
+                            x-text="bridges.status[bridge.id].activeReplicas + '/' + bridges.status[bridge.id].replicas + ' replicas active'"></span>
                     </template>
                     <template x-if="bridges.status[bridge.id]?.errors > 0">
                       <span class="tag tag-orange" x-text="bridges.status[bridge.id].errors + ' errors'"></span>

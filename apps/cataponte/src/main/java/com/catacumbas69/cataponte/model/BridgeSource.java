@@ -23,7 +23,7 @@ public class BridgeSource {
     /** Subscription the bridge consumes with. */
     private String subscription;
 
-    /** Pulsar subscription type name: Exclusive, Shared, Failover or Key_Shared. */
+    /** Pulsar subscription type name: Shared, Failover or Key_Shared ({@code Exclusive} is refused). */
     private String subscriptionType = DEFAULT_SUBSCRIPTION_TYPE;
 
     /**

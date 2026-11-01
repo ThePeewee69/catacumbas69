@@ -13,17 +13,16 @@ import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 /**
- * A bridge definition: one source topic whose messages are copied to every destination topic.
- *
- * <p>Schema evolution (MONGO-2): documents written before fan-out support have a single
- * {@code destination}; they are read through {@link #resolveDestinationTopics()} and rewritten to
- * {@code destinations} by the schema migration. Documents written before ordering modes have no
- * {@code ordered} flag; see {@link #isOrderedEffective()}.
+ * A bridge definition: one source topic whose messages are copied to every destination topic. When a request
+ * leaves {@code ordered} unset, it follows the subscription type; see {@link #isOrderedEffective()}.
  */
 @Getter
 @Setter
-@Document(collection = "bridges")
+@Document(collection = BridgeDocument.COLLECTION)
 public class BridgeDocument {
+
+    /** Cataponte's bridge definitions. */
+    public static final String COLLECTION = "cataponte_bridges";
 
     private static final String SHARED = "Shared";
 
@@ -42,10 +41,6 @@ public class BridgeDocument {
 
     /** One or more destination topics; every message is sent to all of them. */
     private List<BridgeDestination> destinations = new ArrayList<>();
-
-    /** Legacy single destination. Only read when {@link #destinations} is empty. */
-    @Deprecated
-    private BridgeDestination destination;
 
     /** Copy the message key to the destinations. */
     private boolean preserveKey = true;
@@ -76,15 +71,12 @@ public class BridgeDocument {
     private Instant updatedAt;
 
     /**
-     * Returns the destination topics, falling back to the legacy single destination, without blanks or
-     * duplicates and in their original order.
+     * Returns the destination topics without blanks or duplicates, in their original order.
      *
      * @return the effective destination topics, never {@code null}
      */
     public List<String> resolveDestinationTopics() {
-        List<BridgeDestination> list = destinations != null && !destinations.isEmpty()
-                ? destinations
-                : legacyDestinationAsList();
+        List<BridgeDestination> list = destinations == null ? List.of() : destinations;
         return list.stream()
                 .filter(Objects::nonNull)
                 .map(BridgeDestination::getTopic)
@@ -120,14 +112,9 @@ public class BridgeDocument {
         this.enabled = other.enabled;
         this.source = other.source;
         this.destinations = new ArrayList<>(other.destinations);
-        this.destination = null;
         this.preserveKey = other.preserveKey;
         this.preserveProperties = other.preserveProperties;
         this.ordered = other.ordered;
         this.maxInFlight = other.maxInFlight;
-    }
-
-    private List<BridgeDestination> legacyDestinationAsList() {
-        return destination == null ? List.of() : List.of(destination);
     }
 }

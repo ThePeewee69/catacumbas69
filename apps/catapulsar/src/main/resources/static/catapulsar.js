@@ -34,7 +34,7 @@ function autoRefreshStored() {
 
 /**
  * Extracts a readable message from an error body: RFC 9457 Problem Details (`detail`/`title`),
- * a legacy `{ error }` / `{ message }` object, or plain text.
+ * an `{ error }` / `{ message }` object (e.g. Spring's default error body), or plain text.
  * @param {object|string} body parsed response body
  * @param {string} fallback text to use when the body has no message
  * @returns {string} the message to show
@@ -517,7 +517,7 @@ function app() {
       try {
         const status = await this.bridgesApi(`${BRIDGES_API}/status`);
         s.healthState = 'ok';
-        s.healthMsg = `${s.url} · ${status.running ?? 0} bridge(s) running`;
+        s.healthMsg = `${s.url} · ${status.activeCount ?? 0} bridge(s) running`;
       } catch (e) {
         s.healthState = 'error';
         s.healthMsg = e.message;
@@ -1222,10 +1222,9 @@ function app() {
       this.loadAllTopics();
     },
 
-    // Destination topics of a bridge (supports legacy single `destination`).
+    // Destination topics of a bridge.
     bridgeDestTopics(b) {
-      if (b?.destinations?.length) return b.destinations.map(d => d.topic).filter(Boolean);
-      return b?.destination?.topic ? [b.destination.topic] : [];
+      return (b?.destinations || []).map(d => d.topic).filter(Boolean);
     },
 
     isDestSelected(t) {

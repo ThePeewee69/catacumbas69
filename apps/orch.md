@@ -42,19 +42,17 @@ catacommons) are symlinks to it — edit only the original.
 | Component | Responsibility | Owns (data) | Talks to |
 |---|---|---|---|
 | **Catapulsar** | Web UI for Pulsar (tenants, namespaces, topics, subscriptions, backlog, produce); UI for bridges, for the audit trail (BFF to Cataudit) and for the statistics (overviews from Catametricas' API); runtime settings (Cataponte, Cataudit and Catametricas URLs, intervals), published on the settings topic; events for its actions | `catapulsar_settings` | Pulsar Admin API, Pulsar binary (produce/peek, events), Cataponte REST, Cataudit REST, Catametricas REST, MongoDB |
-| **Cataponte** | Runs bridges: consumes a source topic and fans each message out to 1..n destination topics; CRUD API for bridge config; system bridges registered by the apps (`audit-<app>`); per-topic traffic counts; loop blocking; events for bridge changes | `bridges`, `bridge_traffic_minutes`, `bridge_traffic_totals` | Pulsar binary + Admin API, MongoDB |
-| **Cataudit** | Owns the audit trail (ADR 0009): consumes `catacumbas69/cataudit/audit` (fed by the `audit-<app>` bridges), stores every event once, serves a query API; copied the old `audit_logs` | `cataudit_events`; reads `audit_logs` once per start (copy) | Pulsar binary + Admin API, MongoDB |
+| **Cataponte** | Runs bridges: consumes a source topic and fans each message out to 1..n destination topics; CRUD API for bridge config; system bridges registered by the apps (`audit-<app>`); per-topic traffic counts; loop blocking; events for bridge changes. Runs N replicas, each running every enabled bridge; Pulsar spreads the messages (ADR 0012) | `cataponte_bridges`, `cataponte_traffic_minutes`, `cataponte_traffic_totals`, `cataponte_worker_status` | Pulsar binary + Admin API, MongoDB |
+| **Cataudit** | Owns the audit trail (ADR 0009): consumes `catacumbas69/cataudit/audit` (fed by the `audit-<app>` bridges), stores every event once, serves a query API | `cataudit_events` | Pulsar binary + Admin API, MongoDB |
 | **catacommons** | Shared library (not a service): CloudEvents envelope, event publisher with retries, Pulsar names, start-up provisioning of the tenant/namespace/topics, registration of the app's audit bridge (ADR 0008, 0009) | — | Pulsar binary + Admin API through each app's clients; Cataponte REST |
 | **Catametricas** | Collects every topic's statistics from Pulsar on an interval and stores traffic (messages/bytes in and out) and backlog per topic: latest snapshot, per minute (30 days), per hour and all-time (ADR 0007). The work is shared by every replica through collection tasks on Pulsar (ADR 0012). The only metrics API: topics, series and collector state (ADR 0013) | `catametricas_topic_snapshots`, `catametricas_topic_minutes`, `catametricas_topic_hours`, `catametricas_topic_totals`, `catametricas_task_runs`; reads its interval from the settings topic | Pulsar Admin API + binary (tasks, events, settings), MongoDB |
 
 **Names.** The apps were renamed on 2026-10-31: Pulsário → **Catapulsar**, Passário → **Cataponte**,
 Contário → **Catametricas** (folders, Maven artifacts, packages, classes, properties, environment variables,
-metrics, images and docs). **MongoDB identifiers kept the old names** at first so no data had to be migrated;
-each owner migrates its collections in its phase (§15). Done: `pulsario_settings` → `catapulsar_settings`
-with ids equal to the topic keys (phase 3); `contario_*` → `catametricas_*`, renamed, with `contario_locks` and
-`contario_status` dropped (phase 4). Still old: `bridges` and `bridge_traffic_*` (phase 5); new code MUST keep
-using those exact names (constants in the Cataponte models) until then. The old shared `audit_logs`
-(with `application` values `pulsario` / `passario`) is no longer written; Cataudit copies it at start-up.
+metrics, images and docs). Every MongoDB collection now carries its owner's prefix (`catapulsar_*`,
+`cataponte_*`, `catametricas_*`, `cataudit_*`). The apps keep **no backward compatibility** (decision 40): the
+collections from before (`pulsario_settings`, `contario_*`, `bridges`, `bridge_traffic_*`, `audit_logs`) held only
+test data and were dropped by hand; no code reads or migrates them.
 
 **Events and audit (§15 phases 1–2, §4.4).** Every app owns a Pulsar namespace `catacumbas69/<app>`,
 created at start-up, and publishes a CloudEvent to `catacumbas69/<app>/events` for every action it audits.
@@ -70,9 +68,8 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 ## 2. Architecture rules
 
 - **ARCH-1 [MUST]** Each service owns its MongoDB collections. A service MUST NOT read or write another
-  service's collection. Cross-service data goes through the owner's REST API or its events. **Exceptions**,
-  each with its ADR and removed in a later phase (§15): Cataudit **reads** the old `audit_logs` to copy it
-  (ADR 0009). Statistics come from Catametricas' API (ADR 0013) and shared settings travel on the settings
+  service's collection. Cross-service data goes through the owner's REST API or its events; there are no
+  exceptions. Statistics come from Catametricas' API (ADR 0013) and shared settings travel on the settings
   topic (ADR 0011), never through another app's collection.
 - **ARCH-2 [MUST]** The browser talks only to Catapulsar. Catapulsar exposes the bridge API to its UI as a
   **backend-for-frontend (BFF)** proxy (`/api/v1/bridges/**` → Cataponte). Cataponte is not exposed outside
@@ -85,10 +82,14 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 - **ARCH-4 [MUST]** Bridge configuration in MongoDB is the desired state; Cataponte reconciles running
   workers to it on a fixed interval (`bridge.reconcile.interval`). API calls change the document only;
   they MUST NOT start or stop workers directly. This keeps one code path for start/stop/restart.
-- **ARCH-5 [MUST]** Cataponte runs with **exactly one replica** until leader election or bridge sharding
-  exists. With 2+ replicas every replica runs every bridge: `Exclusive`/`Failover` subscriptions fail and
-  `Shared` ones split traffic unpredictably. Encode this in the Deployment (`replicas: 1`,
-  `strategy: Recreate`).
+- **ARCH-5 [MUST]** Cataponte may run **any number of replicas**; every replica runs every enabled bridge and
+  **Pulsar spreads the messages** through the bridge's subscription type (ADR 0012, superseding ADR 0002):
+  `Failover` (ordered) — one replica receives, the others stand by and take over; `Key_Shared` — spread by key,
+  order kept per key; `Shared` (unordered) — spread round-robin. **`Exclusive` is not allowed**: the API refuses
+  it and existing bridges were moved to `Failover`. Each replica adds to the traffic counters only what it relayed
+  itself, and writes the status of its workers to `cataponte_worker_status`, so `GET /api/v1/bridges/status`
+  answers for all replicas. After a subscription type change, replicas restart one by one; a replica whose type
+  differs from the consumers still connected fails to start and retries with back-off until they agree.
 - **ARCH-6 [MUST]** Bridge delivery is **at-least-once**: the source message is acknowledged only after
   every destination accepted it; any failure → negative ack → redelivery. Consumers of destination topics
   MUST tolerate duplicates. Do not add "exactly-once" claims anywhere without Pulsar transactions.
@@ -233,7 +234,7 @@ Standard: **W3C CSS** specs, **stylelint-config-standard**, Prettier formatting.
   how to test, API link (`/swagger-ui.html`), and operational notes.
 - **DOC-4 [MUST]** Architecture decisions are recorded as **ADRs** (Michael Nygard format: Context,
   Decision, Consequences) in `apps/docs/adr/NNNN-title.md`. Existing decisions to record first:
-  BFF for bridges (ARCH-2), single-replica Cataponte (ARCH-5), at-least-once fan-out (ARCH-6),
+  BFF for bridges (ARCH-2), Cataponte replicas (ARCH-5), at-least-once fan-out (ARCH-6),
   config-as-desired-state reconciliation (ARCH-4).
 - **DOC-5 [SHOULD]** Diagrams as text (Mermaid or ASCII) in Markdown, so they are versioned with the code.
 
@@ -311,15 +312,16 @@ Every package has a `package-info.java` (DOC-2). Dependencies point downwards on
 
 - **MONGO-1 [MUST]** Timestamps come from Spring Data auditing (`@CreatedDate`, `@LastModifiedDate`,
   `@EnableMongoAuditing`), not set by hand in controllers.
-- **MONGO-2 [MUST]** Schema changes are backward compatible: read old and new shapes, write only the new
-  one (example: `destination` → `destinations[]` in `bridges`). Remove the old shape only after a
-  migration has rewritten all documents.
+- **MONGO-2 [MUST]** Once there is data worth keeping, schema changes are backward compatible: read old and new
+  shapes, write only the new one, and remove the old shape only after a migration has rewritten all documents.
+  **Not applied today** (decision 40): with test data only, a change replaces the old shape and old data is
+  dropped.
 - **MONGO-3 [SHOULD]** Declare indexes in code (`@Indexed`, `@CompoundIndex`) with
-  `spring.data.mongodb.auto-index-creation=true`; `bridges.name` is unique.
+  `spring.data.mongodb.auto-index-creation=true`; `cataponte_bridges.name` is unique.
 - **MONGO-4 [MUST]** Local connections to the ReplicaSet use `directConnection=true` against the
   NodePort; in-cluster connections use the replica-set URI.
 - **MONGO-5 [MUST]** Counters are written with `$inc` bulk upserts on a unique key, never read-modify-write:
-  `bridge_traffic_minutes` (`bridgeId`, `role`, `topic`, `minute`) and `bridge_traffic_totals`
+  `cataponte_traffic_minutes` (`bridgeId`, `role`, `topic`, `minute`) and `cataponte_traffic_totals`
   (`bridgeId`, `role`, `topic`). Both are kept forever (no TTL); queries over minutes are bounded to
   7 days (PERF-5). Catametricas uses the same pattern: `catametricas_topic_minutes` (`topic`, `minute`, TTL
   30 days), `catametricas_topic_hours` (`topic`, `hour`, forever) and `catametricas_topic_totals` (`_id` = topic,
@@ -368,7 +370,7 @@ Event catalogue (phase 1):
 | Catapulsar | `catapulsar.message.peeked\|skipped.v1` | topic | details: `subscription`, `count` |
 | Catapulsar | `catapulsar.setting.changed.v1` | setting key (below) | before/after: `value` |
 | Catapulsar | `catapulsar.bridge.create\|update\|delete\|enable\|disable-requested.v1` | bridge id (create: id from the response, else the requested name) | details: `status` (Cataponte's HTTP status, `503` if unreachable), `request` (body) |
-| Cataponte | `cataponte.bridge.created\|updated\|deleted\|enabled\|disabled\|migrated.v1` | bridge id | before/after: flattened definition; actor `cataponte` for migrations |
+| Cataponte | `cataponte.bridge.created\|updated\|deleted\|enabled\|disabled.v1` | bridge id | before/after: flattened definition; actor `cataponte` for its own system bridge |
 | Catametricas | `catametricas.collection.failed\|recovered.v1` | `collector` | details: `stage` (`schedule`, `claim`, `collect`), `error`, `instance`, `task`… (state changes of each instance only) |
 
 System bridges (ADR 0009): `audit-<app>` = `catacumbas69/<app>/events` → `catacumbas69/cataudit/audit`,
@@ -388,13 +390,13 @@ start-up, from `catapulsar_settings` (document id = key).
 - **EVT-8 [MUST]** A change is applied at once by the replica that made it and reaches every other replica
   and service through the topic; settings are never read from MongoDB at request time.
 
-| Key | Used by | Old id in `pulsario_settings` (migrated in phase 3) |
-|---|---|---|
-| `catapulsar.cataponte-url` | Catapulsar | `passario.url` |
-| `catapulsar.cataudit-url` | Catapulsar | `catapulsar.cataudit-url` |
-| `catapulsar.catametricas-url` | Catapulsar | (new in phase 4) |
-| `catapulsar.refresh-interval-seconds` | Catapulsar | `ui.refresh-interval-seconds` |
-| `catametricas.collect-interval-seconds` | Catametricas | `contario.collect-interval-seconds` |
+| Key | Used by |
+|---|---|
+| `catapulsar.cataponte-url` | Catapulsar |
+| `catapulsar.cataudit-url` | Catapulsar |
+| `catapulsar.catametricas-url` | Catapulsar |
+| `catapulsar.refresh-interval-seconds` | Catapulsar |
+| `catametricas.collect-interval-seconds` | Catametricas |
 
 ## 5. REST contracts and errors
 
@@ -463,8 +465,8 @@ Targets are measured on `meloes` (NUC, MicroShift) with the broker on the same n
   - **ordered** — pipelined sends through one producer per destination keep source order on success.
     On any failure the worker pauses, waits for in-flight sends, and calls
     `redeliverUnacknowledgedMessages()` so the stream is replayed **in order** (duplicates possible,
-    reordering not). Requires an `Exclusive`, `Failover` or `Key_Shared` subscription — `Shared` is
-    rejected by validation.
+    reordering not). Requires a `Failover` or `Key_Shared` subscription — `Shared` is rejected by validation
+    (and `Exclusive` always is, ARCH-5).
   - **unordered** — failures are negative-acked individually and redelivered later; any subscription type
     is allowed. Highest throughput.
 - **PERF-5 [MUST]** Catapulsar never loads unbounded data into memory: peek counts are capped (≤ 100),
@@ -506,7 +508,7 @@ other service is slow or down.
   Un-acked messages are redelivered after restart (at-least-once, ARCH-6).
 - **RES-8 [MUST]** Negative acks use a redelivery delay (`negativeAckRedeliveryDelay` 1 s) so a broken
   destination does not cause a hot retry loop.
-- **RES-9 [MUST]** Concurrent edits are detected: `bridges` documents carry `@Version`; a stale update
+- **RES-9 [MUST]** Concurrent edits are detected: `cataponte_bridges` documents carry `@Version`; a stale update
   returns `409 Conflict`.
 - **RES-10 [MUST]** Write endpoints are idempotent where HTTP says so (`PUT`, `DELETE`,
   `POST …/enable|disable`). Deleting a missing bridge returns `404`, never `500`.
@@ -531,8 +533,8 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
   - Cataponte: `BridgeManager` reconcile decisions (start / stop / restart on `updatedAt` change / keep
     running when Mongo fails / back-off after start failure); `BridgeWorker` fan-out to every
     destination, ack only after all destinations succeed, ordered-mode replay vs unordered nack,
-    `maxInFlight` bound; bridge validation (destinations, source ≠ destination, ordered ⇒ not `Shared`);
-    legacy `destination` → `destinations` normalisation.
+    `maxInFlight` bound; bridge validation (destinations, source ≠ destination, ordered ⇒ not `Shared`,
+    no `Exclusive`).
   - Catapulsar: audit is best-effort (RES-11), BFF error mapping (Cataponte down → `502`), input
     validation of topic names and peek counts.
 - **TEST-1b [MUST]** Pulsar and Mongo types are mocked at the service boundary (`PulsarClient`,
@@ -615,7 +617,8 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 - **OPS-2 [MUST]** Image tags are immutable (`<version>-<git-sha>`); `latest` is never deployed.
 - **OPS-3 [MUST]** Kubernetes manifests live in the GitOps repo and are synced by ArgoCD. Each Deployment
   sets resource requests/limits, liveness/readiness probes on Actuator, and config via ConfigMap + Secret.
-- **OPS-4 [MUST]** Cataponte Deployment: `replicas: 1`, `strategy: Recreate` (ARCH-5). Catametricas may run
+- **OPS-4 [MUST]** Cataponte may run several replicas with a rolling update (ARCH-5); during the update old
+  and new pods run side by side, which Pulsar handles like any other replicas. Catametricas may run
   several replicas, all collecting: the `Shared` subscription of `collect-tasks` spreads the tasks and the claims
   in `catametricas_task_runs` keep each task single (ADR 0012). Cataudit may run several
   replicas: its `Shared` subscription splits the audit topic between them and inserts are keyed by event id
@@ -675,6 +678,11 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-01, phase 5 of §15 and no backward compatibility** (`mvn clean install` at `apps/` green:
+  catacommons 20, Catapulsar 98, Cataponte 91, Catametricas 51, Cataudit 14 tests, 0 Checkstyle violations):
+  Cataponte runs N replicas; `Exclusive` refused; status merged over replicas (`cataponte_worker_status`,
+  `replicas`/`activeReplicas` in the Bridges panel); collections `cataponte_*`. Every migration and legacy-shape
+  code removed from all apps (settings, statistics, bridges, audit copy, `destination`, `bridge.migrated`).
 - **2026-11-01, phase 4 of §15** (`mvn clean install` at `apps/` green: catacommons 20, Catapulsar 102,
   Cataponte 84, Catametricas 54, Cataudit 18 tests, 0 Checkstyle violations): Catametricas API (`topics`, `series`,
   `collector`, OpenAPI), collection tasks on `catacumbas69/catametricas/collect-tasks` with claims and
@@ -702,14 +710,14 @@ Closed on 2026-10-30:
 1. **UI conventions** — G-17, G-18, G-20: frontend lint tooling, JSDoc, semantic and accessible markup,
    inline styles moved to CSS.
 2. **Tests** — G-6, G-11: Testcontainers integration tests (MongoDB, Pulsar), Playwright smoke test.
-3. **Delivery** — G-16, G-21: manifests for ArgoCD (Cataponte `replicas: 1`, Catametricas with N replicas, probes, Secrets)
+3. **Delivery** — G-16, G-21: manifests for ArgoCD (Cataponte and Catametricas with N replicas, probes, Secrets)
    and a CI pipeline.
 
 ---
 
 ## 15. Target architecture (proposed — ADR 0008–0013)
 
-Status: **phases 1–4 implemented** (2026-10-31 – 2026-11-01); phases 5–6 proposed. Until a phase below is implemented, the
+Status: **phases 1–5 implemented** (2026-10-31 – 2026-11-01); phase 6 later. Until a phase below is implemented, the
 rules in sections 1–14 stay in force. When a phase lands, the rules it changes are updated in the same change
 and its ADRs become "Accepted".
 
@@ -750,7 +758,7 @@ Each phase ends with `mvn verify` green in every app, the docs updated and the a
 | 2 | Cataudit | New service; each app registers its `audit-<app>` system bridge; `audit_logs` copied into `cataudit_events` and no longer written; Catapulsar's new audit view reads Cataudit | **Done** 2026-10-31 |
 | 3 | Settings topic | Catametricas and all Catapulsar replicas read the settings topic (`SharedSettings`, TableView); nobody reads settings from MongoDB; `pulsario_settings` → `catapulsar_settings` (copied, then dropped) | **Done** 2026-11-01 |
 | 4 | Catametricas API and tasks | Query API (`topics`, `series`, `collector`); Catapulsar overviews built from it (Catametricas URL editable); collection tasks on Pulsar with claims and conditional snapshot updates; lease removed; `contario_*` → `catametricas_*` (renamed) | **Done** 2026-11-01 |
-| 5 | Cataponte replicas | `Exclusive` rejected and migrated to `Failover`; Deployment with N replicas; ADR 0002 superseded; `bridges`, `bridge_traffic_*` → `cataponte_*` | Next |
+| 5 | Cataponte replicas | `Exclusive` rejected; N replicas, status merged over replicas (`cataponte_worker_status`); ADR 0002 superseded; collections `cataponte_*` | **Done** 2026-11-01 |
 | 6 | Prometheus source (later) | Once Prometheus/OpenMetrics/Loki run on MicroShift: short ranges from PromQL in Catametricas | Later |
 
 ### Decisions taken on 2026-10-31
@@ -758,7 +766,7 @@ Each phase ends with `mvn verify` green in every app, the docs updated and the a
 1. Tenant, namespaces, topics and policies are created **by each app at start-up** (idempotent; every app
    needs Pulsar admin access).
 2. Envelope, publisher, topic names and settings reader live in a shared library, **`catacommons`**.
-3. Existing collections are **renamed to their owner's prefix** with a one-off, idempotent migration per
+3. *(Superseded by 40.)* Existing collections are **renamed to their owner's prefix** with a one-off, idempotent migration per
    owner (ADR 0010).
 4. Until an authentication proxy exists, the event `actor` is the **client IP address**.
 5. The apps become a **Maven multi-module build**: `apps/pom.xml` aggregates `catacommons` and every app;
@@ -781,7 +789,7 @@ Phase 1 decisions (2026-10-31):
     refused ones included) and Cataponte `bridge.*` (the change made).
 13. Catametricas publishes only **state changes** of collection: `collection.failed` and
     `collection.recovered`.
-14. Collections are renamed to their owner's prefix **in the phase of each owner** (see the table).
+14. *(Superseded by 40.)* Collections are renamed to their owner's prefix **in the phase of each owner** (see the table).
 15. The settings topic is **created and published already in phase 1**, with the **new keys**; readers come
     in phase 3.
 16. Docker builds cache the Maven repository with a **BuildKit cache mount**.
@@ -792,7 +800,7 @@ Phase 2 decisions (2026-10-31):
     `CATAPONTE_URL`, Catapulsar uses its editable Cataponte URL, Cataponte registers in-process.
 18. Registration is idempotent through a new **`PUT /api/v1/bridges/system/{name}`** in Cataponte.
 19. System bridges get **only a badge**: they can be edited, disabled and deleted like any bridge.
-20. `audit_logs` is **copied and kept**: Cataudit copies it at every start (ids `legacy-<ObjectId>`); delete
+20. *(Superseded by 40.)* `audit_logs` is **copied and kept**: Cataudit copies it at every start (ids `legacy-<ObjectId>`); delete
     it by hand when no longer needed.
 21. The audit view is **new, with filters** (app, entity, action, subject prefix, actor, period) and pages.
 22. Audit events are kept **forever**.
@@ -804,7 +812,7 @@ Phase 3 decisions (2026-11-01):
 
 25. **Every** Catapulsar setting is read from the topic (URLs and intervals); `catapulsar_settings` is only
     written, and is the source Catapulsar republishes from at start-up.
-26. `pulsario_settings` is **copied and dropped**: ids become the topic keys, a value already in
+26. *(Superseded by 40.)* `pulsario_settings` is **copied and dropped**: ids become the topic keys, a value already in
     `catapulsar_settings` wins, and the old collection is kept (with a warning) if it holds an unknown id.
 27. Until the topic has been read, apps **use their configured defaults** (no waiting).
 28. Cataponte reads **no** shared setting yet; the reader is available in catacommons when it needs one.
@@ -817,7 +825,7 @@ Phase 4 decisions (2026-11-01):
     `GET /api/v1/collector`. Catapulsar keeps building the overview rows, summary and chart buckets.
 30. The **Catametricas URL is editable in Catapulsar**, like the Cataponte and Cataudit URLs
     (`catapulsar.catametricas-url`, default `CATAMETRICAS_URL`, check button, audited, published).
-31. `contario_*` collections are **renamed** (`renameCollection`, indexes kept) to `catametricas_*` at start-up;
+31. *(Superseded by 40.)* `contario_*` collections are **renamed** (`renameCollection`, indexes kept) to `catametricas_*` at start-up;
     `contario_locks` and `contario_status` are dropped. If both names exist, the old one is left with a warning.
 32. One collection task **per namespace and interval**, id `<tenant>/<namespace>@<interval start>`; intervals
     are aligned to the epoch so every instance publishes the same ids. Claims live 6 h (TTL).
@@ -827,3 +835,24 @@ Phase 4 decisions (2026-11-01):
     component, not part of readiness).
 35. The first collection of a **namespace** (no snapshot of it yet) only sets the baseline; a namespace that no
     longer exists marks its topics as gone. "Last collection" is the newest snapshot.
+
+Phase 5 decisions (2026-11-01):
+
+36. `Exclusive` is **refused** by the API (`400`); ordered bridges use `Failover` or `Key_Shared`.
+37. Bridge status is **merged over replicas through MongoDB**: each replica writes its workers' status to
+    `cataponte_worker_status` every 5 s (TTL 5 min, ignored after 30 s); the API returns the most advanced state,
+    summed counters, and how many replicas run the bridge and how many receive (`replicas`, `activeReplicas`;
+    `Failover` activity comes from the broker's consumer events). If MongoDB is down, a replica answers for itself.
+38. Cataponte's collections are `cataponte_bridges`, `cataponte_traffic_minutes`, `cataponte_traffic_totals` and
+    `cataponte_worker_status`; the old ones are not migrated (decision 40).
+39. The loop check on writes stays **in-process**: two writes on different replicas at the same instant could
+    still create a loop, and the reconciler then blocks those bridges (`BLOCKED`, ADR 0005).
+
+No backward compatibility (2026-11-01):
+
+40. The data in MongoDB is test data, so the apps keep **no backward compatibility**. Removed: the copy of
+    `pulsario_settings` and its old ids (Catapulsar), the rename of `contario_*` (Catametricas), the copy of
+    `audit_logs` and the `legacy` flag (Cataudit), the copy of `bridges`/`bridge_traffic_*`, the move from
+    `Exclusive` to `Failover`, missing versions, the single `destination` field and the `bridge.migrated` event
+    (Cataponte). The old collections, and the `legacy-*` entries already copied into `cataudit_events`, are dropped
+    by hand. MONGO-2 applies again once there is data worth keeping.

@@ -7,8 +7,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -16,6 +18,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pulsar.client.api.Consumer;
+import org.apache.pulsar.client.api.ConsumerBuilder;
+import org.apache.pulsar.client.api.ConsumerEventListener;
 import org.apache.pulsar.client.api.Message;
 import org.apache.pulsar.client.api.MessageId;
 import org.apache.pulsar.client.api.Producer;
@@ -60,10 +64,13 @@ public class BridgeWorker {
     private final List<TopicTraffic> destinationTraffic;
     private final List<String> destinationTopics;
     private final boolean ordered;
+    private final SubscriptionType subscriptionType;
     private final int maxInFlight;
     private final Semaphore inFlight;
     private final List<Producer<byte[]>> producers = new ArrayList<>();
     private final AtomicReference<String> lastError = new AtomicReference<>();
+    /** Partitions where the broker made this consumer the active one ({@code Failover}; -1 = not partitioned). */
+    private final Set<Integer> activePartitions = ConcurrentHashMap.newKeySet();
     private final Object lifecycleLock = new Object();
 
     private volatile Consumer<byte[]> consumer;
@@ -89,6 +96,7 @@ public class BridgeWorker {
         this.metrics = metrics;
         this.destinationTopics = config.resolveDestinationTopics();
         this.ordered = config.isOrderedEffective();
+        this.subscriptionType = subscriptionTypeOf(config);
         this.maxInFlight = config.getMaxInFlight() != null ? config.getMaxInFlight() : settings.defaultMaxInFlight();
         this.inFlight = new Semaphore(maxInFlight);
         metrics.registerInFlight(this::inFlightCount);
@@ -336,17 +344,33 @@ public class BridgeWorker {
     }
 
     private CompletableFuture<Consumer<byte[]>> subscribe() {
-        return client.newConsumer()
+        ConsumerBuilder<byte[]> builder = client.newConsumer()
                 .topic(config.getSource().getTopic())
                 .subscriptionName(config.getSource().getSubscription())
-                .subscriptionType(subscriptionType())
+                .subscriptionType(subscriptionType)
                 .receiverQueueSize(settings.receiverQueueSize())
                 .acknowledgmentGroupTime(settings.acknowledgmentGroupTime().toMillis(), TimeUnit.MILLISECONDS)
-                .negativeAckRedeliveryDelay(settings.negativeAckRedeliveryDelay().toMillis(), TimeUnit.MILLISECONDS)
-                .subscribeAsync();
+                .negativeAckRedeliveryDelay(settings.negativeAckRedeliveryDelay().toMillis(), TimeUnit.MILLISECONDS);
+        if (subscriptionType == SubscriptionType.Failover) {
+            builder.consumerEventListener(new ActiveListener(config.getName(), activePartitions));
+        }
+        return builder.subscribeAsync();
     }
 
-    private SubscriptionType subscriptionType() {
+    /**
+     * Tells whether this replica receives the bridge's messages: on a {@code Failover} subscription only while
+     * the broker has made this consumer active for at least one partition; otherwise whenever it is running.
+     *
+     * @return {@code true} if active
+     */
+    public boolean isActive() {
+        if (state != BridgeState.RUNNING) {
+            return false;
+        }
+        return subscriptionType != SubscriptionType.Failover || !activePartitions.isEmpty();
+    }
+
+    private static SubscriptionType subscriptionTypeOf(BridgeDocument config) {
         String type = config.getSource().subscriptionTypeOrDefault();
         try {
             return SubscriptionType.valueOf(type);
@@ -371,7 +395,7 @@ public class BridgeWorker {
      * Returns the document version this worker was created from; a different stored version means the
      * definition changed and the worker must be restarted.
      *
-     * @return configuration version, may be {@code null} for documents not yet migrated
+     * @return configuration version
      */
     public Long getConfigVersion() {
         return config.getVersion();
@@ -405,7 +429,8 @@ public class BridgeWorker {
                 destinationTopics,
                 ordered,
                 lastError.get(),
-                null);
+                null,
+                isActive());
     }
 
     private int inFlightCount() {
@@ -472,5 +497,31 @@ public class BridgeWorker {
             cause = cause.getCause();
         }
         return cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
+    }
+
+    /** Follows which partitions the broker gave to this consumer on a {@code Failover} subscription. */
+    private static final class ActiveListener implements ConsumerEventListener {
+
+        private static final long serialVersionUID = 1L;
+
+        private final String bridgeName;
+        private final transient Set<Integer> partitions;
+
+        ActiveListener(String bridgeName, Set<Integer> partitions) {
+            this.bridgeName = bridgeName;
+            this.partitions = partitions;
+        }
+
+        @Override
+        public void becameActive(Consumer<?> consumer, int partitionId) {
+            partitions.add(partitionId);
+            log.info("Bridge '{}' is active in this replica (partition {})", bridgeName, partitionId);
+        }
+
+        @Override
+        public void becameInactive(Consumer<?> consumer, int partitionId) {
+            partitions.remove(partitionId);
+            log.info("Bridge '{}' stands by in this replica (partition {})", bridgeName, partitionId);
+        }
     }
 }

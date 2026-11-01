@@ -1,13 +1,12 @@
 package com.catacumbas69.cataponte.dto;
 
-import com.catacumbas69.cataponte.service.BridgeWorkerStatus;
 import java.util.List;
 
 /**
- * Body of {@code GET /api/v1/bridges/status}.
+ * Body of {@code GET /api/v1/bridges/status}: the status of every bridge over all replicas (ADR 0012).
  *
- * @param activeCount bridges currently relaying messages
- * @param workers status of every running, starting or failed bridge
+ * @param activeCount bridges relaying messages in at least one replica
+ * @param workers status of every running, starting, failed or blocked bridge
  */
-public record BridgeStatusResponse(int activeCount, List<BridgeWorkerStatus> workers) {
+public record BridgeStatusResponse(int activeCount, List<BridgeRuntimeStatus> workers) {
 }

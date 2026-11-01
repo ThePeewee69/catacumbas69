@@ -219,12 +219,12 @@ public class BridgeManager {
         blocked.values().forEach(bridge -> statuses.add(new BridgeWorkerStatus(bridge.getId(), bridge.getName(),
                 BridgeState.BLOCKED, false, 0, 0, 0, null, bridge.getSource().getTopic(),
                 bridge.resolveDestinationTopics(), bridge.isOrderedEffective(),
-                "Part of a message loop; change the bridges so that no topic feeds back into itself", null)));
+                "Part of a message loop; change the bridges so that no topic feeds back into itself", null, false)));
         failures.forEach((id, failure) -> {
             if (!workers.containsKey(id) && !blocked.containsKey(id)) {
                 statuses.add(new BridgeWorkerStatus(id, failure.bridgeName(), BridgeState.FAILED, false, 0, 0, 0,
                         null, failure.sourceTopic(), failure.destinationTopics(), failure.ordered(),
-                        failure.lastError(), failure.nextAttemptAt()));
+                        failure.lastError(), failure.nextAttemptAt(), false));
             }
         });
         return statuses;

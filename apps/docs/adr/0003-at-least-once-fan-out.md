@@ -10,7 +10,7 @@ transactions would allow exactly-once but add latency and broker requirements.
 ## Decision
 
 - Acknowledge a source message only after every destination confirmed it.
-- `ordered` bridges (Exclusive/Failover/Key_Shared): on any failure stop acknowledging, wait for in-flight
+- `ordered` bridges (Failover/Key_Shared; Exclusive until phase 5, ADR 0012): on any failure stop acknowledging, wait for in-flight
   sends, then `redeliverUnacknowledgedMessages()` so the stream is replayed in order.
 - Unordered bridges (any subscription, typically Shared): negatively acknowledge the failed message only.
 - Sends are pipelined up to `maxInFlight` per bridge (target ≥ 1,000 msg/s).

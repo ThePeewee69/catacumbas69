@@ -40,10 +40,6 @@ every instance, each interval ──▶ catametricas/collect-tasks ──▶ eve
 | `catametricas_topic_totals` | All-time messages/bytes in and out per topic | Forever |
 | `catametricas_task_runs` | Task claims: who, when, and the result | 6 h (TTL index) |
 
-**Migration (phase 4)**: at start-up, before anything is written, the old `contario_*` collections are renamed
-to these names (`renameCollection`, indexes kept), and `contario_locks` and `contario_status` are dropped. If
-both an old and a new collection exist, the old one is left alone with a warning.
-
 **Events** (ADR 0008, orch.md §4.4): only changes of state of each instance are published on
 `catacumbas69/catametricas/events`: `collection.failed` the first time scheduling, claiming or collecting fails,
 and `collection.recovered` on the next successful task. The namespace and the topics are created at start-up,

@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Point-in-time view of one bridge's runtime.
+ * Point-in-time view of one bridge's runtime in this replica.
  *
  * @param bridgeId bridge id
  * @param name bridge name
@@ -19,6 +19,9 @@ import java.util.List;
  * @param ordered whether the bridge runs in ordered mode
  * @param lastError last error message, or {@code null}
  * @param nextRetryAt next start attempt after a failure, or {@code null}
+ * @param active {@code true} when this replica's consumer receives messages: always while running on a
+ *               {@code Shared} or {@code Key_Shared} subscription; on a {@code Failover} subscription only for the
+ *               replica the broker made active (the others stand by)
  */
 public record BridgeWorkerStatus(
         String bridgeId,
@@ -33,5 +36,6 @@ public record BridgeWorkerStatus(
         List<String> destinationTopics,
         boolean ordered,
         String lastError,
-        Instant nextRetryAt) {
+        Instant nextRetryAt,
+        boolean active) {
 }

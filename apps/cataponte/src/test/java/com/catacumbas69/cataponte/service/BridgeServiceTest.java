@@ -71,6 +71,16 @@ class BridgeServiceTest {
     }
 
     @Test
+    void create_rejectsExclusiveSubscriptions() {
+        BridgeDocument draft = TestBridges.bridge("1", "Exclusive", DEST_A);
+
+        assertThatThrownBy(() -> service.create(draft, USER))
+                .isInstanceOf(BridgeValidationException.class)
+                .extracting("field").isEqualTo("source.subscriptionType");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
     void create_rejectsBridgeThatClosesALoop() {
         BridgeDocument back = TestBridges.bridge("2", "Shared");
         back.getSource().setTopic(DEST_A);

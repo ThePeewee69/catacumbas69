@@ -17,11 +17,11 @@ Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs
 | **Produce** | Send a message with an optional key |
 | **Subscription details** | Backlog per subscription in Overview, with **Clear backlog** (skips every message) |
 | **Backlog** | Subscriptions with backlog statistics (messages, size, consumers, type, rate out, unacked) refreshed automatically; one click peeks up to 100 messages without consuming them (audited); view, edit & re-produce, skip one or all |
-| **Bridges** | Create, edit, enable/disable and delete Cataponte bridges; running state, errors, loop blocks and all-time message counts per topic |
+| **Bridges** | Create, edit, enable/disable and delete Cataponte bridges (subscription `Shared`, `Failover` or `Key_Shared`); running state over every Cataponte replica ("1/3 replicas active"), errors, loop blocks and all-time message counts per topic |
 | **Settings** | ⚙️ Connection Settings: Cataponte, Cataudit and Catametricas URLs and the Catametricas collection interval, changed at runtime (saved in MongoDB, audited, published on the settings topic) |
 | **Breadcrumb** | Cluster › tenant › namespace › topic, each part clickable |
 | **Auto-refresh** | Top bar "Auto N s": on/off per browser; ▾ sets the interval for everyone (2–300 s, default 10 s, saved in MongoDB, audited). Refreshes the sidebar, Overview, Subscriptions and Bridges; never repeats a backlog peek |
-| **Audit** | 🛡 Audit panel: the audit trail of every app, from Cataudit (ADR 0009). Filters by app, entity, action, subject prefix, actor and period. Each row expands into before/after and details; clicking a subject filters by it; refreshed automatically. Old `audit_logs` entries are tagged *legacy* |
+| **Audit** | 🛡 Audit panel: the audit trail of every app, from Cataudit (ADR 0009). Filters by app, entity, action, subject prefix, actor and period. Each row expands into before/after and details; clicking a subject filters by it; refreshed automatically |
 
 ## Architecture
 
@@ -81,8 +81,7 @@ Timeouts, producer cache size and the peek limit are under `catapulsar.*` in `ap
 `CATAPONTE_URL` is only the default: the Cataponte URL can be changed in ⚙️ Connection Settings. The new
 URL is stored in `catapulsar_settings`, published on the settings topic (every replica follows it within
 seconds, ADR 0011) and recorded in the audit log (`setting.changed`). "Use default" deletes it and goes back to
-`CATAPONTE_URL`. All settings work this way; at start-up Catapulsar copies the old `pulsario_settings` into
-`catapulsar_settings` once and drops it.
+`CATAPONTE_URL`. All settings work this way.
 
 `CATAUDIT_URL` works the same way: it is the default of the Cataudit URL, editable in ⚙️ Connection Settings or
 from the link in the Audit panel header, with a "Check Cataudit" button. So does `CATAMETRICAS_URL`, the

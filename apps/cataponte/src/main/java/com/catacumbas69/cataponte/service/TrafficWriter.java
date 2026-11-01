@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Writes drained traffic counts with two unordered bulk upserts: one per minute bucket into
- * {@code bridge_traffic_minutes}, one per topic into {@code bridge_traffic_totals}. Counts are added
+ * {@code cataponte_traffic_minutes}, one per topic into {@code cataponte_traffic_totals}. Counts are added
  * with {@code $inc}, so repeated writes for the same minute accumulate correctly.
  */
 @Component

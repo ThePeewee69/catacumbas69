@@ -56,3 +56,9 @@ know the collection's shape and be able to write to it.
 - `audit_logs` is copied at every start, with ids `legacy-<ObjectId>` and each old action mapped to today's
   event type. The collection is **kept**, read-only, until it is deleted by hand. Catapulsar and Cataponte no
   longer write it; that code is removed.
+
+## No backward compatibility (2026-11-01)
+
+The data in MongoDB was test data, so every migration was removed from the code and the old collections were
+dropped by hand (orch.md decision 40). Cataudit no longer copies `audit_logs` and its events have no `legacy` flag;
+the `legacy-*` entries already copied were deleted with `audit_logs`.

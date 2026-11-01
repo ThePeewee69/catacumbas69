@@ -18,11 +18,10 @@ import java.util.Map;
  * @param before state before, or {@code null}
  * @param after state after, or {@code null}
  * @param details other values, or {@code null}
- * @param legacy copied from the old {@code audit_logs}
  */
 public record AuditEventResponse(String id, Instant time, String app, String entity, String action, String type,
                                  String subject, String actor, Map<String, String> before,
-                                 Map<String, String> after, Map<String, String> details, boolean legacy) {
+                                 Map<String, String> after, Map<String, String> details) {
 
     /**
      * Converts a stored event.
@@ -32,7 +31,6 @@ public record AuditEventResponse(String id, Instant time, String app, String ent
      */
     public static AuditEventResponse from(AuditEvent event) {
         return new AuditEventResponse(event.id(), event.time(), event.app(), event.entity(), event.action(),
-                event.type(), event.subject(), event.actor(), event.before(), event.after(), event.details(),
-                event.legacy());
+                event.type(), event.subject(), event.actor(), event.before(), event.after(), event.details());
     }
 }

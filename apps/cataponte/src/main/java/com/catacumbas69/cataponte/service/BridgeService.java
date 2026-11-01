@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 public class BridgeService {
 
     private static final String SHARED = "Shared";
+    private static final String EXCLUSIVE = "Exclusive";
 
     private final BridgeRepository repository;
     private final AuditLog audit;
@@ -218,13 +219,11 @@ public class BridgeService {
         return left.equals(right);
     }
 
-    /** Collapses legacy and duplicate destinations into the {@code destinations} list (MONGO-2). */
-    @SuppressWarnings("deprecation")
+    /** Removes blank and duplicate destinations. */
     private static void normalize(BridgeDocument bridge) {
         List<BridgeDestination> destinations = new ArrayList<>();
         bridge.resolveDestinationTopics().forEach(topic -> destinations.add(new BridgeDestination(topic)));
         bridge.setDestinations(destinations);
-        bridge.setDestination(null);
     }
 
     /** Rules that span several fields; single-field rules are checked by Jakarta Validation (API-5). */
@@ -239,9 +238,13 @@ public class BridgeService {
         if (destinations.contains(bridge.getSource().getTopic())) {
             throw new BridgeValidationException("destinations", "A destination cannot be the source topic");
         }
+        if (Objects.equals(EXCLUSIVE, bridge.getSource().subscriptionTypeOrDefault())) {
+            throw new BridgeValidationException("source.subscriptionType",
+                    "Exclusive is not allowed: every replica runs every bridge; use Failover to keep order");
+        }
         if (bridge.isOrderedEffective() && Objects.equals(SHARED, bridge.getSource().subscriptionTypeOrDefault())) {
             throw new BridgeValidationException("ordered",
-                    "Ordered bridges need an Exclusive, Failover or Key_Shared subscription");
+                    "Ordered bridges need a Failover or Key_Shared subscription");
         }
     }
 

@@ -47,7 +47,7 @@ public final class AuditEvents {
         return Optional.of(new AuditEvent(event.id(), event.source(), type, app, entity, action, event.subject(),
                 timeOf(event.time(), receivedAt), data == null ? null : data.actor(),
                 data == null ? null : data.before(), data == null ? null : data.after(),
-                data == null ? null : data.details(), receivedAt, false));
+                data == null ? null : data.details(), receivedAt));
     }
 
     private static String appOf(String source) {
