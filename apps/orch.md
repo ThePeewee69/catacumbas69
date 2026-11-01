@@ -591,6 +591,9 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 - **OBS-3 [MUST]** Logs are JSON on stdout in the cluster (structured logging, ECS format) and
   human-readable locally. Alloy ships them to Loki; Kubernetes labels `app`, `namespace` come from Alloy,
   not from the app.
+- **OBS-9 [MUST]** A failure the code handles (retried or ignored) is logged once, in one line, by our code.
+  Library loggers that repeat it at WARN with a stack trace are lowered to ERROR in `application.properties`
+  (Pulsar client: `BinaryProtoLookupService`, `PulsarClientImpl`, admin `BaseResource`).
 - **OBS-4 [MUST]** Cataponte puts `bridgeId` and `bridgeName` in the MDC inside worker threads.
 - **OBS-5 [MUST]** Cataponte exposes Micrometer metrics per bridge, tagged `bridge`:
   `cataponte_messages_forwarded_total`, `cataponte_forward_errors_total`, `cataponte_bridges_running`.
