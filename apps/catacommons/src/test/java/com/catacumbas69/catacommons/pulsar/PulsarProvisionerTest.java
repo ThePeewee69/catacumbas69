@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -29,6 +30,7 @@ import org.apache.pulsar.common.policies.data.BacklogQuota;
 import org.apache.pulsar.common.policies.data.RetentionPolicies;
 import org.apache.pulsar.common.policies.data.TenantInfo;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.mockito.ArgumentCaptor;
 import org.springframework.util.unit.DataSize;
 
@@ -72,10 +74,16 @@ class PulsarProvisionerTest {
         ArgumentCaptor<RetentionPolicies> retention = ArgumentCaptor.forClass(RetentionPolicies.class);
         verify(namespaces).setRetention(eq("catacumbas69/catapulsar"), retention.capture());
         assertThat(retention.getValue().getRetentionTimeInMinutes()).isEqualTo(7 * 24 * 60);
-        assertThat(retention.getValue().getRetentionSizeInMB()).isEqualTo(1024);
+        assertThat(retention.getValue().getRetentionSizeInMB()).isEqualTo(2048);
         ArgumentCaptor<BacklogQuota> quota = ArgumentCaptor.forClass(BacklogQuota.class);
         verify(namespaces).setBacklogQuota(eq("catacumbas69/catapulsar"), quota.capture());
         assertThat(quota.getValue().getPolicy()).isEqualTo(BacklogQuota.RetentionPolicy.producer_exception);
+        // Pulsar refuses (412) a quota that is not below the retention size
+        assertThat(quota.getValue().getLimitSize()).isEqualTo(1024L * 1024 * 1024)
+                .isLessThan(retention.getValue().getRetentionSizeInMB() * 1024L * 1024);
+        InOrder order = inOrder(namespaces);
+        order.verify(namespaces).setRetention(eq("catacumbas69/catapulsar"), any(RetentionPolicies.class));
+        order.verify(namespaces).setBacklogQuota(eq("catacumbas69/catapulsar"), any(BacklogQuota.class));
         verify(topics).createNonPartitionedTopic(EVENTS);
         verify(topics).createNonPartitionedTopic(SETTINGS);
         verify(topicPolicies, never()).setRetention(eq(EVENTS), any());
