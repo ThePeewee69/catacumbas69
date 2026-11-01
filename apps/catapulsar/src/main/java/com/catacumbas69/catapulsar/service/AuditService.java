@@ -2,7 +2,6 @@ package com.catacumbas69.catapulsar.service;
 
 import com.catacumbas69.catacommons.events.EventData;
 import com.catacumbas69.catacommons.events.EventPublisher;
-import com.catacumbas69.catapulsar.model.Setting;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -78,12 +77,11 @@ public class AuditService {
         }
     }
 
-    /** Subject is the setting's topic key; before/after hold {@code value}. */
+    /** Subject is the setting id (its key on the settings topic); before/after hold {@code value}. */
     private void publishSettingChanged(String user, Map<String, Object> details) {
         String id = String.valueOf(details.get("setting"));
         events.publish(AuditAction.CHANGE_SETTING.entity(), AuditAction.CHANGE_SETTING.verb(),
-                Setting.topicKey(id).orElse(id),
-                EventData.change(user, value(details.get("from")), value(details.get("to")), Map.of("id", id)));
+                id, EventData.change(user, value(details.get("from")), value(details.get("to")), null));
     }
 
     private static Map<String, Object> value(Object value) {

@@ -11,14 +11,17 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.catacumbas69.catacommons.settings.SettingValue;
+import com.catacumbas69.catacommons.settings.SharedSettings;
 import com.catacumbas69.catapulsar.TestProperties;
 import com.catacumbas69.catapulsar.model.Setting;
 import com.catacumbas69.catapulsar.repository.SettingRepository;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Map;
-import java.util.Optional;
+import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
 
@@ -29,8 +32,10 @@ class CataponteEndpointTest {
     private final SettingRepository settings = mock(SettingRepository.class);
     private final AuditService audit = mock(AuditService.class);
     private final SettingsPublisher publisher = mock(SettingsPublisher.class);
+    private final SharedSettings shared = new SharedSettings(null, Executors.newSingleThreadScheduledExecutor(),
+            Duration.ofSeconds(1));
     private final CataponteEndpoint endpoint = new CataponteEndpoint(TestProperties.properties(), settings, audit,
-            publisher, Clock.fixed(Instant.parse("2026-10-30T22:00:00Z"), ZoneOffset.UTC));
+            publisher, shared, Clock.fixed(Instant.parse("2026-10-30T22:00:00Z"), ZoneOffset.UTC));
 
     @Test
     void startsWithTheConfiguredUrl() {
@@ -86,32 +91,19 @@ class CataponteEndpointTest {
     }
 
     @Test
-    void loadSaved_appliesTheStoredUrl() {
-        when(settings.findById(Setting.CATAPONTE_URL)).thenReturn(Optional.of(
-                new Setting(Setting.CATAPONTE_URL, "http://saved:8082", Instant.EPOCH, "10.0.0.1")));
+    void followsTheSettingsTopic() {
+        shared.apply(Setting.CATAPONTE_URL, new SettingValue("http://other:8082/"));
+        assertThat(endpoint.url()).isEqualTo("http://other:8082");
+        assertThat(endpoint.isCustom()).isTrue();
 
-        endpoint.loadSaved();
-
-        assertThat(endpoint.url()).isEqualTo("http://saved:8082");
-    }
-
-    @Test
-    void loadSaved_keepsTheDefault_whenMongoIsDown() {
-        when(settings.findById(Setting.CATAPONTE_URL)).thenThrow(new DataAccessResourceFailureException("down"));
-
-        endpoint.loadSaved();
-
+        shared.apply(Setting.CATAPONTE_URL, null);
         assertThat(endpoint.url()).isEqualTo(DEFAULT_URL);
     }
 
     @Test
-    void loadSaved_doesNotOverwriteAChangeMadeMeanwhile() {
-        endpoint.change("http://new:8082", "10.0.0.1");
-        when(settings.findById(Setting.CATAPONTE_URL)).thenReturn(Optional.of(
-                new Setting(Setting.CATAPONTE_URL, "http://old:8082", Instant.EPOCH, "10.0.0.1")));
+    void ignoresAnInvalidUrlFromTheTopic() {
+        shared.apply(Setting.CATAPONTE_URL, new SettingValue("not a url"));
 
-        endpoint.loadSaved();
-
-        assertThat(endpoint.url()).isEqualTo("http://new:8082");
+        assertThat(endpoint.url()).isEqualTo(DEFAULT_URL);
     }
 }

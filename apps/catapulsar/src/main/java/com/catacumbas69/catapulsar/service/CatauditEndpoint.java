@@ -1,5 +1,6 @@
 package com.catacumbas69.catapulsar.service;
 
+import com.catacumbas69.catacommons.settings.SharedSettings;
 import com.catacumbas69.catapulsar.config.CatapulsarProperties;
 import com.catacumbas69.catapulsar.model.Setting;
 import com.catacumbas69.catapulsar.repository.SettingRepository;
@@ -20,11 +21,12 @@ public class CatauditEndpoint extends UrlSetting {
      * @param settings stored settings
      * @param audit audit log
      * @param publisher publishes the URL on the settings topic
+     * @param shared values read from the settings topic
      * @param clock time source
      */
     public CatauditEndpoint(CatapulsarProperties properties, SettingRepository settings, AuditService audit,
-                            SettingsPublisher publisher, Clock clock) {
+                            SettingsPublisher publisher, SharedSettings shared, Clock clock) {
         super(Setting.CATAUDIT_URL, "Cataudit", "http://cataudit:8084", properties.cataudit().url(), settings, audit,
-                publisher, clock);
+                publisher, shared, clock);
     }
 }

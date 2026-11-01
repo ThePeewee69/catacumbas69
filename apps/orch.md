@@ -26,7 +26,7 @@ catacommons) are symlinks to it — edit only the original.
   Browser ─────────▶│  Catapulsar  (:8081)         │──── Admin REST ───▶ Pulsar broker
   (Alpine.js UI)    │  UI + BFF API                │                     (HTTP :8080 / NodePort 31080)
                     └──┬────────────┬──────────┬───┘
-         REST bridges  │            │ REST     │ reads contario_*, pulsario_settings
+         REST bridges  │            │ REST     │ catapulsar_settings; reads contario_*
                        ▼            ▼ audit    ▼
               ┌──────────────┐ ┌──────────┐ ┌──────────────────────────┐ ┌──────────────┐
               │ Cataponte    │ │ Cataudit │ │ MongoDB  catacumbas69    │ │ Catametricas │── Admin REST ──▶ Pulsar
@@ -40,18 +40,19 @@ catacommons) are symlinks to it — edit only the original.
 
 | Component | Responsibility | Owns (data) | Talks to |
 |---|---|---|---|
-| **Catapulsar** | Web UI for Pulsar (tenants, namespaces, topics, subscriptions, backlog, produce); UI for bridges and for the audit trail (BFF to Cataudit); runtime settings (Cataponte URL); events for its actions | `pulsario_settings` | Pulsar Admin API, Pulsar binary (produce/peek, events), Cataponte REST, Cataudit REST, MongoDB |
+| **Catapulsar** | Web UI for Pulsar (tenants, namespaces, topics, subscriptions, backlog, produce); UI for bridges and for the audit trail (BFF to Cataudit); runtime settings (Cataponte and Cataudit URLs, intervals), published on the settings topic; events for its actions | `catapulsar_settings` | Pulsar Admin API, Pulsar binary (produce/peek, events), Cataponte REST, Cataudit REST, MongoDB |
 | **Cataponte** | Runs bridges: consumes a source topic and fans each message out to 1..n destination topics; CRUD API for bridge config; system bridges registered by the apps (`audit-<app>`); per-topic traffic counts; loop blocking; events for bridge changes | `bridges`, `bridge_traffic_minutes`, `bridge_traffic_totals` | Pulsar binary + Admin API, MongoDB |
 | **Cataudit** | Owns the audit trail (ADR 0009): consumes `catacumbas69/cataudit/audit` (fed by the `audit-<app>` bridges), stores every event once, serves a query API; copied the old `audit_logs` | `cataudit_events`; reads `audit_logs` once per start (copy) | Pulsar binary + Admin API, MongoDB |
 | **catacommons** | Shared library (not a service): CloudEvents envelope, event publisher with retries, Pulsar names, start-up provisioning of the tenant/namespace/topics, registration of the app's audit bridge (ADR 0008, 0009) | — | Pulsar binary + Admin API through each app's clients; Cataponte REST |
-| **Catametricas** | Collects every topic's statistics from Pulsar on an interval and stores traffic (messages/bytes in and out) and backlog per topic: latest snapshot, per minute (30 days), per hour and all-time (ADR 0007). No business API | `contario_topic_snapshots`, `contario_topic_minutes`, `contario_topic_hours`, `contario_topic_totals`, `contario_status`, `contario_locks`; reads one document of `pulsario_settings` | Pulsar Admin API, MongoDB |
+| **Catametricas** | Collects every topic's statistics from Pulsar on an interval and stores traffic (messages/bytes in and out) and backlog per topic: latest snapshot, per minute (30 days), per hour and all-time (ADR 0007). No business API | `contario_topic_snapshots`, `contario_topic_minutes`, `contario_topic_hours`, `contario_topic_totals`, `contario_status`, `contario_locks`; reads its interval from the settings topic | Pulsar Admin API, MongoDB |
 
 **Names.** The apps were renamed on 2026-10-31: Pulsário → **Catapulsar**, Passário → **Cataponte**,
 Contário → **Catametricas** (folders, Maven artifacts, packages, classes, properties, environment variables,
-metrics, images and docs). **MongoDB identifiers kept the old names** so no data had to be migrated: the
-collections `pulsario_settings` and `contario_*`, and the setting ids `passario.url` and
-`contario.collect-interval-seconds`. New code MUST keep using these exact names (they are constants in
-`Setting` and `CatametricasSchema`/`Schema`) until each owner's migration (§15). The old shared `audit_logs`
+metrics, images and docs). **MongoDB identifiers kept the old names** at first so no data had to be migrated;
+each owner migrates its collections in its phase (§15). Done: `pulsario_settings` → `catapulsar_settings`
+with ids equal to the topic keys (phase 3). Still old: `contario_*` (phase 4), `bridges` and
+`bridge_traffic_*` (phase 5); new code MUST keep using those exact names (constants in
+`CatametricasSchema`/`Schema` and the Cataponte models) until then. The old shared `audit_logs`
 (with `application` values `pulsario` / `passario`) is no longer written; Cataudit copies it at start-up.
 
 **Events and audit (§15 phases 1–2, §4.4).** Every app owns a Pulsar namespace `catacumbas69/<app>`,
@@ -70,8 +71,9 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 - **ARCH-1 [MUST]** Each service owns its MongoDB collections. A service MUST NOT read or write another
   service's collection. Cross-service data goes through the owner's REST API or its events. **Exceptions**,
   each with its ADR and removed in a later phase (§15): Cataudit **reads** the old `audit_logs` to copy it
-  (ADR 0009); Catapulsar **reads** Catametricas' `contario_*` collections for the overviews and Catametricas
-  **reads** the `contario.collect-interval-seconds` document of `pulsario_settings` (ADR 0007). The shared
+  (ADR 0009); Catapulsar **reads** Catametricas' `contario_*` collections for the overviews (ADR 0007, until
+  phase 4). Shared settings travel on the settings topic, never through another app's collection (ADR 0011).
+  The shared
   field names live in `catametricas/.../model/Schema.java` and its mirror `catapulsar/.../model/CatametricasSchema.java`;
   change both together.
 - **ARCH-2 [MUST]** The browser talks only to Catapulsar. Catapulsar exposes the bridge API to its UI as a
@@ -114,7 +116,7 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 
 `CATAPONTE_URL` and `CATAUDIT_URL` are defaults; both can be changed at runtime from Catapulsar's Connection
 Settings (`PUT /api/v1/settings/cataponte`, `PUT /api/v1/settings/cataudit`), which stores them in
-`pulsario_settings`, audits the change and publishes it on the settings topic. Deleting the setting goes back
+`catapulsar_settings`, audits the change and publishes it on the settings topic. Deleting the setting goes back
 to the env var.
 
 - **CFG-1 [MUST]** Bind config with `@ConfigurationProperties` records (validated with `@Validated`), not
@@ -374,14 +376,22 @@ app's next start. Registration events have the app name as actor (`X-Catacumbas6
 
 Settings topic `catacumbas69/catapulsar/settings` (ADR 0011): key = setting key, value `{"value": "<text>"}`,
 empty value (tombstone) = default. Catapulsar publishes on every change and every value (or tombstone) at
-start-up.
+start-up, from `catapulsar_settings` (document id = key).
 
-| Key | Document id in `pulsario_settings` |
-|---|---|
-| `catapulsar.cataponte-url` | `passario.url` |
-| `catapulsar.cataudit-url` | `catapulsar.cataudit-url` (new, already the owner's name) |
-| `catapulsar.refresh-interval-seconds` | `ui.refresh-interval-seconds` |
-| `catametricas.collect-interval-seconds` | `contario.collect-interval-seconds` |
+- **EVT-7 [MUST]** Every service reads shared settings only through catacommons' `SharedSettings` (a Pulsar
+  `TableView` on the topic, opened at start-up and retried while Pulsar is down): `get(key)` or
+  `listen(key, …)`. Until the topic has been read, and for a missing or invalid value, the configured default
+  is used; nobody waits for the topic. An app that uses no shared setting sets
+  `catacommons.settings.enabled=false` (Cataponte, Cataudit).
+- **EVT-8 [MUST]** A change is applied at once by the replica that made it and reaches every other replica
+  and service through the topic; settings are never read from MongoDB at request time.
+
+| Key | Used by | Old id in `pulsario_settings` (migrated in phase 3) |
+|---|---|---|
+| `catapulsar.cataponte-url` | Catapulsar | `passario.url` |
+| `catapulsar.cataudit-url` | Catapulsar | `catapulsar.cataudit-url` |
+| `catapulsar.refresh-interval-seconds` | Catapulsar | `ui.refresh-interval-seconds` |
+| `catametricas.collect-interval-seconds` | Catametricas | `contario.collect-interval-seconds` |
 
 ## 5. REST contracts and errors
 
@@ -430,7 +440,7 @@ Stack: plain HTML + Alpine.js 3 (from cdnjs, pinned version), one `index.html`, 
   bridge list/status/traffic. It never repeats an action with side effects or one that writes an audit
   entry (backlog peek). It refreshes in place (no spinner, no toast), skips while the browser tab is
   hidden, and lists are replaced only when they changed. The on/off switch is per browser; the interval
-  is shared (`pulsario_settings`, 2–300 s, audited).
+  is shared (settings topic, 2–300 s, audited).
 
 ---
 
@@ -659,9 +669,14 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
-- **2026-10-31, phase 2 of §15** (pending `mvn clean install` at `apps/`): **Cataudit** (new service, port
+- **2026-11-01, phase 3 of §15** (pending `mvn clean install` at `apps/`): `SharedSettings` (TableView) in
+  catacommons; Catapulsar and Catametricas read their settings from the topic; `pulsario_settings` migrated to
+  `catapulsar_settings` and dropped.
+- **2026-11-01, phase 2 of §15** (`mvn clean install` at `apps/` green: catacommons 17, Catapulsar 88,
+  Cataponte 84, Catametricas 26, Cataudit 18 tests, 0 Checkstyle violations): **Cataudit** (new service, port
   8084), `audit-<app>` system bridges registered by each app, `PUT /api/v1/bridges/system/{name}` in
-  Cataponte, `audit_logs` no longer written and copied into `cataudit_events`, new audit view in Catapulsar.
+  Cataponte, `audit_logs` no longer written and copied into `cataudit_events`, new audit view in Catapulsar,
+  Cataudit URL editable like the Cataponte URL.
 - **2026-10-31, phase 1 of §15** (`mvn clean install` at `apps/` green: catacommons 11, Catapulsar 83,
   Cataponte 80, Catametricas 26 tests, 0 Checkstyle violations): Maven reactor and `catacommons`,
   Pulsar namespaces created at start-up, events for every audited action (§4.4), settings topic published,
@@ -682,7 +697,7 @@ Closed on 2026-10-30:
 
 ## 15. Target architecture (proposed — ADR 0008–0013)
 
-Status: **phases 1–2 implemented** (2026-10-31); phases 3–6 proposed. Until a phase below is implemented, the
+Status: **phases 1–3 implemented** (2026-10-31 – 2026-11-01); phases 4–6 proposed. Until a phase below is implemented, the
 rules in sections 1–14 stay in force. When a phase lands, the rules it changes are updated in the same change
 and its ADRs become "Accepted".
 
@@ -721,8 +736,8 @@ Each phase ends with `mvn verify` green in every app, the docs updated and the a
 |---|---|---|---|
 | 1 | Event foundations | Reactor + catacommons; tenant/namespaces/policies at start-up; CloudEvents publisher with retries in each app; events for every action already audited today (still writing `audit_logs` too); Catapulsar already publishes the settings topic | **Done** 2026-10-31 |
 | 2 | Cataudit | New service; each app registers its `audit-<app>` system bridge; `audit_logs` copied into `cataudit_events` and no longer written; Catapulsar's new audit view reads Cataudit | **Done** 2026-10-31 |
-| 3 | Settings topic | Catametricas, Cataponte and all Catapulsar replicas read the settings topic (TableView); Catametricas stops reading `pulsario_settings`; `pulsario_settings` → `catapulsar_settings` | Next |
-| 4 | Catametricas API and tasks | Query API; Catapulsar overviews via BFF; collection tasks on Pulsar with claims and conditional snapshot updates; lease removed; `contario_*` → `catametricas_*` | Proposed |
+| 3 | Settings topic | Catametricas and all Catapulsar replicas read the settings topic (`SharedSettings`, TableView); nobody reads settings from MongoDB; `pulsario_settings` → `catapulsar_settings` (copied, then dropped) | **Done** 2026-11-01 |
+| 4 | Catametricas API and tasks | Query API; Catapulsar overviews via BFF; collection tasks on Pulsar with claims and conditional snapshot updates; lease removed; `contario_*` → `catametricas_*` | Next |
 | 5 | Cataponte replicas | `Exclusive` rejected and migrated to `Failover`; Deployment with N replicas; ADR 0002 superseded; `bridges`, `bridge_traffic_*` → `cataponte_*` | Proposed |
 | 6 | Prometheus source (later) | Once Prometheus/OpenMetrics/Loki run on MicroShift: short ranges from PromQL in Catametricas | Later |
 
@@ -772,3 +787,12 @@ Phase 2 decisions (2026-10-31):
 23. Catapulsar and Cataponte **stop writing `audit_logs` for good** (the code is removed).
 24. The **Cataudit URL is editable in Catapulsar**, like the Cataponte URL (Settings dialog, link in the Audit
     panel, check button, audited, published); `CATAUDIT_URL` is its default. Both share `UrlSetting`.
+
+Phase 3 decisions (2026-11-01):
+
+25. **Every** Catapulsar setting is read from the topic (URLs and intervals); `catapulsar_settings` is only
+    written, and is the source Catapulsar republishes from at start-up.
+26. `pulsario_settings` is **copied and dropped**: ids become the topic keys, a value already in
+    `catapulsar_settings` wins, and the old collection is kept (with a warning) if it holds an unknown id.
+27. Until the topic has been read, apps **use their configured defaults** (no waiting).
+28. Cataponte reads **no** shared setting yet; the reader is available in catacommons when it needs one.

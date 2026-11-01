@@ -38,9 +38,8 @@ class AuditServiceTest {
         audit.record("10.0.0.1", AuditAction.CHANGE_SETTING, null,
                 Map.of("setting", Setting.COLLECT_INTERVAL_SECONDS, "from", 60, "to", 30));
 
-        verify(events).publish("setting", "changed", Setting.COLLECT_INTERVAL_SECONDS_KEY,
-                EventData.change("10.0.0.1", Map.of("value", 60), Map.of("value", 30),
-                        Map.of("id", Setting.COLLECT_INTERVAL_SECONDS)));
+        verify(events).publish("setting", "changed", Setting.COLLECT_INTERVAL_SECONDS,
+                EventData.change("10.0.0.1", Map.of("value", 60), Map.of("value", 30), null));
     }
 
     @Test

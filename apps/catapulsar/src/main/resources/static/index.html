@@ -406,7 +406,7 @@
       <span x-text="connLabel()"></span>
     </div>
 
-    <!-- Auto-refresh: on/off per browser, interval shared by everyone (pulsario_settings, audited) -->
+    <!-- Auto-refresh: on/off per browser, interval shared by everyone (catapulsar_settings, audited) -->
     <div class="auto-refresh" @click.outside="auto.menuOpen = false" @keydown.escape="auto.menuOpen = false">
       <button type="button" class="btn btn-ghost auto-toggle" :class="{ on: auto.on }" :aria-pressed="auto.on"
               @click="toggleAutoRefresh()"

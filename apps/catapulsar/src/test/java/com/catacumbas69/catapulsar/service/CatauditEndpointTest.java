@@ -8,13 +8,16 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import com.catacumbas69.catacommons.settings.SharedSettings;
 import com.catacumbas69.catapulsar.TestProperties;
 import com.catacumbas69.catapulsar.model.Setting;
 import com.catacumbas69.catapulsar.repository.SettingRepository;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Map;
+import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
 
 class CatauditEndpointTest {
@@ -22,8 +25,10 @@ class CatauditEndpointTest {
     private final SettingRepository settings = mock(SettingRepository.class);
     private final AuditService audit = mock(AuditService.class);
     private final SettingsPublisher publisher = mock(SettingsPublisher.class);
+    private final SharedSettings shared = new SharedSettings(null, Executors.newSingleThreadScheduledExecutor(),
+            Duration.ofSeconds(1));
     private final CatauditEndpoint endpoint = new CatauditEndpoint(TestProperties.properties(), settings, audit,
-            publisher, Clock.fixed(Instant.parse("2026-11-01T00:30:00Z"), ZoneOffset.UTC));
+            publisher, shared, Clock.fixed(Instant.parse("2026-11-01T00:30:00Z"), ZoneOffset.UTC));
 
     @Test
     void startsWithTheConfiguredUrl() {

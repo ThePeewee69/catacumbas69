@@ -1,6 +1,6 @@
 # 11. Shared settings live in Catapulsar and are published on a compacted topic
 
-Date: 2026-10-31 · Status: Accepted, publishing implemented in phase 1 (readers: phase 3)
+Date: 2026-10-31 · Status: Accepted (publishing in phase 1, readers in phase 3)
 
 ## Context
 
@@ -46,3 +46,19 @@ replica's memory, so other replicas miss changes.
   migration.
 - Catapulsar publishes on every change and, at start-up, publishes every setting: its stored value, or a
   tombstone when the setting is at its default. Nobody reads the topic until phase 3.
+
+## Implementation (phase 3, 2026-11-01)
+
+- catacommons provides **`SharedSettings`**. At start-up it opens a `TableView<SettingValue>` on the topic,
+  retried every 10 s while Pulsar is down. `get(key)` returns the current value. `listen(key, …)` gives the
+  current value and every change, and a tombstone arrives as `null`, which means the default. Until the topic
+  has been read, callers use their configured defaults. An app turns the reader off with
+  `catacommons.settings.enabled=false`; Cataponte and Cataudit do.
+- Catapulsar reads **every** setting through it: both URLs and both intervals. A change is applied at once in
+  the replica that made it and reaches the other replicas through the topic. MongoDB is never read at request
+  time.
+- `pulsario_settings` becomes **`catapulsar_settings`**, with document id = topic key. At start-up, before
+  republishing, Catapulsar copies the missing settings (a value already in the new collection wins), checks
+  them and drops the old collection. The old collection is kept, with a warning, if it holds an unknown id.
+- Catametricas no longer reads Catapulsar's collection; its interval comes from
+  `catametricas.collect-interval-seconds` on the topic.

@@ -32,7 +32,7 @@ Browser (Alpine.js)
 Catapulsar  :8081  (Spring Boot)
     ├── /api/v1/tenants, /namespaces, /topics/**  ──► Pulsar admin API (HTTP)  +  Pulsar client (produce)
     ├── /api/v1/bridges/**  (BFF, ADR 0001)        ──► Cataponte (URL from settings, default CATAPONTE_URL)
-    ├── /api/v1/settings/**                        ──► MongoDB catacumbas69.pulsario_settings
+    ├── /api/v1/settings/**                        ──► MongoDB catapulsar_settings + settings topic (ADR 0011)
     ├── /api/v1/overview/**  (read-only, ADR 0007) ──► MongoDB catacumbas69.contario_*  (written by Catametricas)
     ├── /api/v1/audit/**  (read-only, ADR 0009)     ──► Cataudit (URL from settings, default CATAUDIT_URL)
     └── /actuator/**, /swagger-ui.html
@@ -74,8 +74,10 @@ All settings have in-cluster defaults in `application.properties`; override them
 Timeouts, producer cache size and the peek limit are under `catapulsar.*` in `application.properties`.
 
 `CATAPONTE_URL` is only the default: the Cataponte URL can be changed in ⚙️ Connection Settings. The new
-URL applies immediately for every user, is stored in `pulsario_settings`, loaded again on start-up and
-recorded in the audit log (`CHANGE_SETTING`). "Use default" deletes it and goes back to `CATAPONTE_URL`.
+URL is stored in `catapulsar_settings`, published on the settings topic (every replica follows it within
+seconds, ADR 0011) and recorded in the audit log (`setting.changed`). "Use default" deletes it and goes back to
+`CATAPONTE_URL`. All settings work this way; at start-up Catapulsar copies the old `pulsario_settings` into
+`catapulsar_settings` once and drops it.
 
 `CATAUDIT_URL` works the same way: it is the default of the Cataudit URL, editable in ⚙️ Connection Settings or
 from the link in the Audit panel header, with a "Check Cataudit" button.

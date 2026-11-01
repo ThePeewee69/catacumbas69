@@ -1,5 +1,6 @@
 package com.catacumbas69.catapulsar.service;
 
+import com.catacumbas69.catacommons.settings.SharedSettings;
 import com.catacumbas69.catapulsar.model.Setting;
 import com.catacumbas69.catapulsar.repository.SettingRepository;
 import java.time.Clock;
@@ -9,11 +10,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * A whole-number setting stored in {@code pulsario_settings} with a default from configuration and an
- * accepted range. The value is read from MongoDB on every call, so every replica (and other services
- * that read the same document, such as Catametricas) sees a change at once; if MongoDB cannot be read the
- * default is used. Every change is audited as {@code CHANGE_SETTING} (OBS-6) and published on the settings
- * topic (ADR 0011).
+ * A whole-number setting with a default from configuration and an accepted range.
+ *
+ * <p>The value in use comes from the settings topic (ADR 0011) through {@link SharedSettings}, so every replica
+ * sees a change within seconds, also replicas that start later; until the topic has been read the default is
+ * used. A change is stored in {@code catapulsar_settings} (the source Catapulsar republishes from at start-up),
+ * applied at once in this replica, audited as {@code CHANGE_SETTING} (OBS-6) and published on the topic.
  */
 public abstract class IntegerSettingService {
 
@@ -27,21 +29,24 @@ public abstract class IntegerSettingService {
     private final AuditService audit;
     private final SettingsPublisher publisher;
     private final Clock clock;
+    private volatile int current;
 
     /**
-     * Creates the setting.
+     * Creates the setting and starts following its key on the settings topic.
      *
-     * @param id document id in {@code pulsario_settings}
-     * @param defaultValue value used when nothing valid is stored
+     * @param id setting id (its key on the topic)
+     * @param defaultValue value used when nothing valid is set
      * @param min smallest accepted value
      * @param max largest accepted value
      * @param settings stored settings
      * @param audit audit log
      * @param publisher publishes the value on the settings topic
+     * @param shared values read from the settings topic
      * @param clock time source
      */
     protected IntegerSettingService(String id, int defaultValue, int min, int max, SettingRepository settings,
-                                    AuditService audit, SettingsPublisher publisher, Clock clock) {
+                                    AuditService audit, SettingsPublisher publisher, SharedSettings shared,
+                                    Clock clock) {
         this.id = id;
         this.defaultValue = defaultValue;
         this.min = min;
@@ -50,15 +55,17 @@ public abstract class IntegerSettingService {
         this.audit = audit;
         this.publisher = publisher;
         this.clock = clock;
+        this.current = defaultValue;
+        shared.listen(id, value -> current = value == null ? defaultValue : parse(value).orElse(defaultValue));
     }
 
     /**
      * Returns the value in use.
      *
-     * @return the stored value, or the default
+     * @return the value from the settings topic, or the default
      */
     public int value() {
-        return saved().orElse(defaultValue);
+        return current;
     }
 
     /**
@@ -89,7 +96,7 @@ public abstract class IntegerSettingService {
     }
 
     /**
-     * Stores, audits and publishes a new value. Storing the default removes the saved value.
+     * Stores, applies, audits and publishes a new value. Storing the default removes the saved value.
      *
      * @param value new value
      * @param user client IP address, for the audit log
@@ -100,12 +107,13 @@ public abstract class IntegerSettingService {
         if (value < min || value > max) {
             throw new InvalidSettingException("seconds", "must be between " + min + " and " + max);
         }
-        int previous = value();
+        int previous = current;
         if (value == defaultValue) {
             settings.deleteById(id);
         } else {
             settings.save(new Setting(id, Integer.toString(value), clock.instant(), user));
         }
+        current = value;
         audit.record(user, AuditAction.CHANGE_SETTING, null, Map.of("setting", id, "from", previous, "to", value));
         publisher.changed(id, value == defaultValue ? null : Integer.toString(value));
         return value;
@@ -121,21 +129,16 @@ public abstract class IntegerSettingService {
         return change(defaultValue, user);
     }
 
-    private Optional<Integer> saved() {
+    private Optional<Integer> parse(String text) {
         try {
-            return settings.findById(id).map(Setting::getValue).flatMap(this::parse);
-        } catch (RuntimeException e) {
-            LOG.warn("Setting {} not read, using {}: {}", id, defaultValue, e.getMessage());
-            return Optional.empty();
+            int parsed = Integer.parseInt(text.strip());
+            if (parsed >= min && parsed <= max) {
+                return Optional.of(parsed);
+            }
+        } catch (NumberFormatException ignored) {
+            // reported below
         }
-    }
-
-    private Optional<Integer> parse(String stored) {
-        try {
-            int parsed = Integer.parseInt(stored.strip());
-            return parsed >= min && parsed <= max ? Optional.of(parsed) : Optional.empty();
-        } catch (NumberFormatException e) {
-            return Optional.empty();
-        }
+        LOG.warn("Ignoring {}={} (expected {}–{}), using {}", id, text, min, max, defaultValue);
+        return Optional.empty();
     }
 }

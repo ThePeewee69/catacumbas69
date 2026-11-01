@@ -20,6 +20,7 @@ import org.springframework.validation.annotation.Validated;
  * @param events event publishing
  * @param provisioning start-up creation of the tenant, namespace and topics
  * @param auditBridge start-up registration of the app's audit bridge in Cataponte (ADR 0009)
+ * @param settings reader of the shared settings topic (ADR 0011)
  */
 @Validated
 @ConfigurationProperties(prefix = "catacommons")
@@ -27,7 +28,8 @@ public record CatacommonsProperties(
         @NotBlank @Pattern(regexp = "[a-z][a-z0-9-]*") String app,
         @Valid @NotNull @DefaultValue Events events,
         @Valid @NotNull @DefaultValue Provisioning provisioning,
-        @Valid @NotNull @DefaultValue AuditBridge auditBridge) {
+        @Valid @NotNull @DefaultValue AuditBridge auditBridge,
+        @Valid @NotNull @DefaultValue Settings settings) {
 
     /**
      * Event publishing (ADR 0008).
@@ -80,5 +82,16 @@ public record CatacommonsProperties(
             @NotNull @DefaultValue("5s") Duration timeout,
             @NotNull @DefaultValue("10s") Duration retryInterval,
             @NotNull @DefaultValue("5m") Duration maxRetryInterval) {
+    }
+
+    /**
+     * Reader of the shared settings topic (ADR 0011).
+     *
+     * @param enabled {@code false} for an app that uses no shared setting (no reader is opened)
+     * @param retryInterval wait before trying to open the reader again while Pulsar is down
+     */
+    public record Settings(
+            @DefaultValue("true") boolean enabled,
+            @NotNull @DefaultValue("10s") Duration retryInterval) {
     }
 }

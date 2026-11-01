@@ -17,7 +17,7 @@ import org.springframework.validation.annotation.Validated;
  * @param cataponte Cataponte HTTP client settings
  * @param mongo MongoDB client timeouts
  * @param ui web UI defaults
- * @param catametricas Catametricas defaults shared through {@code pulsario_settings}
+ * @param catametricas Catametricas defaults shared through the settings topic
  * @param cataudit Cataudit HTTP client settings (audit view, ADR 0009)
  */
 @Validated
@@ -51,7 +51,7 @@ public record CatapulsarProperties(
     }
 
     /**
-     * Web UI defaults. Each can be overridden at runtime from the UI (stored in {@code pulsario_settings}).
+     * Web UI defaults. Each can be overridden at runtime from the UI (stored in {@code catapulsar_settings}).
      *
      * @param refreshIntervalSeconds how often the UI refreshes what is on screen
      */

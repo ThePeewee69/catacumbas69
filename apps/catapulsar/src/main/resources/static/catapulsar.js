@@ -55,9 +55,9 @@ function app() {
     overview: { data: null, dataKey: null, loading: false, error: '', hover: null,
                 period: storedChoice('overviewPeriod', '24h', OVERVIEW_PERIODS),
                 metric: storedChoice('overviewMetric', 'in', Object.keys(OVERVIEW_METRICS)) },
-    // Catametricas collection interval, edited in ⚙️ Settings (pulsario_settings, audited).
+    // Catametricas collection interval, edited in ⚙️ Settings (catapulsar_settings, audited).
     collect: { seconds: 60, defaultSeconds: 60, min: 15, max: 600, custom: false, draft: 60 },
-    // Auto-refresh: `on` is per browser; `seconds` is shared by every user (pulsario_settings, audited).
+    // Auto-refresh: `on` is per browser; `seconds` is shared by every user (catapulsar_settings, audited).
     auto: { on: autoRefreshStored(), seconds: 10, defaultSeconds: 10, min: 2, max: 300, custom: false,
             menuOpen: false, draft: 10, saving: false, tick: 0, busy: false, timer: null },
     subscriptions: [],
@@ -472,7 +472,7 @@ function app() {
       this.settings.open = false;
     },
 
-    /** Loads Catametricas' collection interval (stored in pulsario_settings). */
+    /** Loads Catametricas' collection interval (stored in catapulsar_settings). */
     async loadCollectInterval() {
       try {
         const r = await this.api('/api/v1/settings/collect-interval');

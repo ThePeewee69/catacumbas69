@@ -13,6 +13,7 @@ Engineering rules: [`../orch.md`](../orch.md) §4.4 Events. Decisions: [`../docs
 | `RetryingSenderFactory` | Senders for the app's other topics, with the same retries (Catapulsar uses it for the settings topic) |
 | `PulsarProvisioner` | Once the app is ready, creates the tenant `catacumbas69` (if missing), the namespace `catacumbas69/<app>` with its policies, and every `TopicSpec` bean (the events topic is always one), with its schema |
 | `AuditBridgeRegistrar` | Once the app is ready, registers its system bridge `audit-<app>` (`<app>/events` → `cataudit/audit`) in Cataponte through a `SystemBridgeRegistry`. The default registry calls `PUT /api/v1/bridges/system/{name}` at a `CataponteLocation`. Catapulsar provides its own location (the editable URL), Cataponte its own in-process registry (ADR 0009) |
+| `SharedSettings` | The shared settings: a `TableView` on `catacumbas69/catapulsar/settings` opened at start-up (retried while Pulsar is down). `get(key)` and `listen(key, …)`; empty/`null` = use your default (ADR 0011) |
 
 The app must provide a `PulsarClient`, a `PulsarAdmin` and `catacommons.app=<app>`.
 
@@ -29,7 +30,8 @@ succeeds. "Already exists" counts as success, and policies are set again on ever
 - `EventData`: `actor`, `before`, `after`, `details`, all text maps. Use `EventData.action(actor, details)`
   or `EventData.change(actor, before, after, details)`, which flatten nested maps (`source.topic`) and join
   lists with commas.
-- `SettingValue`: `{"value": "<text>"}`, the value of the compacted settings topic (ADR 0011).
+- `SettingValue`: `{"value": "<text>"}`, the value of the compacted settings topic (ADR 0011), read by
+  `SharedSettings`.
 - `CatacumbasTopics`: tenant, namespace and topic names.
 
 ## Configuration (`catacommons.*`)
@@ -48,6 +50,7 @@ succeeds. "Already exists" counts as success, and policies are set again on ever
 | `catacommons.audit-bridge.enabled` | `true` (`false` in Cataudit) |
 | `catacommons.audit-bridge.cataponte-url` | `http://cataponte:8082`; set it from `CATAPONTE_URL` |
 | `catacommons.audit-bridge.timeout` / `retry-interval` / `max-retry-interval` | `5s` / `10s` / `5m` |
+| `catacommons.settings.enabled` / `retry-interval` | `true` (`false` in Cataponte and Cataudit) / `10s` |
 
 Metric: `catacommons_messages_total{topic, outcome=sent|retried|failed}`.
 

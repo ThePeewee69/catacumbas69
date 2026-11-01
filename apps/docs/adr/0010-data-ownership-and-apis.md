@@ -24,7 +24,8 @@ are explicit exceptions to ARCH-1 and couple the services through document shape
   `pulsario_settings` → `catapulsar_settings`; `bridges`, `bridge_traffic_*` → `cataponte_bridges`,
   `cataponte_traffic_*`; `contario_*` → `catametricas_*`; `audit_logs` → `cataudit_events` (ADR 0009).
   The audit `application` values keep the old app names only in migrated entries. Each migration ships with
-  its owner's phase (decided 2026-10-31): `audit_logs` in phase 2, `pulsario_settings` in phase 3,
+  its owner's phase (decided 2026-10-31): `audit_logs` in phase 2 (copied, kept), `pulsario_settings` in phase 3 (copied, dropped;
+  done 2026-11-01),
   `contario_*` in phase 4, `bridges`/`bridge_traffic_*` in phase 5 (orch.md §15).
 - **Catametricas exposes a query API** (`GET /api/v1/metrics/overview`, `/tenants/{t}`, `/namespaces/{t}/{ns}`,
   `/topics/{topic}` with `period`), returning the overview rows Catapulsar shows today. Catapulsar calls it

@@ -1,24 +1,23 @@
 package com.catacumbas69.catametricas.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
+import com.catacumbas69.catacommons.settings.SettingValue;
+import com.catacumbas69.catacommons.settings.SharedSettings;
 import com.catacumbas69.catametricas.TestProperties;
-import org.bson.Document;
+import java.time.Duration;
+import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
-import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.data.mongodb.core.MongoTemplate;
 
 class CollectIntervalTest {
 
-    private final MongoTemplate mongoTemplate = mock(MongoTemplate.class);
-    private final CollectInterval interval = new CollectInterval(mongoTemplate, TestProperties.properties());
+    private final SharedSettings shared = new SharedSettings(null, Executors.newSingleThreadScheduledExecutor(),
+            Duration.ofSeconds(1));
+    private final CollectInterval interval = new CollectInterval(shared, TestProperties.properties());
 
     @Test
-    void usesTheValueSavedByCatapulsar() {
-        saved("120");
+    void usesTheValueSetInCatapulsar() {
+        shared.apply(CollectInterval.KEY, new SettingValue("120"));
 
         assertThat(interval.seconds()).isEqualTo(120);
     }
@@ -26,24 +25,19 @@ class CollectIntervalTest {
     @Test
     void fallsBackToTheDefault_whenMissingInvalidOrOutOfRange() {
         assertThat(interval.seconds()).isEqualTo(60);
-        saved("abc");
+        shared.apply(CollectInterval.KEY, new SettingValue("abc"));
         assertThat(interval.seconds()).isEqualTo(60);
-        saved("5");
+        shared.apply(CollectInterval.KEY, new SettingValue("5"));
         assertThat(interval.seconds()).isEqualTo(60);
-        saved("601");
+        shared.apply(CollectInterval.KEY, new SettingValue("601"));
         assertThat(interval.seconds()).isEqualTo(60);
     }
 
     @Test
-    void fallsBackToTheDefault_whenMongoIsDown() {
-        when(mongoTemplate.findById(eq(CollectInterval.SETTING_ID), eq(Document.class), eq(CollectInterval.COLLECTION)))
-                .thenThrow(new DataAccessResourceFailureException("down"));
+    void goesBackToTheDefault_onATombstone() {
+        shared.apply(CollectInterval.KEY, new SettingValue("120"));
+        shared.apply(CollectInterval.KEY, null);
 
         assertThat(interval.seconds()).isEqualTo(60);
-    }
-
-    private void saved(String value) {
-        when(mongoTemplate.findById(eq(CollectInterval.SETTING_ID), eq(Document.class), eq(CollectInterval.COLLECTION)))
-                .thenReturn(new Document("_id", CollectInterval.SETTING_ID).append("value", value));
     }
 }

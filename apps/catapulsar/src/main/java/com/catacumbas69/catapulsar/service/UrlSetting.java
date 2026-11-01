@@ -1,23 +1,22 @@
 package com.catacumbas69.catapulsar.service;
 
+import com.catacumbas69.catacommons.settings.SharedSettings;
 import com.catacumbas69.catapulsar.model.Setting;
 import com.catacumbas69.catapulsar.repository.SettingRepository;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Clock;
 import java.util.Map;
-import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
 
 /**
  * The base URL of another service, with a default from configuration that can be changed from the UI.
  *
- * <p>A changed URL is stored in MongoDB ({@code pulsario_settings}) and loaded again at start-up, in the
- * background so that a missing MongoDB does not delay start-up (RES-1). Every change is audited and published
- * on the settings topic (ADR 0011). The URL is kept in memory, so calls never wait for MongoDB.
+ * <p>The URL in use comes from the settings topic (ADR 0011) through {@link SharedSettings}, so every replica
+ * follows a change within seconds; until the topic has been read the default is used, so start-up never waits
+ * (RES-1). A change is stored in {@code catapulsar_settings} (the source Catapulsar republishes from at
+ * start-up), applied at once in this replica, audited and published on the topic.
  */
 public abstract class UrlSetting {
 
@@ -34,22 +33,22 @@ public abstract class UrlSetting {
     private final Clock clock;
     private final Object lock = new Object();
     private volatile String url;
-    private volatile boolean changedSinceStart;
 
     /**
      * Creates the setting.
      *
-     * @param id document id in {@code pulsario_settings}
+     * @param id setting id (its key on the settings topic)
      * @param service name of the service, for logs
      * @param example example URL shown in validation messages
      * @param defaultUrl URL from configuration
      * @param settings stored settings
      * @param audit audit log
      * @param publisher publishes the URL on the settings topic
+     * @param shared values read from the settings topic
      * @param clock time source
      */
     protected UrlSetting(String id, String service, String example, String defaultUrl, SettingRepository settings,
-                         AuditService audit, SettingsPublisher publisher, Clock clock) {
+                         AuditService audit, SettingsPublisher publisher, SharedSettings shared, Clock clock) {
         this.id = id;
         this.service = service;
         this.example = example;
@@ -59,6 +58,7 @@ public abstract class UrlSetting {
         this.audit = audit;
         this.publisher = publisher;
         this.clock = clock;
+        shared.listen(id, this::applyShared);
     }
 
     /**
@@ -88,29 +88,22 @@ public abstract class UrlSetting {
         return !url.equals(defaultUrl);
     }
 
-    /** Loads a saved URL in the background once the application has started. */
-    @EventListener(ApplicationReadyEvent.class)
-    public void loadSavedInBackground() {
-        Thread.ofVirtual().name(id + "-loader").start(this::loadSaved);
-    }
-
-    /** Applies the saved URL, unless the UI changed it in the meantime. Never throws. */
-    void loadSaved() {
-        Optional<Setting> saved;
-        try {
-            saved = settings.findById(id);
-        } catch (RuntimeException e) {
-            LOG.warn("Saved {} URL not loaded, using {}: {}", service, defaultUrl, e.getMessage());
-            return;
-        }
-        saved.ifPresent(setting -> {
-            synchronized (lock) {
-                if (!changedSinceStart) {
-                    url = normalize(setting.getValue());
-                    LOG.info("Using saved {} URL {}", service, url);
-                }
+    /** Applies a value read from the settings topic; an empty or invalid one means the default. */
+    private void applyShared(String value) {
+        String next = defaultUrl;
+        if (value != null) {
+            try {
+                next = validate(value);
+            } catch (InvalidSettingException e) {
+                LOG.warn("Ignoring {} URL '{}' from the settings topic: {}", service, value, e.getMessage());
             }
-        });
+        }
+        synchronized (lock) {
+            if (!next.equals(url)) {
+                url = next;
+                LOG.info("{} URL is now {}", service, url);
+            }
+        }
     }
 
     /**
@@ -131,7 +124,6 @@ public abstract class UrlSetting {
                 settings.save(new Setting(id, normalized, clock.instant(), user));
             }
             url = normalized;
-            changedSinceStart = true;
             audit.record(user, AuditAction.CHANGE_SETTING, null,
                     Map.of("setting", id, "from", previous, "to", normalized));
             publisher.changed(id, normalized.equals(defaultUrl) ? null : normalized);

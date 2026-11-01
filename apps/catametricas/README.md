@@ -8,7 +8,8 @@ Engineering rules: [`../orch.md`](../orch.md). Design: [ADR 0007](../docs/adr/00
 
 ## How it works
 
-- Every **60 s** by default (15–600 s, editable in Catapulsar → ⚙️ Settings) Catametricas lists every tenant,
+- Every **60 s** by default (15–600 s, editable in Catapulsar → ⚙️ Settings and read from the settings topic,
+  ADR 0011) Catametricas lists every tenant,
   namespace and topic and reads each topic's statistics, with at most 8 calls in flight. System topics
   (`__…`) are skipped.
 - Pulsar's counters (messages and bytes in/out) are cumulative and **reset when a topic is reloaded**.

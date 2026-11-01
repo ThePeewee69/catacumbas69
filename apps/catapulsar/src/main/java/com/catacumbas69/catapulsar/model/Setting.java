@@ -8,38 +8,37 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 /**
- * A runtime setting changed from the UI, stored in the {@code pulsario_settings} collection. Settings
- * override the matching value from {@code application.properties}; deleting one restores the default.
+ * A runtime setting changed from the UI, stored in Catapulsar's {@value #COLLECTION} collection and published
+ * on the settings topic (ADR 0011). Settings override the matching value from {@code application.properties};
+ * deleting one restores the default. The document id is the setting key on the topic.
  */
-@Document(collection = "pulsario_settings")
+@Document(collection = Setting.COLLECTION)
 public class Setting {
 
-    /** Id of the Cataponte base URL setting. */
-    public static final String CATAPONTE_URL = "passario.url";
+    /** Catapulsar's settings collection (ADR 0010; {@code pulsario_settings} before phase 3). */
+    public static final String COLLECTION = "catapulsar_settings";
 
-    /** Id of the Cataudit base URL setting (ADR 0009); new, so it already uses the owner's name. */
+    /** The collection before phase 3, copied and dropped by {@code SettingsMigration}. */
+    public static final String LEGACY_COLLECTION = "pulsario_settings";
+
+    /** Cataponte base URL. */
+    public static final String CATAPONTE_URL = "catapulsar.cataponte-url";
+
+    /** Cataudit base URL (ADR 0009). */
     public static final String CATAUDIT_URL = "catapulsar.cataudit-url";
 
-    /** Id of the UI auto-refresh interval setting, in seconds. */
-    public static final String REFRESH_INTERVAL_SECONDS = "ui.refresh-interval-seconds";
+    /** UI auto-refresh interval, in seconds. */
+    public static final String REFRESH_INTERVAL_SECONDS = "catapulsar.refresh-interval-seconds";
 
-    /** Id of Catametricas' collection interval, in seconds; Catametricas reads this document (ADR 0007). */
-    public static final String COLLECT_INTERVAL_SECONDS = "contario.collect-interval-seconds";
+    /** Catametricas' collection interval, in seconds; Catametricas reads it from the settings topic. */
+    public static final String COLLECT_INTERVAL_SECONDS = "catametricas.collect-interval-seconds";
 
-    /** Key of {@link #CATAPONTE_URL} on the settings topic (ADR 0011). */
-    public static final String CATAPONTE_URL_KEY = "catapulsar.cataponte-url";
-
-    /** Key of {@link #REFRESH_INTERVAL_SECONDS} on the settings topic. */
-    public static final String REFRESH_INTERVAL_SECONDS_KEY = "catapulsar.refresh-interval-seconds";
-
-    /** Key of {@link #COLLECT_INTERVAL_SECONDS} on the settings topic. */
-    public static final String COLLECT_INTERVAL_SECONDS_KEY = "catametricas.collect-interval-seconds";
-
-    private static final Map<String, String> TOPIC_KEYS = Map.of(
-            CATAPONTE_URL, CATAPONTE_URL_KEY,
+    /** Ids in {@value #LEGACY_COLLECTION} → ids now. */
+    private static final Map<String, String> LEGACY_IDS = Map.of(
+            "passario.url", CATAPONTE_URL,
             CATAUDIT_URL, CATAUDIT_URL,
-            REFRESH_INTERVAL_SECONDS, REFRESH_INTERVAL_SECONDS_KEY,
-            COLLECT_INTERVAL_SECONDS, COLLECT_INTERVAL_SECONDS_KEY);
+            "ui.refresh-interval-seconds", REFRESH_INTERVAL_SECONDS,
+            "contario.collect-interval-seconds", COLLECT_INTERVAL_SECONDS);
 
     @Id
     private String id;
@@ -107,22 +106,21 @@ public class Setting {
     }
 
     /**
-     * Returns the key a setting has on the settings topic. Document ids keep the names the apps had when
-     * the collection was created until the phase 3 migration; topic keys use the owner's name already.
+     * Returns the id of every shared setting; each is published on the settings topic.
      *
-     * @param id document id
-     * @return the topic key, or empty for an unknown id
+     * @return the ids (= topic keys)
      */
-    public static Optional<String> topicKey(String id) {
-        return Optional.ofNullable(TOPIC_KEYS.get(id));
+    public static Set<String> ids() {
+        return Set.copyOf(LEGACY_IDS.values());
     }
 
     /**
-     * Returns the ids of every setting published on the settings topic.
+     * Maps an id of {@value #LEGACY_COLLECTION} to the id it has now.
      *
-     * @return document ids
+     * @param legacyId id in the old collection
+     * @return the current id, or empty for an unknown id
      */
-    public static Set<String> publishedIds() {
-        return TOPIC_KEYS.keySet();
+    public static Optional<String> fromLegacyId(String legacyId) {
+        return Optional.ofNullable(LEGACY_IDS.get(legacyId));
     }
 }

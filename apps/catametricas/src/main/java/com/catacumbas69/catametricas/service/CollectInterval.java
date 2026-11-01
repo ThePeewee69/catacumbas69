@@ -3,40 +3,38 @@ package com.catacumbas69.catametricas.service;
 import static com.catacumbas69.catametricas.config.CatametricasProperties.MAX_INTERVAL_SECONDS;
 import static com.catacumbas69.catametricas.config.CatametricasProperties.MIN_INTERVAL_SECONDS;
 
+import com.catacumbas69.catacommons.settings.SharedSettings;
 import com.catacumbas69.catametricas.config.CatametricasProperties;
-import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * The collection interval. It is edited in Catapulsar and stored in Catapulsar's {@value #COLLECTION}
- * collection ({@code _id} {@value #SETTING_ID}, field {@code value}); Catametricas only reads it (ADR 0007).
- * Missing, invalid or unreadable values fall back to {@code catametricas.collect.default-interval-seconds}.
+ * The collection interval. It is edited in Catapulsar and read from the settings topic, key {@value #KEY}
+ * (ADR 0011), so every Catametricas instance sees a change within seconds. Until the topic has been read, and
+ * when the value is missing or invalid, {@code catametricas.collect.default-interval-seconds} is used.
  */
 @Component
 public class CollectInterval {
 
-    /** Catapulsar's settings collection. */
-    public static final String COLLECTION = "pulsario_settings";
-    /** Setting id of the collection interval. */
-    public static final String SETTING_ID = "contario.collect-interval-seconds";
+    /** Key of the collection interval on the settings topic. */
+    public static final String KEY = "catametricas.collect-interval-seconds";
 
     private static final Logger LOG = LoggerFactory.getLogger(CollectInterval.class);
 
-    private final MongoTemplate mongoTemplate;
     private final int defaultSeconds;
+    private volatile int seconds;
 
     /**
-     * Creates the reader.
+     * Creates the reader and starts following the key.
      *
-     * @param mongoTemplate template for the settings collection
+     * @param shared values read from the settings topic
      * @param properties application properties, for the default
      */
-    public CollectInterval(MongoTemplate mongoTemplate, CatametricasProperties properties) {
-        this.mongoTemplate = mongoTemplate;
+    public CollectInterval(SharedSettings shared, CatametricasProperties properties) {
         this.defaultSeconds = properties.collect().defaultIntervalSeconds();
+        this.seconds = defaultSeconds;
+        shared.listen(KEY, value -> seconds = value == null ? defaultSeconds : parse(value));
     }
 
     /**
@@ -46,24 +44,21 @@ public class CollectInterval {
      *         {@value CatametricasProperties#MAX_INTERVAL_SECONDS}
      */
     public int seconds() {
+        return seconds;
+    }
+
+    private int parse(String value) {
         try {
-            Document setting = mongoTemplate.findById(SETTING_ID, Document.class, COLLECTION);
-            if (setting == null || setting.get("value") == null) {
-                return defaultSeconds;
+            int parsed = Integer.parseInt(value.strip());
+            if (parsed >= MIN_INTERVAL_SECONDS && parsed <= MAX_INTERVAL_SECONDS) {
+                LOG.info("Collection interval is now {} s", parsed);
+                return parsed;
             }
-            int seconds = Integer.parseInt(setting.get("value").toString().strip());
-            if (seconds < MIN_INTERVAL_SECONDS || seconds > MAX_INTERVAL_SECONDS) {
-                LOG.warn("Ignoring collection interval {} s outside {}–{} s", seconds, MIN_INTERVAL_SECONDS,
-                        MAX_INTERVAL_SECONDS);
-                return defaultSeconds;
-            }
-            return seconds;
-        } catch (NumberFormatException e) {
-            LOG.warn("Ignoring collection interval that is not a number: {}", e.getMessage());
-            return defaultSeconds;
-        } catch (RuntimeException e) {
-            LOG.debug("Collection interval not read, using {} s: {}", defaultSeconds, e.getMessage());
-            return defaultSeconds;
+        } catch (NumberFormatException ignored) {
+            // reported below
         }
+        LOG.warn("Ignoring collection interval '{}' (expected {}–{} s), using {} s", value, MIN_INTERVAL_SECONDS,
+                MAX_INTERVAL_SECONDS, defaultSeconds);
+        return defaultSeconds;
     }
 }

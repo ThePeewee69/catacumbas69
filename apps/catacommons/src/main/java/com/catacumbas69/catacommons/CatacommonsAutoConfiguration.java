@@ -11,6 +11,7 @@ import com.catacumbas69.catacommons.pulsar.PulsarProvisioner;
 import com.catacumbas69.catacommons.pulsar.RetryingSender;
 import com.catacumbas69.catacommons.pulsar.RetryingSenderFactory;
 import com.catacumbas69.catacommons.pulsar.TopicSpec;
+import com.catacumbas69.catacommons.settings.SharedSettings;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -36,7 +37,8 @@ import org.springframework.context.annotation.Bean;
  *       (the events topic is always one) once the app has started;</li>
  *   <li>{@link AuditBridgeRegistrar}, which registers the app's {@code audit-<app>} bridge in Cataponte
  *       (ADR 0009) through a {@link SystemBridgeRegistry}; an app can provide its own registry (Cataponte
- *       does, in-process) or its own {@link CataponteLocation} (Catapulsar does).</li>
+ *       does, in-process) or its own {@link CataponteLocation} (Catapulsar does);</li>
+ *   <li>{@link SharedSettings}, the shared settings read from the compacted settings topic (ADR 0011).</li>
  * </ul>
  */
 @AutoConfiguration
@@ -173,5 +175,21 @@ public class CatacommonsAutoConfiguration {
         CatacommonsProperties.AuditBridge settings = properties.auditBridge();
         return new AuditBridgeRegistrar(registry, properties.app(), scheduler.executor(), settings.retryInterval(),
                 settings.maxRetryInterval());
+    }
+
+    /**
+     * Reads the shared settings topic, unless {@code catacommons.settings.enabled=false}.
+     *
+     * @param client the app's Pulsar client
+     * @param properties catacommons configuration
+     * @param scheduler runs retries
+     * @return the reader, closed on shutdown
+     */
+    @Bean(destroyMethod = "close")
+    @ConditionalOnProperty(prefix = "catacommons.settings", name = "enabled", havingValue = "true",
+            matchIfMissing = true)
+    public SharedSettings sharedSettings(PulsarClient client, CatacommonsProperties properties,
+                                         CatacommonsScheduler scheduler) {
+        return new SharedSettings(client, scheduler.executor(), properties.settings().retryInterval());
     }
 }

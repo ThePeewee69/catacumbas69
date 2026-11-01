@@ -1,5 +1,6 @@
 package com.catacumbas69.catapulsar.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
@@ -21,20 +22,21 @@ class SettingsPublisherTest {
     @SuppressWarnings("unchecked")
     private final RetryingSender<SettingValue> sender = mock(RetryingSender.class);
     private final SettingRepository settings = mock(SettingRepository.class);
-    private final SettingsPublisher publisher = new SettingsPublisher(sender, settings);
+    private final SettingsMigration migration = mock(SettingsMigration.class);
+    private final SettingsPublisher publisher = new SettingsPublisher(sender, settings, migration);
 
     @Test
-    void changed_sendsTheValue_underTheTopicKey() {
+    void changed_sendsTheValue_underItsId() {
         publisher.changed(Setting.CATAPONTE_URL, "http://cataponte:8082");
 
-        verify(sender).send(Setting.CATAPONTE_URL_KEY, new SettingValue("http://cataponte:8082"));
+        verify(sender).send(Setting.CATAPONTE_URL, new SettingValue("http://cataponte:8082"));
     }
 
     @Test
     void changed_toDefault_sendsATombstone() {
         publisher.changed(Setting.REFRESH_INTERVAL_SECONDS, null);
 
-        verify(sender).send(Setting.REFRESH_INTERVAL_SECONDS_KEY, null);
+        verify(sender).send(Setting.REFRESH_INTERVAL_SECONDS, null);
     }
 
     @Test
@@ -49,11 +51,12 @@ class SettingsPublisherTest {
         when(settings.findAll()).thenReturn(List.of(
                 new Setting(Setting.COLLECT_INTERVAL_SECONDS, "30", Instant.EPOCH, "10.0.0.1")));
 
-        publisher.publishAll();
+        assertThat(publisher.publishAll()).isTrue();
 
-        verify(sender).send(Setting.COLLECT_INTERVAL_SECONDS_KEY, new SettingValue("30"));
-        verify(sender).send(Setting.CATAPONTE_URL_KEY, null);
-        verify(sender).send(Setting.REFRESH_INTERVAL_SECONDS_KEY, null);
+        verify(migration).migrate();
+        verify(sender).send(Setting.COLLECT_INTERVAL_SECONDS, new SettingValue("30"));
+        verify(sender).send(Setting.CATAPONTE_URL, null);
+        verify(sender).send(Setting.REFRESH_INTERVAL_SECONDS, null);
         verify(sender).send(Setting.CATAUDIT_URL, null);
     }
 
@@ -61,7 +64,7 @@ class SettingsPublisherTest {
     void publishAll_sendsNothing_whenMongoIsDown() {
         when(settings.findAll()).thenThrow(new DataAccessResourceFailureException("down"));
 
-        publisher.publishAll();
+        assertThat(publisher.publishAll()).isFalse();
 
         verify(sender, never()).send(any(), isNull());
         verify(sender, never()).send(any(), any(SettingValue.class));

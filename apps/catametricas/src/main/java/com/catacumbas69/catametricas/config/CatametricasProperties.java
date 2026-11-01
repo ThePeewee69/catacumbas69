@@ -55,7 +55,7 @@ public record CatametricasProperties(
     /**
      * Collection settings.
      *
-     * @param defaultIntervalSeconds interval used when {@code pulsario_settings} has no valid value
+     * @param defaultIntervalSeconds interval used until the settings topic has a valid value
      * @param initialDelay wait before the first collection after start-up
      * @param concurrency parallel topic-stats calls per collection
      * @param minuteRetention how long per-minute history is kept (TTL index)

@@ -9,61 +9,59 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
+import com.catacumbas69.catacommons.settings.SettingValue;
+import com.catacumbas69.catacommons.settings.SharedSettings;
 import com.catacumbas69.catapulsar.TestProperties;
 import com.catacumbas69.catapulsar.model.Setting;
 import com.catacumbas69.catapulsar.repository.SettingRepository;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Map;
-import java.util.Optional;
+import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
-import org.springframework.dao.DataAccessResourceFailureException;
 
 class RefreshIntervalServiceTest {
 
     private final SettingRepository settings = mock(SettingRepository.class);
     private final AuditService audit = mock(AuditService.class);
     private final SettingsPublisher publisher = mock(SettingsPublisher.class);
+    private final SharedSettings shared = new SharedSettings(null, Executors.newSingleThreadScheduledExecutor(),
+            Duration.ofSeconds(1));
     private final RefreshIntervalService service = new RefreshIntervalService(TestProperties.properties(), settings,
-            audit, publisher, Clock.fixed(Instant.parse("2026-10-31T08:30:00Z"), ZoneOffset.UTC));
+            audit, publisher, shared, Clock.fixed(Instant.parse("2026-10-31T08:30:00Z"), ZoneOffset.UTC));
 
     @Test
-    void usesTheDefault_whenNothingIsSaved() {
+    void usesTheDefault_untilTheTopicHasAValue() {
         assertThat(service.value()).isEqualTo(10);
     }
 
     @Test
-    void readsTheSavedValueFromMongo() {
-        saved("30");
-
+    void followsTheSettingsTopic() {
+        shared.apply(Setting.REFRESH_INTERVAL_SECONDS, new SettingValue("30"));
         assertThat(service.value()).isEqualTo(30);
-    }
 
-    @Test
-    void ignoresInvalidSavedValues() {
-        saved("1");
-        assertThat(service.value()).isEqualTo(10);
-
-        saved("abc");
+        shared.apply(Setting.REFRESH_INTERVAL_SECONDS, null);
         assertThat(service.value()).isEqualTo(10);
     }
 
     @Test
-    void usesTheDefault_whenMongoIsDown() {
-        when(settings.findById(Setting.REFRESH_INTERVAL_SECONDS))
-                .thenThrow(new DataAccessResourceFailureException("down"));
+    void ignoresInvalidValuesFromTheTopic() {
+        shared.apply(Setting.REFRESH_INTERVAL_SECONDS, new SettingValue("1"));
+        assertThat(service.value()).isEqualTo(10);
 
+        shared.apply(Setting.REFRESH_INTERVAL_SECONDS, new SettingValue("abc"));
         assertThat(service.value()).isEqualTo(10);
     }
 
     @Test
-    void change_storesAndAudits() {
+    void change_storesAppliesAuditsAndPublishes() {
         int seconds = service.change(30, "10.0.0.1");
 
         assertThat(seconds).isEqualTo(30);
+        assertThat(service.value()).isEqualTo(30);
         verify(settings).save(argThat(setting -> setting.getId().equals(Setting.REFRESH_INTERVAL_SECONDS)
                 && setting.getValue().equals("30") && setting.getUpdatedBy().equals("10.0.0.1")));
         verify(audit).record(eq("10.0.0.1"), eq(AuditAction.CHANGE_SETTING), isNull(), eq(Map.of(
@@ -72,8 +70,8 @@ class RefreshIntervalServiceTest {
     }
 
     @Test
-    void reset_deletesTheSavedValue_andAudits() {
-        saved("30");
+    void reset_deletesTheSavedValue_andPublishesATombstone() {
+        shared.apply(Setting.REFRESH_INTERVAL_SECONDS, new SettingValue("30"));
 
         service.reset("10.0.0.2");
 
@@ -94,10 +92,5 @@ class RefreshIntervalServiceTest {
         verify(settings, never()).save(any());
         verify(audit, never()).record(any(), any(), any(), any());
         verify(publisher, never()).changed(any(), any());
-    }
-
-    private void saved(String value) {
-        when(settings.findById(Setting.REFRESH_INTERVAL_SECONDS))
-                .thenReturn(Optional.of(new Setting(Setting.REFRESH_INTERVAL_SECONDS, value, Instant.EPOCH, "x")));
     }
 }
