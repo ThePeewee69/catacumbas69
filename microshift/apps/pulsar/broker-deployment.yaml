@@ -25,9 +25,8 @@ spec:
           command: ["/bin/sh", "/scripts/init.sh"]
           env:
             # true apaga /pulsar/data no próximo arranque (só se o bookie não arrancar); voltar a false a seguir
-            # TEMPORÁRIO (2026-11-03): true uma única vez, para recriar o cookie do bookie com localhost
             - name: PULSAR_WIPE_DATA
-              value: "true"
+              value: "false"
             - name: MY_POD_IP
               valueFrom:
                 fieldRef:
