@@ -5,6 +5,9 @@ metadata:
   namespace: pulsar
 spec:
   replicas: 1
+  # RWO + HerdDB embebido: nunca dois pods ao mesmo tempo sobre a mesma base de dados
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: pulsar-manager
@@ -24,11 +27,20 @@ spec:
           env:
             - name: SPRING_CONFIGURATION_FILE
               value: /pulsar-manager/pulsar-manager/application.properties
-            - name: DEFAULT_SUPERUSER_ENABLED
-              value: "true"
-            - name: DEFAULT_SUPERUSER_NAME
-              value: "peewee69"
-            - name: DEFAULT_SUPERUSER_PASSWORD
-              value: "Pass123-456-789"
-            - name: DEFAULT_SUPERUSER_EMAIL
-              value: "hpereira@gmail.com"
+            # Environment criado no arranque se a base de dados não tiver nenhum (default.environment.* da v0.4.0).
+            # Com a base de dados vazia e o broker inacessível, o Manager termina e volta a tentar.
+            - name: DEFAULT_ENVIRONMENT_NAME
+              value: catacumbas69
+            - name: DEFAULT_ENVIRONMENT_SERVICE_URL
+              value: http://pulsar.pulsar.svc.cluster.local:8080
+            # O standalone não expõe o HTTP do bookie: a página Bookies não funciona, o resto sim
+            - name: DEFAULT_ENVIRONMENT_BOOKIE_URL
+              value: http://pulsar.pulsar.svc.cluster.local:8000
+          volumeMounts:
+            # HerdDB: jdbc:herddb:server:localhost:7000?server.base.dir=dbdata, relativo a /pulsar-manager/pulsar-manager
+            - name: data
+              mountPath: /pulsar-manager/pulsar-manager/dbdata
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: pulsar-manager-data-pvc

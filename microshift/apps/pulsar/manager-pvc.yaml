@@ -1,0 +1,13 @@
+# Base de dados interna do Pulsar Manager (HerdDB): utilizadores e environments.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pulsar-manager-data-pvc
+  namespace: pulsar
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: topolvm-provisioner

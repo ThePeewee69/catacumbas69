@@ -9,6 +9,7 @@ resources:
   - broker-route.yaml
   # Pulsar Manager
   - manager-deployment.yaml
+  - manager-pvc.yaml
   - manager-svc.yaml
   - manager-route.yaml
   # Admin Console
