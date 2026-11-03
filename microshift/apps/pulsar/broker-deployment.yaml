@@ -24,6 +24,9 @@ spec:
           image: docker.io/apachepulsar/pulsar:4.2.2
           command: ["/bin/sh", "/scripts/init.sh"]
           env:
+            # true apaga /pulsar/data no próximo arranque (só se o bookie não arrancar); voltar a false a seguir
+            - name: PULSAR_WIPE_DATA
+              value: "false"
             - name: MY_POD_IP
               valueFrom:
                 fieldRef:

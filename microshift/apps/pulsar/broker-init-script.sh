@@ -6,21 +6,22 @@ cp -r /pulsar/conf/. /conf/
 
 # Injeta advertisedListeners: interno (pod IP) + externo (NodePort do NUC)
 printf '\nadvertisedListeners=internal:pulsar://%s:6650,external:pulsar://192.168.86.35:31650\n' "${MY_POD_IP}" >> /conf/standalone.conf
+
+# advertisedAddress=localhost dá ao bookie um ID estável (localhost:<porta>) que não muda com o IP do pod.
+# No modo standalone com RocksDB o bookie lê a configuração do standalone.conf (não do bookkeeper.conf) e,
+# quando já existe um cookie em /pulsar/data, volta a usar o endereço e a porta que lá estão gravados.
+# Por isso os dados em /pulsar/data (tenants, tópicos, mensagens, subscrições) sobrevivem aos reinícios.
 printf '\nadvertisedAddress=localhost\n' >> /conf/standalone.conf
-printf '\nmetadataStoreBackedBookkeeperPort=3181\n' >> /conf/standalone.conf
 
-# Tenta fixar endereço estável para o bookie via bookkeeper.conf
-printf '\nadvertisedAddress=localhost\nbookiePort=3181\n' >> /conf/bookkeeper.conf
-
-# Limpa TUDO em /pulsar/data ao reiniciar.
-# O BKCluster armazena cookies em vários locais (bookkeeper/, metadata/, etc.).
-# Limpar subdirs específicos deixa sempre algum estado inconsistente.
-# Com um único bookie não há recovery possível — estado fresco é a única solução.
+# Limpeza só a pedido: PULSAR_WIPE_DATA=true no initContainer do Deployment apaga /pulsar/data neste arranque.
+# Usar só se o bookie não arrancar (InvalidCookieException) — perde-se tudo. Voltar a pôr false depois.
 PULSAR_DATA=/pulsar/data
-if [ "$(ls -A ${PULSAR_DATA} 2>/dev/null)" ]; then
-  echo "[init] Dados existentes detectados — a limpar ${PULSAR_DATA}/..."
+if [ "${PULSAR_WIPE_DATA:-false}" = "true" ]; then
+  echo "[init] PULSAR_WIPE_DATA=true — a apagar ${PULSAR_DATA}/..."
   rm -rf "${PULSAR_DATA:?}"/*
   echo "[init] Feito — broker arranca com estado fresco."
+elif [ "$(ls -A ${PULSAR_DATA} 2>/dev/null)" ]; then
+  echo "[init] Dados existentes em ${PULSAR_DATA} — mantidos."
 else
-  echo "[init] Instalação nova — sem dados para limpar."
+  echo "[init] Instalação nova — sem dados."
 fi
