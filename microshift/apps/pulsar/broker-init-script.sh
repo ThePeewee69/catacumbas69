@@ -10,11 +10,17 @@ printf '\nadvertisedListeners=internal:pulsar://%s:6650,external:pulsar://192.16
 # advertisedAddress=localhost dá ao bookie um ID estável (localhost:<porta>) que não muda com o IP do pod.
 # No modo standalone com RocksDB o bookie lê a configuração do standalone.conf (não do bookkeeper.conf) e,
 # quando já existe um cookie em /pulsar/data, volta a usar o endereço e a porta que lá estão gravados.
-# Por isso os dados em /pulsar/data (tenants, tópicos, mensagens, subscrições) sobrevivem aos reinícios.
-printf '\nadvertisedAddress=localhost\n' >> /conf/standalone.conf
+# A linha tem de ser SUBSTITUÍDA, não acrescentada: o standalone.conf já traz "advertisedAddress=" e, com a chave
+# repetida, o bookie (Commons Configuration) fica com o primeiro valor (vazio → IP do pod), enquanto o broker
+# (java.util.Properties) fica com o último. Foi isso que gravou o IP do pod no cookie.
+sed -i 's/^advertisedAddress=.*/advertisedAddress=localhost/' /conf/standalone.conf
+if [ "$(grep -c '^advertisedAddress=' /conf/standalone.conf)" != "1" ]; then
+  echo "[init] ERRO: advertisedAddress não ficou definido exatamente uma vez em standalone.conf" >&2
+  exit 1
+fi
 
 # Limpeza só a pedido: PULSAR_WIPE_DATA=true no initContainer do Deployment apaga /pulsar/data neste arranque.
-# Usar só se o bookie não arrancar (InvalidCookieException) — perde-se tudo. Voltar a pôr false depois.
+# Usar só se o bookie não arrancar ou não encontrar os ledgers — perde-se tudo. Voltar a pôr false depois.
 PULSAR_DATA=/pulsar/data
 if [ "${PULSAR_WIPE_DATA:-false}" = "true" ]; then
   echo "[init] PULSAR_WIPE_DATA=true — a apagar ${PULSAR_DATA}/..."
