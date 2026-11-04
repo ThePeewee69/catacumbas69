@@ -721,6 +721,10 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-04, forced collection** (`mvn clean install` at `apps/` green: catacommons 25, Catapulsar 106,
+  Cataponte 91, Catametricas 58, Cataudit 18 tests, 0 Checkstyle violations): `POST /api/v1/collect` in
+  Catametricas, **Collect now** and **Live** in Catapulsar's overviews (decisions 50–53), Settings in tabs, topic view
+  boundary (OBS-10).
 - **2026-11-03/04, fixes found running the apps** (`mvn clean install` at `apps/` green: catacommons 25,
   Catapulsar 102, Cataponte 91, Catametricas 51, Cataudit 18 tests, 0 Checkstyle violations): namespace retention
   2 GB with the backlog quota below it (decision 41), Pulsar client loggers lowered (OBS-9), Pulsar system names
