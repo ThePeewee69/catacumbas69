@@ -157,6 +157,7 @@ Full contract: <http://localhost:8081/swagger-ui.html>. Errors are RFC 9457 Prob
 |---|---|
 | `400` | Invalid name, count or body — `errors` lists each field. Names start with a letter, a digit or `_`. Also returned when creating, deleting, skipping or clearing a Pulsar system subscription (`__*`) |
 | `404` / `409` | Pulsar says the resource is missing / already exists |
+| `409` *Partitioned topic exists* | Creating a topic whose name is taken by a partitioned topic that has no partitions yet, so it is not listed; the detail gives the `pulsar-admin` commands to delete it or create its partitions |
 | `502` | Pulsar failed or is unreachable |
 | `503` | Cataponte, Cataudit or Catametricas is unreachable (only its panel), or MongoDB is down while saving a setting |
 

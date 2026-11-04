@@ -70,10 +70,28 @@ public class PulsarAdminService {
      * Creates a non-partitioned topic.
      *
      * @param topic fully-qualified topic
+     * @throws PartitionedTopicExistsException if a partitioned topic with that name exists (it is not listed
+     *         while its partitions do not exist, so the plain "already exists" would be puzzling)
      * @throws PulsarAdminException if Pulsar rejects the request (e.g. it already exists)
      */
     public void createTopic(String topic) throws PulsarAdminException {
-        admin.topics().createNonPartitionedTopic(topic);
+        try {
+            admin.topics().createNonPartitionedTopic(topic);
+        } catch (PulsarAdminException.ConflictException e) {
+            int partitions = partitionsOf(topic);
+            if (partitions > 0) {
+                throw new PartitionedTopicExistsException(topic, partitions);
+            }
+            throw e;
+        }
+    }
+
+    private int partitionsOf(String topic) {
+        try {
+            return admin.topics().getPartitionedTopicMetadata(topic).partitions;
+        } catch (PulsarAdminException | RuntimeException e) {
+            return 0;
+        }
     }
 
     /**

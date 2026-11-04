@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -21,6 +22,7 @@ import com.catacumbas69.catapulsar.dto.MessageDTO;
 import com.catacumbas69.catapulsar.service.AuditAction;
 import com.catacumbas69.catapulsar.service.AuditService;
 import com.catacumbas69.catapulsar.service.MessageService;
+import com.catacumbas69.catapulsar.service.PartitionedTopicExistsException;
 import com.catacumbas69.catapulsar.service.PulsarAdminService;
 import java.util.List;
 import java.util.Map;
@@ -167,6 +169,17 @@ class PulsarControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value(containsString("must start with a letter, a digit or '_'")));
         verify(messages, never()).peek(any(), any(), anyInt());
+    }
+
+    @Test
+    void createTopic_explainsAPartitionedTopicWithTheSameName() throws Exception {
+        doThrow(new PartitionedTopicExistsException(TOPIC, 1)).when(admin).createTopic(TOPIC);
+
+        mvc.perform(post("/api/v1/topics/home/media/events"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Partitioned topic exists"))
+                .andExpect(jsonPath("$.detail").value(containsString("delete-partitioned-topic -f " + TOPIC)));
+        verify(audit, never()).record(any(), any(), any(), any());
     }
 
     @Test

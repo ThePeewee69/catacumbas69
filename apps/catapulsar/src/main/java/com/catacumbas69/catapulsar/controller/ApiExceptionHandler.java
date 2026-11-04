@@ -1,6 +1,7 @@
 package com.catacumbas69.catapulsar.controller;
 
 import com.catacumbas69.catapulsar.service.InvalidSettingException;
+import com.catacumbas69.catapulsar.service.PartitionedTopicExistsException;
 import com.catacumbas69.catapulsar.service.CatametricasUnavailableException;
 import com.catacumbas69.catapulsar.service.CataponteUnavailableException;
 import com.catacumbas69.catapulsar.service.CatauditUnavailableException;
@@ -134,6 +135,17 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         }
         String title = status.is5xxServerError() ? "Pulsar unavailable" : status.getReasonPhrase();
         return ResponseEntity.status(status).body(problem(status, title, pulsarMessage(ex)));
+    }
+
+    /**
+     * A topic cannot be created because a partitioned topic with that name exists.
+     *
+     * @param ex the exception
+     * @return {@code 409} saying how to delete it or create its partitions
+     */
+    @ExceptionHandler(PartitionedTopicExistsException.class)
+    public ProblemDetail handlePartitionedTopicExists(PartitionedTopicExistsException ex) {
+        return problem(HttpStatus.CONFLICT, "Partitioned topic exists", ex.getMessage());
     }
 
     /**

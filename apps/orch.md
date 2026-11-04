@@ -724,7 +724,8 @@ Closed on 2026-10-30:
 - **2026-11-04, forced collection** (`mvn clean install` at `apps/` green: catacommons 25, Catapulsar 106,
   Cataponte 91, Catametricas 58, Cataudit 18 tests, 0 Checkstyle violations): `POST /api/v1/collect` in
   Catametricas, **Collect now** and **Live** in Catapulsar's overviews (decisions 50–53), Settings in tabs, topic view
-  boundary (OBS-10).
+  boundary (OBS-10). Creating a topic whose name is taken by an unlisted partitioned topic (no partitions yet)
+  answers `409` *Partitioned topic exists* with the `pulsar-admin` commands to fix it.
 - **2026-11-03/04, fixes found running the apps** (`mvn clean install` at `apps/` green: catacommons 25,
   Catapulsar 102, Cataponte 91, Catametricas 51, Cataudit 18 tests, 0 Checkstyle violations): namespace retention
   2 GB with the backlog quota below it (decision 41), Pulsar client loggers lowered (OBS-9), Pulsar system names
