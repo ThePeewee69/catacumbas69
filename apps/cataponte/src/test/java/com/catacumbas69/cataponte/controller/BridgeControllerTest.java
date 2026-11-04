@@ -19,9 +19,11 @@ import com.catacumbas69.cataponte.TestBridges;
 import com.catacumbas69.cataponte.dto.BridgeRuntimeStatus;
 import com.catacumbas69.cataponte.dto.BridgeStatusResponse;
 import com.catacumbas69.cataponte.dto.BridgeMapper;
+import com.catacumbas69.cataponte.model.AreaDocument;
 import com.catacumbas69.cataponte.model.BridgeDocument;
 import com.catacumbas69.cataponte.model.BridgeTrafficTotal;
 import com.catacumbas69.cataponte.model.TrafficRole;
+import com.catacumbas69.cataponte.service.AreaService;
 import com.catacumbas69.cataponte.service.BridgeConflictException;
 import com.catacumbas69.cataponte.service.BridgeNotFoundException;
 import com.catacumbas69.cataponte.service.BridgeService;
@@ -29,6 +31,7 @@ import com.catacumbas69.cataponte.service.BridgeStatusService;
 import com.catacumbas69.cataponte.service.BridgeValidationException;
 import com.catacumbas69.cataponte.service.TrafficService;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -61,6 +64,28 @@ class BridgeControllerTest {
 
     @MockitoBean
     private TrafficService traffic;
+
+    @MockitoBean
+    private AreaService areas;
+
+    @Test
+    void list_reportsTopicsOutsideTheBridgesArea() throws Exception {
+        AreaDocument area = new AreaDocument();
+        area.setId("media");
+        area.setName("media");
+        area.setPatterns(List.of("home/media/in"));
+        BridgeDocument bridge = TestBridges.unordered("abc", DEST_A);
+        bridge.setAreaId("media");
+        when(areas.byId()).thenReturn(Map.of("media", area));
+        when(service.findAll()).thenReturn(List.of(bridge, TestBridges.unordered("def", DEST_A)));
+
+        mvc.perform(get("/api/v1/bridges"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].areaId").value("media"))
+                .andExpect(jsonPath("$[0].outsideArea").value(true))
+                .andExpect(jsonPath("$[0].outsideTopics[0]").value(DEST_A))
+                .andExpect(jsonPath("$[1].outsideArea").value(false));
+    }
 
     @Test
     void traffic_returnsTotalsPerTopic() throws Exception {

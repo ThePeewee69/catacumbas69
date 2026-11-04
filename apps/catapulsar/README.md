@@ -17,7 +17,7 @@ Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs
 | **Produce** | Send a message with an optional key |
 | **Subscription details** | Backlog per subscription in Overview, with **Clear backlog** (skips every message) |
 | **Backlog** | Subscriptions with backlog statistics (messages, size as computed by Pulsar on request, consumers, type, rate out, unacked) refreshed automatically; one click peeks up to 100 messages without consuming them (audited); view, edit & re-produce, skip one or all |
-| **Bridges** | Create, edit, enable/disable and delete Cataponte bridges (subscription `Shared`, `Failover` or `Key_Shared`); running state over every Cataponte replica ("1/3 replicas active"), errors, loop blocks and all-time message counts per topic |
+| **Bridges** | Create, edit, enable/disable and delete Cataponte bridges (subscription `Shared`, `Failover` or `Key_Shared`); running state over every Cataponte replica ("1/3 replicas active"), errors, loop blocks and all-time message counts per topic. Tabs **System** (bridges the apps register), **Bridges** (no area) and one per **area** (ADR 0014), with counts; opens on the last tab used (per browser), System the first time. **+ Area** creates an area with glob patterns (`home/media/*`, `home/**`) and a preview of the topics they match; in an area the topic pickers show only those topics and the bridge must fit. Bridges left outside after the patterns changed are tagged *outside filter*. Deleting an area with bridges asks whether to delete them or move them to Bridges or another area. Every area action is audited by Cataponte (Cataudit) |
 | **Settings** | ⚙️ Settings, in tabs: **Connections** (Pulsar label, Cataponte, Cataudit and Catametricas URLs, each with a check button) and **Refresh & collection** (auto-refresh interval and Catametricas collection interval). Changed at runtime: saved in MongoDB, audited, published on the settings topic. Only the body scrolls; title, tabs and buttons stay visible |
 | **Breadcrumb** | Cluster › tenant › namespace › topic, each part clickable |
 | **Auto-refresh** | Top bar "Auto N s": on/off per browser; ▾ sets the interval for everyone (2–300 s, default 10 s, saved in MongoDB, audited). Refreshes the sidebar, Overview, Subscriptions and Bridges; never repeats a backlog peek |
@@ -32,6 +32,7 @@ Browser (Alpine.js)
 Catapulsar  :8081  (Spring Boot)
     ├── /api/v1/tenants, /namespaces, /topics/**  ──► Pulsar admin API (HTTP)  +  Pulsar client (produce)
     ├── /api/v1/bridges/**  (BFF, ADR 0001)        ──► Cataponte (URL from settings, default CATAPONTE_URL)
+    ├── /api/v1/areas/**    (BFF, ADR 0014)        ──► Cataponte
     ├── /api/v1/settings/**                        ──► MongoDB catapulsar_settings + settings topic (ADR 0011)
     ├── /api/v1/overview/**  (read-only, ADR 0013) ──► Catametricas API (URL from settings, default CATAMETRICAS_URL)
     ├── /api/v1/audit/**  (read-only, ADR 0009)     ──► Cataudit (URL from settings, default CATAUDIT_URL)
@@ -140,6 +141,7 @@ Full contract: <http://localhost:8081/swagger-ui.html>. Errors are RFC 9457 Prob
 | `POST` | `/api/v1/topics/{tenant}/{ns}/{topic}/subscriptions/{sub}/skip/{n}` | Skip `n` messages (`204`) |
 | `POST` | `/api/v1/topics/{tenant}/{ns}/{topic}/subscriptions/{sub}/clear-backlog` | Skip the whole backlog (`204`) |
 | `*` | `/api/v1/bridges/**` | Bridges and their traffic counts, forwarded to Cataponte (see Cataponte's API) |
+| `GET` / `POST` / `PUT` / `DELETE` | `/api/v1/areas`, `/api/v1/areas/{id}?bridges=delete\|move&to=` | Bridge areas, forwarded to Cataponte; each change is also published as `area.<action>-requested` |
 | `GET` / `PUT` / `DELETE` | `/api/v1/settings/cataponte` | Cataponte URL in use / change `{url}` / back to default |
 | `GET` / `PUT` / `DELETE` | `/api/v1/settings/cataudit` | Cataudit URL in use / change `{url}` / back to default |
 | `GET` / `PUT` / `DELETE` | `/api/v1/settings/catametricas` | Catametricas URL in use / change `{url}` / back to default |

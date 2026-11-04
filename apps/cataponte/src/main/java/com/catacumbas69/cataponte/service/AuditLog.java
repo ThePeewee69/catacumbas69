@@ -2,9 +2,11 @@ package com.catacumbas69.cataponte.service;
 
 import com.catacumbas69.catacommons.events.EventData;
 import com.catacumbas69.catacommons.events.EventPublisher;
+import com.catacumbas69.cataponte.model.AreaDocument;
 import com.catacumbas69.cataponte.model.BridgeDocument;
 import com.catacumbas69.cataponte.model.BridgeSource;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -46,11 +48,46 @@ public class AuditLog {
     public void bridgeChanged(String user, AuditAction action, BridgeDocument before, BridgeDocument after) {
         BridgeDocument subject = after != null ? after : before;
         try {
-            events.publish(AuditAction.ENTITY, action.verb(), subject.getId(), EventData.change(user,
+            events.publish(action.entity(), action.verb(), subject.getId(), EventData.change(user,
                     before == null ? null : snapshot(before), after == null ? null : snapshot(after), null));
         } catch (RuntimeException e) {
             log.warn("Event not published: {} {}: {}", action, subject.getId(), e.getMessage());
         }
+    }
+
+    /**
+     * Records a change of one area (ADR 0014).
+     *
+     * @param user client IP address
+     * @param action {@code CREATE_AREA}, {@code UPDATE_AREA} or {@code DELETE_AREA}
+     * @param before area before the change, or {@code null} when created
+     * @param after area after the change, or {@code null} when deleted
+     * @param details extra values (e.g. what happened to the bridges of a deleted area), or {@code null}
+     */
+    public void areaChanged(String user, AuditAction action, AreaDocument before, AreaDocument after,
+                            Map<String, ?> details) {
+        AreaDocument subject = after != null ? after : before;
+        try {
+            events.publish(action.entity(), action.verb(), subject.getId(), EventData.change(user,
+                    before == null ? null : snapshot(before), after == null ? null : snapshot(after), details));
+        } catch (RuntimeException e) {
+            log.warn("Event not published: {} {}: {}", action, subject.getId(), e.getMessage());
+        }
+    }
+
+    /**
+     * Copies the user-visible definition of an area.
+     *
+     * @param area the area
+     * @return its definition as plain values
+     */
+    static Map<String, Object> snapshot(AreaDocument area) {
+        Map<String, Object> definition = new LinkedHashMap<>();
+        definition.put("name", area.getName());
+        definition.put("description", area.getDescription());
+        definition.put("patterns", area.getPatterns() == null ? List.of() : List.copyOf(area.getPatterns()));
+        definition.put("version", area.getVersion());
+        return definition;
     }
 
     /**
@@ -78,6 +115,7 @@ public class AuditLog {
         definition.put("preserveKey", bridge.isPreserveKey());
         definition.put("preserveProperties", bridge.isPreserveProperties());
         definition.put("system", bridge.isSystem());
+        definition.put("areaId", bridge.getAreaId());
         definition.put("version", bridge.getVersion());
         return definition;
     }

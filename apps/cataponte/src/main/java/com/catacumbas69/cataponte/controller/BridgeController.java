@@ -6,6 +6,10 @@ import com.catacumbas69.cataponte.dto.BridgeResponse;
 import com.catacumbas69.cataponte.dto.BridgeStatusResponse;
 import com.catacumbas69.cataponte.dto.TrafficMinuteResponse;
 import com.catacumbas69.cataponte.dto.TrafficTotalResponse;
+import com.catacumbas69.cataponte.model.AreaDocument;
+import com.catacumbas69.cataponte.model.BridgeDocument;
+import com.catacumbas69.cataponte.service.AreaFilter;
+import com.catacumbas69.cataponte.service.AreaService;
 import com.catacumbas69.cataponte.service.BridgeStatusService;
 import com.catacumbas69.cataponte.service.BridgeService;
 import com.catacumbas69.cataponte.service.BridgeValidationException;
@@ -18,6 +22,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -49,6 +54,7 @@ public class BridgeController {
     private final BridgeStatusService statuses;
     private final BridgeMapper mapper;
     private final TrafficService traffic;
+    private final AreaService areas;
 
     /**
      * Creates the controller.
@@ -57,13 +63,15 @@ public class BridgeController {
      * @param statuses runtime status of the bridges over every replica
      * @param mapper API ↔ model mapping
      * @param traffic stored message counts
+     * @param areas areas, to report topics outside a bridge's area (ADR 0014)
      */
     public BridgeController(BridgeService service, BridgeStatusService statuses, BridgeMapper mapper,
-                            TrafficService traffic) {
+                            TrafficService traffic, AreaService areas) {
         this.service = service;
         this.statuses = statuses;
         this.mapper = mapper;
         this.traffic = traffic;
+        this.areas = areas;
     }
 
     /**
@@ -74,7 +82,8 @@ public class BridgeController {
     @Operation(summary = "List bridges")
     @GetMapping
     public List<BridgeResponse> list() {
-        return service.findAll().stream().map(mapper::toResponse).toList();
+        Map<String, AreaDocument> byId = areas.byId();
+        return service.findAll().stream().map(bridge -> respond(bridge, byId.get(bridge.getAreaId()))).toList();
     }
 
     /**
@@ -86,7 +95,7 @@ public class BridgeController {
     @Operation(summary = "Get a bridge")
     @GetMapping("/{id}")
     public BridgeResponse get(@PathVariable String id) {
-        return mapper.toResponse(service.get(id));
+        return respond(service.get(id));
     }
 
     /**
@@ -101,7 +110,7 @@ public class BridgeController {
     @PostMapping
     public ResponseEntity<BridgeResponse> create(@Valid @RequestBody BridgeRequest request,
                                                  UriComponentsBuilder uriBuilder, HttpServletRequest http) {
-        BridgeResponse created = mapper.toResponse(service.create(mapper.toDocument(request), ClientAddress.of(http)));
+        BridgeResponse created = respond(service.create(mapper.toDocument(request), ClientAddress.of(http)));
         URI location = uriBuilder.path("/api/v1/bridges/{id}").buildAndExpand(created.id()).toUri();
         return ResponseEntity.created(location).body(created);
     }
@@ -118,7 +127,7 @@ public class BridgeController {
     @PutMapping("/{id}")
     public BridgeResponse update(@PathVariable String id, @Valid @RequestBody BridgeRequest request,
                                  HttpServletRequest http) {
-        return mapper.toResponse(service.update(id, mapper.toDocument(request), request.version(),
+        return respond(service.update(id, mapper.toDocument(request), request.version(),
                 ClientAddress.of(http)));
     }
 
@@ -141,7 +150,7 @@ public class BridgeController {
         }
         String app = http.getHeader(APP_HEADER);
         String actor = app != null && !app.isBlank() ? app.strip() : ClientAddress.of(http);
-        return mapper.toResponse(service.registerSystem(mapper.toDocument(request), actor));
+        return respond(service.registerSystem(mapper.toDocument(request), actor));
     }
 
     /**
@@ -167,7 +176,7 @@ public class BridgeController {
     @Operation(summary = "Enable a bridge")
     @PostMapping("/{id}/enable")
     public BridgeResponse enable(@PathVariable String id, HttpServletRequest http) {
-        return mapper.toResponse(service.setEnabled(id, true, ClientAddress.of(http)));
+        return respond(service.setEnabled(id, true, ClientAddress.of(http)));
     }
 
     /**
@@ -180,7 +189,7 @@ public class BridgeController {
     @Operation(summary = "Disable a bridge")
     @PostMapping("/{id}/disable")
     public BridgeResponse disable(@PathVariable String id, HttpServletRequest http) {
-        return mapper.toResponse(service.setEnabled(id, false, ClientAddress.of(http)));
+        return respond(service.setEnabled(id, false, ClientAddress.of(http)));
     }
 
     /**
@@ -234,5 +243,18 @@ public class BridgeController {
     @GetMapping("/status")
     public BridgeStatusResponse status() {
         return statuses.status();
+    }
+
+    private BridgeResponse respond(BridgeDocument bridge) {
+        AreaDocument area = null;
+        if (bridge.getAreaId() != null) {
+            area = areas.byId().get(bridge.getAreaId());
+        }
+        return respond(bridge, area);
+    }
+
+    /** A bridge whose area no longer exists has no topics outside it. */
+    private BridgeResponse respond(BridgeDocument bridge, AreaDocument area) {
+        return mapper.toResponse(bridge, area == null ? List.of() : AreaFilter.of(area).outside(bridge));
     }
 }

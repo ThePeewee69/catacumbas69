@@ -60,6 +60,12 @@ public class BridgeDocument {
      */
     private boolean system;
 
+    /**
+     * The area the bridge belongs to (ADR 0014), or {@code null} for the general group. Always {@code null} for
+     * system bridges. Its source and destinations must match the area's patterns when the bridge is saved.
+     */
+    private String areaId;
+
     /** Optimistic-locking version (RES-9); also used to detect configuration changes. */
     @Version
     private Long version;
@@ -116,5 +122,6 @@ public class BridgeDocument {
         this.preserveProperties = other.preserveProperties;
         this.ordered = other.ordered;
         this.maxInFlight = other.maxInFlight;
+        this.areaId = other.areaId;
     }
 }

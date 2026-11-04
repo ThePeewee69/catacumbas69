@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Catapulsar</title>
 <link rel="icon" type="image/svg+xml" href="/catapulsar-icon.svg">
-<link rel="stylesheet" href="/catapulsar.css?v=21">
-<script src="/catapulsar.js?v=21" defer></script>
+<link rel="stylesheet" href="/catapulsar.css?v=22">
+<script src="/catapulsar.js?v=22" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
 </head>
 <body x-data="app()" x-init="init()">
@@ -266,6 +266,30 @@
         </div>
       </div>
 
+      <div class="field" style="margin-bottom:12px;">
+        <label for="bridge-area">Area</label>
+        <template x-if="bridges.form.system">
+          <div class="muted" style="font-size:13px;">System — system bridges always stay in System.</div>
+        </template>
+        <template x-if="!bridges.form.system">
+          <div>
+            <select id="bridge-area" x-model="bridges.form.areaId"
+                    @change="bridges.form.areaId = bridges.form.areaId || null">
+              <option value="">Bridges (no area)</option>
+              <template x-for="a in bridges.areas" :key="a.id">
+                <option :value="a.id" :selected="bridges.form.areaId === a.id" x-text="a.name"></option>
+              </template>
+            </select>
+            <template x-if="areaById(bridges.form.areaId)">
+              <div class="muted" style="font-size:12px;margin-top:4px;">
+                Topics are limited to
+                <span class="mono" x-text="(areaById(bridges.form.areaId).patterns || []).join(', ') || 'every topic'"></span>
+              </div>
+            </template>
+          </div>
+        </template>
+      </div>
+
       <div class="form-section-label">⬅ Source</div>
       <div class="field" style="margin-bottom:12px;">
         <label>Topic *</label>
@@ -351,6 +375,10 @@
       <div class="warn-note" x-show="orderedOnShared()">
         Ordered bridges need a Failover or Key_Shared subscription — a Shared subscription cannot keep order.
       </div>
+      <div class="warn-note" x-show="formOutsideTopics().length > 0">
+        Outside the area's patterns: <span class="mono" x-text="formOutsideTopics().join(', ')"></span>.
+        Choose other topics, another area, or change the area's patterns.
+      </div>
 
       <div class="divider"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
@@ -360,6 +388,100 @@
           <template x-if="bridges.formSaving"><span class="spinner"></span></template>
           Save Bridge
         </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ══ Area form modal (ADR 0014) ════════════════════════════════════════════ -->
+<template x-if="bridges.areaForm !== null">
+  <div class="overlay" @click.self="bridges.areaForm = null">
+    <div class="bridge-form-box" role="dialog" aria-labelledby="area-form-title">
+      <div class="settings-title">
+        <span id="area-form-title" x-text="bridges.areaForm.id ? '✏️ Edit Area' : '▦ New Area'"></span>
+        <button class="close-btn" @click="bridges.areaForm = null" aria-label="Close">✕</button>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label for="area-name">Name *</label>
+          <input id="area-name" type="text" x-model="bridges.areaForm.name" placeholder="e.g. home-media">
+        </div>
+        <div class="field">
+          <label for="area-description">Description</label>
+          <input id="area-description" type="text" x-model="bridges.areaForm.description" placeholder="Optional">
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:8px;">
+        <label for="area-patterns">Topic patterns (one per line; none = every topic)</label>
+        <textarea id="area-patterns" rows="5" class="mono" x-model="bridges.areaForm.patternsText"
+                  placeholder="home/media/*&#10;home/**&#10;*/*/events"></textarea>
+        <div class="muted" style="font-size:12px;margin-top:4px;">
+          Written without <span class="mono">persistent://</span>, as <span class="mono">tenant/namespace/topic</span>.
+          <span class="mono">*</span> matches within one segment, <span class="mono">**</span> across segments.
+          The source and every destination of a bridge in this area must match.
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:8px;">
+        <label>
+          Existing topics that match
+          <span class="muted" x-text="bridges.topicsLoading ? '(loading…)' : '(' + areaFormMatches().length + ' of ' + bridges.topics.length + ')'"></span>
+        </label>
+        <div class="sub-picker topic-picker area-preview">
+          <template x-if="!bridges.topicsLoading && areaFormMatches().length === 0">
+            <div class="sub-picker-empty">no existing topic matches</div>
+          </template>
+          <template x-for="t in areaFormMatches().slice(0, 50)" :key="t">
+            <div class="sub-picker-item" :title="t" x-text="t"></div>
+          </template>
+        </div>
+      </div>
+      <template x-if="bridges.areaForm.id">
+        <p class="muted" style="font-size:12px;">
+          Changing the patterns is always accepted: bridges that no longer fit keep running, marked <em>outside filter</em>.
+        </p>
+      </template>
+      <div class="divider"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn btn-secondary" @click="bridges.areaForm = null">Cancel</button>
+        <button class="btn btn-primary" @click="saveArea()" :disabled="!bridges.areaForm.name.trim() || bridges.areaSaving">
+          <template x-if="bridges.areaSaving"><span class="spinner"></span></template>
+          Save Area
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ══ Delete area dialog ═══════════════════════════════════════════════════ -->
+<template x-if="bridges.areaDelete !== null">
+  <div class="overlay" @click.self="bridges.areaDelete = null">
+    <div class="bridge-form-box" role="dialog" aria-labelledby="area-delete-title" style="max-width:520px;">
+      <div class="settings-title">
+        <span id="area-delete-title" x-text="'Delete area ' + bridges.areaDelete.area.name"></span>
+        <button class="close-btn" @click="bridges.areaDelete = null" aria-label="Close">✕</button>
+      </div>
+      <p style="font-size:13px;margin-bottom:12px;"
+         x-text="'This area has ' + bridges.areaDelete.count + ' bridge(s). What should happen to them?'"></p>
+      <label class="checkbox-label" style="margin-bottom:8px;">
+        <input type="radio" value="move" x-model="bridges.areaDelete.choice"> <span style="white-space:nowrap;">Move them to</span>
+        <select x-model="bridges.areaDelete.to" :disabled="bridges.areaDelete.choice !== 'move'" style="margin-left:6px;">
+          <option value="">Bridges (no area)</option>
+          <template x-for="a in bridges.areas.filter(a => a.id !== bridges.areaDelete.area.id)" :key="a.id">
+            <option :value="a.id" x-text="a.name"></option>
+          </template>
+        </select>
+      </label>
+      <p class="muted" style="font-size:12px;margin:0 0 10px 22px;" x-show="bridges.areaDelete.choice === 'move'">
+        They keep running; any that do not fit the other area's patterns are marked <em>outside filter</em>.
+      </p>
+      <label class="checkbox-label">
+        <input type="radio" value="delete" x-model="bridges.areaDelete.choice"> Delete them all (their relays stop)
+      </label>
+      <div class="divider"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn btn-secondary" @click="bridges.areaDelete = null">Cancel</button>
+        <button class="btn btn-danger" @click="confirmDeleteArea()" :disabled="bridges.areaSaving"
+                x-text="bridges.areaDelete.choice === 'delete' ? 'Delete area and bridges' : 'Move bridges and delete area'"></button>
       </div>
     </div>
   </div>
@@ -719,9 +841,54 @@
             </span>
             <button class="btn btn-ghost" style="font-size:12px;"
                     @click="loadBridges();loadBridgeStatus()" title="Refresh">↺</button>
-            <button class="btn btn-primary" style="font-size:12px;" @click="openNewBridge()">+ New Bridge</button>
+            <template x-if="bridges.tab !== 'system'">
+              <button class="btn btn-primary" style="font-size:12px;" @click="openNewBridge()"
+                      :title="currentArea() ? 'New bridge in area ' + currentArea().name : 'New bridge without an area'">+ New Bridge</button>
+            </template>
           </div>
         </div>
+
+        <!-- Tabs: System | Bridges | areas | + Area (ADR 0014) -->
+        <div class="bridge-tabs-row">
+          <div class="tabs bridge-tabs" role="tablist" aria-label="Bridge groups">
+            <template x-for="t in bridgeTabs()" :key="t.key">
+              <button type="button" role="tab" class="tab" :class="{ active: bridges.tab === t.key }"
+                      :aria-selected="bridges.tab === t.key" @click="selectBridgeTab(t.key)">
+                <span x-text="t.label"></span>
+                <span class="tab-count" x-text="t.count"></span>
+              </button>
+            </template>
+          </div>
+          <button type="button" class="btn btn-ghost btn-xs" @click="openNewArea()"
+                  title="New area: a group of bridges limited to the topics its patterns match">+ Area</button>
+        </div>
+
+        <!-- Header of an area -->
+        <template x-if="currentArea()">
+          <div class="area-head">
+            <div class="area-head-text">
+              <template x-if="currentArea().description">
+                <div class="area-description" x-text="currentArea().description"></div>
+              </template>
+              <div class="area-patterns">
+                <span class="muted">Topics:</span>
+                <template x-if="(currentArea().patterns || []).length === 0">
+                  <span class="tag tag-blue">every topic</span>
+                </template>
+                <template x-for="pt in currentArea().patterns || []" :key="pt">
+                  <span class="mono area-pattern" x-text="pt"></span>
+                </template>
+              </div>
+            </div>
+            <div class="area-head-actions">
+              <button type="button" class="btn btn-ghost btn-xs" @click="openEditArea(currentArea())">✎ Edit area</button>
+              <button type="button" class="btn btn-danger btn-xs" @click="askDeleteArea(currentArea())">Delete area</button>
+            </div>
+          </div>
+        </template>
+        <template x-if="bridges.tab === 'system'">
+          <p class="muted area-hint">Registered by the apps at start-up (e.g. their audit bridges, ADR 0009). They always stay here.</p>
+        </template>
 
         <!-- Loading -->
         <template x-if="bridges.loading">
@@ -732,17 +899,23 @@
         <template x-if="!bridges.loading">
           <div>
             <!-- Empty state -->
-            <template x-if="bridges.list.length === 0">
+            <template x-if="tabBridges().length === 0">
               <div class="card empty" style="margin-top:24px;">
                 <div style="font-size:48px;margin-bottom:12px;">⇌</div>
-                <p style="font-weight:600;color:var(--accent2);">No bridges yet</p>
-                <p style="font-size:13px;margin-top:6px;">Create one to relay messages between Pulsar topics.</p>
-                <button class="btn btn-primary" style="margin-top:16px;" @click="openNewBridge()">+ New Bridge</button>
+                <p style="font-weight:600;color:var(--accent2);"
+                   x-text="bridges.tab === 'system' ? 'No system bridges' : 'No bridges here yet'"></p>
+                <template x-if="bridges.tab !== 'system'">
+                  <div>
+                    <p style="font-size:13px;margin-top:6px;"
+                       x-text="currentArea() ? 'Create one with topics this area allows.' : 'Create one to relay messages between Pulsar topics.'"></p>
+                    <button class="btn btn-primary" style="margin-top:16px;" @click="openNewBridge()">+ New Bridge</button>
+                  </div>
+                </template>
               </div>
             </template>
 
             <!-- Bridge cards -->
-            <template x-for="bridge in bridges.list" :key="bridge.id">
+            <template x-for="bridge in tabBridges()" :key="bridge.id">
               <div class="bridge-card" :class="{'bridge-disabled': !bridge.enabled}">
                 <div class="bridge-card-header">
                   <div class="bridge-status-dot"
@@ -753,6 +926,10 @@
                     <span class="bridge-name" x-text="bridge.name"></span>
                     <template x-if="bridge.system">
                       <span class="tag tag-orange" title="Registered by an app at start-up (e.g. its audit bridge, ADR 0009)">system</span>
+                    </template>
+                    <template x-if="bridge.outsideArea">
+                      <span class="tag tag-orange"
+                            :title="'The area\'s patterns were changed and no longer match: ' + (bridge.outsideTopics || []).join(', ') + '. It keeps running; it must fit again when edited.'">outside filter</span>
                     </template>
                     <template x-if="bridge.description">
                       <span class="bridge-description" x-text="bridge.description"></span>

@@ -24,8 +24,8 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
 /**
- * Backend-for-frontend for bridges (ARCH-2, ADR 0001): forwards bridge calls from the browser to Cataponte
- * at the URL held by {@link CataponteEndpoint}.
+ * Backend-for-frontend for bridges and their areas (ARCH-2, ADR 0001, ADR 0014): forwards bridge and area calls
+ * from the browser to Cataponte at the URL held by {@link CataponteEndpoint}.
  *
  * <p>Cataponte owns validation, the bridge model and the audit of bridge changes (its {@code bridge.*} events
  * carry before and after), so bodies are passed through unchanged, including Cataponte's Problem
@@ -33,7 +33,8 @@ import org.springframework.web.util.UriComponentsBuilder;
  * made the change. If Cataponte cannot be reached a {@link CataponteUnavailableException} is thrown, which
  * the API maps to {@code 503} (RES-12).
  *
- * <p>Every forwarded change is also published as a {@code bridge.<action>-requested} event on
+ * <p>Every forwarded change is also published as a {@code bridge.<action>-requested} (or
+ * {@code area.<action>-requested}) event on
  * {@code catacumbas69/catapulsar/events} with Cataponte's HTTP status, refused requests included
  * (ADR 0008). Cataponte publishes its own {@code bridge.<action>} event for the change it made.
  */
@@ -45,6 +46,7 @@ public class BridgeProxyService {
 
     private static final Logger LOG = LoggerFactory.getLogger(BridgeProxyService.class);
     private static final String BRIDGES = "/api/v1/bridges";
+    private static final String AREAS = "/api/v1/areas";
     private static final int UNAVAILABLE = 503;
 
     private final RestClient cataponte;
@@ -184,17 +186,76 @@ public class BridgeProxyService {
                 () -> forward(HttpMethod.POST, BRIDGES + "/" + id + (enabled ? "/enable" : "/disable"), null, user));
     }
 
-    /** Forwards a change and publishes the matching request event, whatever Cataponte answered. */
-    private ResponseEntity<byte[]> requested(AuditAction action, String id, String body, String user,
+    /**
+     * Lists the areas, with their number of bridges.
+     *
+     * @return Cataponte's response
+     */
+    public ResponseEntity<byte[]> listAreas() {
+        return forward(HttpMethod.GET, AREAS, null, null);
+    }
+
+    /**
+     * Creates an area.
+     *
+     * @param body area definition as JSON
+     * @param user client IP address, recorded by Cataponte
+     * @return Cataponte's response
+     */
+    public ResponseEntity<byte[]> createArea(String body, String user) {
+        return requested(AuditAction.CREATE_AREA, null, body, user,
+                () -> forward(HttpMethod.POST, AREAS, body, user));
+    }
+
+    /**
+     * Replaces an area.
+     *
+     * @param id area id
+     * @param body area definition as JSON
+     * @param user client IP address, recorded by Cataponte
+     * @return Cataponte's response
+     */
+    public ResponseEntity<byte[]> updateArea(String id, String body, String user) {
+        return requested(AuditAction.UPDATE_AREA, id, body, user,
+                () -> forward(HttpMethod.PUT, AREAS + "/" + id, body, user));
+    }
+
+    /**
+     * Deletes an area.
+     *
+     * @param id area id
+     * @param bridges {@code delete} or {@code move} for an area that has bridges, else {@code null}
+     * @param to area to move them to, or {@code null} for the general group
+     * @param user client IP address, recorded by Cataponte
+     * @return Cataponte's response
+     */
+    public ResponseEntity<byte[]> deleteArea(String id, String bridges, String to, String user) {
+        UriComponentsBuilder path = UriComponentsBuilder.fromPath(AREAS + "/" + id);
+        if (bridges != null) {
+            path.queryParam("bridges", bridges);
+        }
+        if (to != null) {
+            path.queryParam("to", to);
+        }
+        String query = path.build().getQuery();
+        return requested(AuditAction.DELETE_AREA, id, query, user,
+                () -> forward(HttpMethod.DELETE, path.build().toUriString(), null, user));
+    }
+
+    /**
+     * Forwards a change and publishes the matching request event, whatever Cataponte answered. {@code request} is
+     * kept in the event: the JSON body, or the query of a delete.
+     */
+    private ResponseEntity<byte[]> requested(AuditAction action, String id, String request, String user,
                                              Supplier<ResponseEntity<byte[]>> call) {
         ResponseEntity<byte[]> response;
         try {
             response = call.get();
         } catch (CataponteUnavailableException e) {
-            publishRequested(action, id, body, user, UNAVAILABLE, null);
+            publishRequested(action, id, request, user, UNAVAILABLE, null);
             throw e;
         }
-        publishRequested(action, id, body, user, response.getStatusCode().value(), response.getBody());
+        publishRequested(action, id, request, user, response.getStatusCode().value(), response.getBody());
         return response;
     }
 

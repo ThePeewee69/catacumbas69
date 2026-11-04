@@ -16,6 +16,8 @@ import static org.mockito.Mockito.when;
 import com.catacumbas69.cataponte.TestBridges;
 import com.catacumbas69.cataponte.model.BridgeDestination;
 import com.catacumbas69.cataponte.model.BridgeDocument;
+import com.catacumbas69.cataponte.model.AreaDocument;
+import com.catacumbas69.cataponte.repository.AreaRepository;
 import com.catacumbas69.cataponte.repository.BridgeRepository;
 import java.util.List;
 import java.util.Optional;
@@ -29,8 +31,9 @@ class BridgeServiceTest {
     private static final String USER = "10.0.0.1";
 
     private final BridgeRepository repository = mock(BridgeRepository.class);
+    private final AreaRepository areas = mock(AreaRepository.class);
     private final AuditLog audit = mock(AuditLog.class);
-    private final BridgeService service = new BridgeService(repository, audit);
+    private final BridgeService service = new BridgeService(repository, areas, audit);
 
     @BeforeEach
     void saveReturnsArgument() {
@@ -47,6 +50,82 @@ class BridgeServiceTest {
         assertThat(saved.getId()).isNull();
         assertThat(saved.getVersion()).isNull();
         assertThat(saved.resolveDestinationTopics()).containsExactly(DEST_A, DEST_B);
+    }
+
+    @Test
+    void create_inArea_acceptsTopicsMatchingItsPatterns() {
+        when(areas.findById("media")).thenReturn(Optional.of(area("media", "home/media/*")));
+        BridgeDocument draft = TestBridges.unordered("1", DEST_A);
+        draft.setAreaId("media");
+
+        assertThat(service.create(draft, USER).getAreaId()).isEqualTo("media");
+    }
+
+    @Test
+    void create_inArea_rejectsTopicsOutsideItsPatterns() {
+        when(areas.findById("media")).thenReturn(Optional.of(area("media", "home/media/in", "home/media/out-a")));
+        BridgeDocument draft = TestBridges.unordered("1", DEST_A, DEST_B);
+        draft.setAreaId("media");
+
+        assertThatThrownBy(() -> service.create(draft, USER))
+                .isInstanceOf(BridgeValidationException.class)
+                .hasMessageContaining(DEST_B)
+                .extracting("field").isEqualTo("areaId");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void create_rejectsUnknownArea() {
+        BridgeDocument draft = TestBridges.unordered("1", DEST_A);
+        draft.setAreaId("gone");
+
+        assertThatThrownBy(() -> service.create(draft, USER))
+                .isInstanceOf(BridgeValidationException.class)
+                .extracting("field").isEqualTo("areaId");
+    }
+
+    @Test
+    void update_refusesAnAreaForASystemBridge() {
+        BridgeDocument existing = TestBridges.unordered("1", DEST_A);
+        existing.setSystem(true);
+        when(repository.findById("1")).thenReturn(Optional.of(existing));
+        BridgeDocument changes = TestBridges.unordered(null, DEST_A);
+        changes.setAreaId("media");
+
+        assertThatThrownBy(() -> service.update("1", changes, null, USER))
+                .isInstanceOf(BridgeValidationException.class)
+                .hasMessageContaining("System bridges stay in System");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void registerSystem_neverKeepsAnArea() {
+        when(repository.findByName("bridge-1")).thenReturn(Optional.empty());
+        BridgeDocument draft = TestBridges.unordered("1", DEST_A);
+        draft.setAreaId("media");
+
+        assertThat(service.registerSystem(draft, "cataudit").getAreaId()).isNull();
+    }
+
+    @Test
+    void moveToArea_skipsThePatterns_andAuditsAnUpdate() {
+        BridgeDocument bridge = TestBridges.unordered("1", DEST_A);
+        bridge.setAreaId("media");
+        when(repository.findById("1")).thenReturn(Optional.of(bridge));
+
+        BridgeDocument moved = service.moveToArea("1", "other", USER);
+
+        assertThat(moved.getAreaId()).isEqualTo("other");
+        verify(audit).bridgeChanged(eq(USER), eq(AuditAction.UPDATE_BRIDGE),
+                argThat(before -> "media".equals(before.getAreaId())), eq(moved));
+    }
+
+    private static AreaDocument area(String id, String... patterns) {
+        AreaDocument area = new AreaDocument();
+        area.setId(id);
+        area.setName(id);
+        area.setPatterns(List.of(patterns));
+        return area;
     }
 
     @Test

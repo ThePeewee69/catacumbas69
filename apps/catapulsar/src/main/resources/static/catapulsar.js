@@ -1,5 +1,9 @@
 /** Bridge API, served by Catapulsar and forwarded to Cataponte (ADR 0001). */
 const BRIDGES_API = '/api/v1/bridges';
+/** Bridge areas API (ADR 0014), forwarded to Cataponte like the bridges. */
+const AREAS_API = '/api/v1/areas';
+/** localStorage key of the last Bridges tab used: 'system', 'general' or an area id. */
+const BRIDGES_TAB_KEY = 'bridgesTab';
 /** localStorage key of the auto-refresh on/off switch (per browser). */
 const AUTO_REFRESH_KEY = 'autoRefresh';
 /** Re-read the shared refresh interval from the server every this many ticks. */
@@ -29,6 +33,38 @@ const LIVE_MAX_MS = 10 * 60 * 1000;
  */
 function storedChoice(key, fallback, allowed) {
   try { const v = localStorage.getItem(key); return allowed.includes(v) ? v : fallback; } catch { return fallback; }
+}
+
+/**
+ * Compiles one area pattern (ADR 0014), with the same rules as Cataponte: written without persistent://,
+ * `*` within one segment, `**` across segments, `non-persistent://` for non-persistent topics.
+ * @param {string} pattern the glob
+ * @returns {(topic: string) => boolean} whether a full topic name matches
+ */
+function areaPatternMatcher(pattern) {
+  const nonPersistent = 'non-persistent://';
+  const persistent = !pattern.startsWith(nonPersistent);
+  const body = persistent ? pattern : pattern.slice(nonPersistent.length);
+  let regex = '';
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] === '*' && body[i + 1] === '*') { regex += '.*'; i++; }
+    else if (body[i] === '*') regex += '[^/]*';
+    else regex += body[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  const compiled = new RegExp(`^${regex}$`);
+  const scheme = persistent ? 'persistent://' : nonPersistent;
+  return topic => typeof topic === 'string' && topic.startsWith(scheme) && compiled.test(topic.slice(scheme.length));
+}
+
+/**
+ * Whether a topic is allowed by an area's patterns; an area without patterns allows every topic.
+ * @param {string[]} patterns the area's globs
+ * @param {string} topic full topic name
+ * @returns {boolean} true when it matches one pattern, or there are none
+ */
+function areaAllows(patterns, topic) {
+  if (!patterns || patterns.length === 0) return true;
+  return patterns.some(p => areaPatternMatcher(p)(topic));
 }
 
 /** Reads the per-browser auto-refresh switch; on unless explicitly turned off. */
@@ -104,6 +140,11 @@ function app() {
       topicsLoading: false,
       srcFilter: '',
       dstFilter: '',
+      areas: [],         // bridge areas (ADR 0014), with bridgeCount
+      tab: 'system',     // open tab: 'system', 'general' or an area id
+      areaForm: null,    // null=closed; { id, name, description, patternsText, version }
+      areaSaving: false,
+      areaDelete: null,  // null=closed; { area, choice: 'delete'|'move', to: '' }
     },
 
     // ── Audit trail (Cataudit, ADR 0009) ───────────────────────────────────
@@ -1176,11 +1217,193 @@ function app() {
       this.loadCataponteSettings();
       this.loadBridges();
       this.loadBridgeStatus();
+      this.loadAreas(true);
     },
 
-    /** @returns {number} bridges whose worker is relaying messages right now */
+    /** @returns {number} bridges of the open tab whose worker is relaying messages right now */
     runningBridges() {
-      return Object.values(this.bridges.status).filter(s => s.running).length;
+      return this.tabBridges().filter(b => this.bridges.status[b.id]?.running).length;
+    },
+
+    // ── Bridge areas (ADR 0014) ──────────────────────────────────────────────
+    /**
+     * Loads the areas; the first time, reopens the last tab used (System when it is gone).
+     * @param {boolean} [restoreTab] pick the remembered tab after loading
+     */
+    async loadAreas(restoreTab = false) {
+      try {
+        const areas = await this.bridgesApi(AREAS_API);
+        if (JSON.stringify(areas) !== JSON.stringify(this.bridges.areas)) this.bridges.areas = areas;
+      } catch { /* keep the current areas; Cataponte errors show with the bridges */ }
+      if (restoreTab) {
+        let stored = null;
+        try { stored = localStorage.getItem(BRIDGES_TAB_KEY); } catch { /* not remembered */ }
+        this.bridges.tab = this.bridgeTabExists(stored) ? stored : 'system';
+      } else if (!this.bridgeTabExists(this.bridges.tab)) {
+        this.bridges.tab = 'system';
+      }
+    },
+
+    /**
+     * @param {?string} key tab key
+     * @returns {boolean} whether the tab exists
+     */
+    bridgeTabExists(key) {
+      return key === 'system' || key === 'general' || this.bridges.areas.some(a => a.id === key);
+    },
+
+    /** @returns {{key: string, label: string, count: number}[]} System, Bridges, then one tab per area */
+    bridgeTabs() {
+      const list = this.bridges.list;
+      return [
+        { key: 'system', label: 'System', count: list.filter(b => b.system).length },
+        { key: 'general', label: 'Bridges', count: list.filter(b => this.inGeneralGroup(b)).length },
+        ...this.bridges.areas.map(a => ({ key: a.id, label: a.name, count: list.filter(b => b.areaId === a.id).length })),
+      ];
+    },
+
+    /**
+     * Bridges without an area, or whose area no longer exists, are in the general group.
+     * @param {object} bridge the bridge
+     * @returns {boolean} true when it belongs to the Bridges tab
+     */
+    inGeneralGroup(bridge) {
+      return !bridge.system && (!bridge.areaId || !this.bridges.areas.some(a => a.id === bridge.areaId));
+    },
+
+    /** @returns {object[]} the bridges of the open tab */
+    tabBridges() {
+      const tab = this.bridges.tab;
+      if (tab === 'system') return this.bridges.list.filter(b => b.system);
+      if (tab === 'general') return this.bridges.list.filter(b => this.inGeneralGroup(b));
+      return this.bridges.list.filter(b => b.areaId === tab);
+    },
+
+    /**
+     * Opens a tab and remembers it in this browser.
+     * @param {string} key 'system', 'general' or an area id
+     */
+    selectBridgeTab(key) {
+      this.bridges.tab = key;
+      try { localStorage.setItem(BRIDGES_TAB_KEY, key); } catch { /* not remembered */ }
+    },
+
+    /** @returns {?object} the area of the open tab, or null on System and Bridges */
+    currentArea() {
+      return this.bridges.areas.find(a => a.id === this.bridges.tab) ?? null;
+    },
+
+    /**
+     * @param {?string} id area id
+     * @returns {?object} the area, or null
+     */
+    areaById(id) {
+      return id ? this.bridges.areas.find(a => a.id === id) ?? null : null;
+    },
+
+    openNewArea() {
+      this.bridges.areaForm = { id: null, name: '', description: '', patternsText: '', version: null };
+      if (this.bridges.topics.length === 0) this.loadAllTopics();
+    },
+
+    /** @param {object} area the area to edit */
+    openEditArea(area) {
+      this.bridges.areaForm = { id: area.id, name: area.name, description: area.description || '',
+        patternsText: (area.patterns || []).join('\n'), version: area.version };
+      if (this.bridges.topics.length === 0) this.loadAllTopics();
+    },
+
+    /** @returns {string[]} the patterns typed in the area form, one per line */
+    areaFormPatterns() {
+      return (this.bridges.areaForm?.patternsText || '').split('\n').map(p => p.trim()).filter(Boolean);
+    },
+
+    /** @returns {string[]} existing topics the area form's patterns match (for the preview) */
+    areaFormMatches() {
+      const patterns = this.areaFormPatterns();
+      try {
+        return this.bridges.topics.filter(t => areaAllows(patterns, t));
+      } catch {
+        return [];
+      }
+    },
+
+    async saveArea() {
+      const f = this.bridges.areaForm;
+      const isNew = !f.id;
+      this.bridges.areaSaving = true;
+      try {
+        const payload = { name: f.name.trim(), description: f.description, patterns: this.areaFormPatterns(),
+          version: f.version ?? null };
+        const saved = isNew
+          ? await this.bridgesApi(AREAS_API, { method: 'POST', body: JSON.stringify(payload) })
+          : await this.bridgesApi(`${AREAS_API}/${f.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        this.bridges.areaForm = null;
+        await this.loadAreas();
+        await this.loadBridges();
+        if (saved?.id) this.selectBridgeTab(saved.id);
+        this.notify(isNew ? `Area "${payload.name}" created` : `Area "${payload.name}" updated`);
+      } catch (e) {
+        this.notify('Cataponte: ' + e.message, 'error');
+      } finally {
+        this.bridges.areaSaving = false;
+      }
+    },
+
+    /** @param {object} area the area to delete; an empty one only needs a confirmation */
+    askDeleteArea(area) {
+      const count = this.bridges.list.filter(b => b.areaId === area.id).length;
+      if (count === 0) {
+        if (confirm(`Delete area "${area.name}"? It has no bridges.`)) this.deleteArea(area, null, null);
+        return;
+      }
+      this.bridges.areaDelete = { area, count, choice: 'move', to: '' };
+    },
+
+    /** Applies the choice of the delete dialog. */
+    confirmDeleteArea() {
+      const d = this.bridges.areaDelete;
+      if (d.choice === 'delete'
+          && !confirm(`Delete area "${d.area.name}" and its ${d.count} bridge(s)? Their relays stop immediately.`)) {
+        return;
+      }
+      this.deleteArea(d.area, d.choice, d.choice === 'move' ? d.to : null);
+    },
+
+    /**
+     * Deletes an area through Cataponte, which audits it and every bridge it deletes or moves.
+     * @param {object} area the area
+     * @param {?string} choice 'delete' or 'move' for an area with bridges
+     * @param {?string} to area to move them to; empty for Bridges
+     */
+    async deleteArea(area, choice, to) {
+      const query = new URLSearchParams();
+      if (choice) query.set('bridges', choice);
+      if (to) query.set('to', to);
+      const suffix = query.toString() ? `?${query}` : '';
+      this.bridges.areaSaving = true;
+      try {
+        await this.bridgesApi(`${AREAS_API}/${area.id}${suffix}`, { method: 'DELETE' });
+        this.bridges.areaDelete = null;
+        this.selectBridgeTab(choice === 'move' && to ? to : choice === 'move' ? 'general' : 'system');
+        await this.loadAreas();
+        await this.loadBridges();
+        await this.loadBridgeStatus();
+        this.notify(`Area "${area.name}" deleted`);
+      } catch (e) {
+        this.notify('Cataponte: ' + e.message, 'error');
+      } finally {
+        this.bridges.areaSaving = false;
+      }
+    },
+
+    /** @returns {string[]} topics of the bridge form that its area's patterns do not allow */
+    formOutsideTopics() {
+      const f = this.bridges.form;
+      const area = this.areaById(f?.areaId);
+      if (!f || !area) return [];
+      const topics = [f.source.topic, ...f.destinations.map(d => d.topic)].filter(Boolean);
+      return topics.filter(t => !areaAllows(area.patterns, t));
     },
 
     // ── Cataponte URL (stored in MongoDB, audited) ──────────────────────────
@@ -1249,6 +1472,7 @@ function app() {
         const list = await this.bridgesApi(BRIDGES_API);
         if (JSON.stringify(list) !== JSON.stringify(this.bridges.list)) this.bridges.list = list;
       } catch { /* keep the current list */ }
+      await this.loadAreas();
     },
 
     async loadWorkerStatus() {
@@ -1326,7 +1550,8 @@ function app() {
         source: { topic: '', subscription: 'cataponte-bridge', subscriptionType: 'Failover' },
         ordered: true,
         destinations: [],
-        preserveKey: true, preserveProperties: true
+        preserveKey: true, preserveProperties: true,
+        areaId: this.currentArea()?.id ?? null
       };
       this.bridges.srcFilter = ''; this.bridges.dstFilter = '';
       this.loadAllTopics();
@@ -1359,7 +1584,7 @@ function app() {
     bridgeFormValid() {
       const f = this.bridges.form;
       return Boolean(f && f.name && f.source.topic && f.source.subscription && f.destinations.length > 0
-        && !this.orderedOnShared());
+        && !this.orderedOnShared() && this.formOutsideTopics().length === 0);
     },
 
     /**
@@ -1407,7 +1632,9 @@ function app() {
     filteredTopics(filter, exclude = []) {
       const f = (filter || '').toLowerCase();
       const ex = Array.isArray(exclude) ? exclude : [exclude];
-      return this.bridges.topics.filter(t => !ex.includes(t) && (!f || t.toLowerCase().includes(f)));
+      const area = this.areaById(this.bridges.form?.areaId);
+      return this.bridges.topics.filter(t => !ex.includes(t) && (!f || t.toLowerCase().includes(f))
+        && (!area || areaAllows(area.patterns, t)));
     },
 
     closeBridgeForm() {
@@ -1423,7 +1650,7 @@ function app() {
           name: f.name, description: f.description, enabled: f.enabled,
           source: f.source, destinations: f.destinations,
           preserveKey: f.preserveKey, preserveProperties: f.preserveProperties,
-          ordered: f.ordered, version: f.version ?? null
+          ordered: f.ordered, areaId: f.system ? null : (f.areaId || null), version: f.version ?? null
         };
         if (isNew) {
           await this.bridgesApi(BRIDGES_API, { method: 'POST', body: JSON.stringify(payload) });

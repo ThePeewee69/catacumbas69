@@ -1,5 +1,6 @@
 package com.catacumbas69.cataponte.service;
 
+import com.catacumbas69.cataponte.model.AreaDocument;
 import com.catacumbas69.cataponte.model.BridgeDocument;
 import com.catacumbas69.cataponte.model.BridgeTrafficMinute;
 import com.catacumbas69.cataponte.model.BridgeTrafficTotal;
@@ -56,6 +57,10 @@ public class BridgeIndexes {
     private void ensure() {
         mongoTemplate.indexOps(BridgeDocument.class)
                 .createIndex(new Index().on("name", Sort.Direction.ASC).unique().named("bridges_name_unique"));
+        mongoTemplate.indexOps(BridgeDocument.class)
+                .createIndex(new Index().on("areaId", Sort.Direction.ASC).named("bridges_area"));
+        mongoTemplate.indexOps(AreaDocument.class)
+                .createIndex(new Index().on("name", Sort.Direction.ASC).unique().named("areas_name_unique"));
         // Upsert keys of the traffic collections; also serve the per-bridge queries.
         mongoTemplate.indexOps(BridgeTrafficMinute.class).createIndex(new Index()
                 .on("bridgeId", Sort.Direction.ASC).on("role", Sort.Direction.ASC)

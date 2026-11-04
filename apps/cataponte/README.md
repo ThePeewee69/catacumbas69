@@ -37,14 +37,24 @@ Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs
   (`<app>/events` → `cataudit/audit`) at start-up with `PUT /api/v1/bridges/system/{name}`. Cataponte
   registers its own `audit-cataponte` in-process. The call is idempotent: nothing changes when the definition
   already matches, and an enabled state a user changed is kept. System bridges have `system: true` (a
-  badge in the UI) and are otherwise normal bridges.
+  badge in the UI) and are otherwise normal bridges. They never belong to an area.
+- **Areas** (ADR 0014): named groups of bridges, each with 0–20 glob patterns over topic names, written without
+  `persistent://` (`home/media/*` = topics of `home/media`; `home/**` = everything in `home`; `*/*/events`;
+  `non-persistent://…` for non-persistent topics; no patterns = every topic). A bridge joins an area with
+  `areaId`; then its source and every destination must match a pattern when it is created, edited or moved
+  (`400` naming the topics that do not fit). Changing the patterns is always accepted: bridges that no longer fit
+  keep running and are returned with `outsideArea: true` and `outsideTopics`. Deleting an area with bridges needs
+  `bridges=delete` or `bridges=move` (`to=<area id>`, or none for the general group); without it, `409`. Area
+  changes are published as `com.catacumbas69.cataponte.area.<created|updated|deleted>.v1`, so they reach
+  Cataudit; moves and bulk deletions also publish one `bridge.updated`/`bridge.deleted` per bridge. Areas change
+  definitions only: the workers are not affected.
 - **Replicas** (ADR 0012, orch.md ARCH-5): every replica runs every enabled bridge and Pulsar spreads the
   messages. On a `Failover` subscription one replica receives and the others stand by (the worker follows the
   broker's consumer events); on `Shared` and `Key_Shared` every replica receives a share. Each replica writes
   its workers' status to `cataponte_worker_status` every 5 s, so `GET /api/v1/bridges/status` answers for all
   of them: most advanced state, summed counters, `replicas` and `activeReplicas`. Two writes on different
   replicas at the same instant could still close a loop; the reconciler then blocks those bridges.
-- **Collections**: `cataponte_bridges`, `cataponte_traffic_minutes`, `cataponte_traffic_totals` and
+- **Collections**: `cataponte_bridges`, `cataponte_areas`, `cataponte_traffic_minutes`, `cataponte_traffic_totals` and
   `cataponte_worker_status`. Their indexes are created shortly after start-up (retried while MongoDB is down).
 
 ## Run locally (IntelliJ on necromancer)
@@ -102,6 +112,9 @@ Unit tests need no Docker, MongoDB or Pulsar.
 | `GET` | `/api/v1/bridges/traffic` | All-time messages/bytes of every bridge, per role and topic |
 | `GET` | `/api/v1/bridges/{id}/traffic` | All-time counts of one bridge |
 | `GET` | `/api/v1/bridges/{id}/traffic/minutes?from=…&to=…` | Per-minute counts (ISO-8601; default last hour, max 7 days) |
+| `GET` / `POST` | `/api/v1/areas` | List (with `bridgeCount`) / create `{name, description?, patterns}` (`201` + `Location`) |
+| `GET` / `PUT` | `/api/v1/areas/{id}` | Get / replace (send `version`) |
+| `DELETE` | `/api/v1/areas/{id}?bridges=delete\|move&to=` | Delete (`204`); an area with bridges needs `bridges` (`409` without it) |
 
 Errors are RFC 9457 Problem Details. Full contract: `http://localhost:8082/swagger-ui.html`.
 
@@ -114,9 +127,12 @@ Example:
               "subscriptionType": "Failover" },
   "destinations": [ { "topic": "persistent://home/media/orders-audit" },
                     { "topic": "persistent://home/media/orders-analytics" } ],
-  "ordered": true
+  "ordered": true,
+  "areaId": "6728f0c1a5b3e94d1c2f7a10"
 }
 ```
+
+`areaId` is optional; without it the bridge is in the general group.
 
 ## Operate
 

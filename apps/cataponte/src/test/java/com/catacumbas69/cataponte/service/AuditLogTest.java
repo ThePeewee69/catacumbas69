@@ -13,7 +13,10 @@ import static org.mockito.Mockito.verify;
 import com.catacumbas69.catacommons.events.EventData;
 import com.catacumbas69.catacommons.events.EventPublisher;
 import com.catacumbas69.cataponte.TestBridges;
+import com.catacumbas69.cataponte.model.AreaDocument;
 import com.catacumbas69.cataponte.model.BridgeDocument;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -64,5 +67,21 @@ class AuditLogTest {
 
         assertThatCode(() -> audit.bridgeChanged("10.0.0.1", AuditAction.CREATE_BRIDGE, null,
                 TestBridges.unordered("1", DEST_A))).doesNotThrowAnyException();
+    }
+
+    @Test
+    void areaChanged_publishesAnAreaEvent_withPatternsAndDetails() {
+        AreaDocument area = new AreaDocument();
+        area.setId("a1");
+        area.setName("media");
+        area.setPatterns(List.of("home/media/*", "home/tv/*"));
+
+        audit.areaChanged("10.0.0.1", AuditAction.DELETE_AREA, area, null, Map.of("bridges", "deleted"));
+
+        ArgumentCaptor<EventData> data = ArgumentCaptor.forClass(EventData.class);
+        verify(events).publish(eq("area"), eq("deleted"), eq("a1"), data.capture());
+        assertThat(data.getValue().before()).containsEntry("name", "media").containsKey("patterns");
+        assertThat(data.getValue().after()).isNull();
+        assertThat(data.getValue().details()).containsEntry("bridges", "deleted");
     }
 }

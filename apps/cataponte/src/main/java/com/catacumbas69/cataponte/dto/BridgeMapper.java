@@ -45,16 +45,29 @@ public class BridgeMapper {
         bridge.setPreserveProperties(valueOr(request.preserveProperties(), true));
         bridge.setOrdered(request.ordered());
         bridge.setMaxInFlight(request.maxInFlight());
+        bridge.setAreaId(request.areaId() == null || request.areaId().isBlank() ? null : request.areaId().trim());
         return bridge;
+    }
+
+    /**
+     * Converts a stored bridge to its API representation, resolving effective values, with every topic inside
+     * its area.
+     *
+     * @param bridge stored bridge
+     * @return the response record
+     */
+    public BridgeResponse toResponse(BridgeDocument bridge) {
+        return toResponse(bridge, List.of());
     }
 
     /**
      * Converts a stored bridge to its API representation, resolving effective values.
      *
      * @param bridge stored bridge
+     * @param outsideTopics its topics that no longer match its area's patterns
      * @return the response record
      */
-    public BridgeResponse toResponse(BridgeDocument bridge) {
+    public BridgeResponse toResponse(BridgeDocument bridge, List<String> outsideTopics) {
         BridgeSource source = bridge.getSource();
         return new BridgeResponse(
                 bridge.getId(),
@@ -69,6 +82,9 @@ public class BridgeMapper {
                 bridge.isOrderedEffective(),
                 bridge.getMaxInFlight() != null ? bridge.getMaxInFlight() : defaultMaxInFlight,
                 bridge.isSystem(),
+                bridge.getAreaId(),
+                !outsideTopics.isEmpty(),
+                List.copyOf(outsideTopics),
                 bridge.getVersion(),
                 bridge.getCreatedAt(),
                 bridge.getUpdatedAt());

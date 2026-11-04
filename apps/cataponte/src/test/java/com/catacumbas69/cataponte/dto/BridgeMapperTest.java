@@ -43,6 +43,6 @@ class BridgeMapperTest {
         return new BridgeRequest(" fanout ", null, null,
                 new BridgeRequest.Source("persistent://a/b/in", "sub", subscriptionType),
                 List.of(new BridgeRequest.Destination("persistent://a/b/out")),
-                null, null, ordered, null, null);
+                null, null, ordered, null, null, null);
     }
 }

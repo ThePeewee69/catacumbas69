@@ -17,6 +17,9 @@ import java.util.List;
  * @param ordered whether source order is kept (effective value)
  * @param maxInFlight unconfirmed messages allowed (effective value)
  * @param system registered by an app at start-up (e.g. an audit bridge, ADR 0009)
+ * @param areaId area of the bridge (ADR 0014), or {@code null}
+ * @param outsideArea some topics no longer match the area's patterns (they were changed after the bridge was saved)
+ * @param outsideTopics those topics; empty when none
  * @param version version to send back on update
  * @param createdAt creation time
  * @param updatedAt last change time
@@ -33,6 +36,9 @@ public record BridgeResponse(
         boolean ordered,
         int maxInFlight,
         boolean system,
+        String areaId,
+        boolean outsideArea,
+        List<String> outsideTopics,
         Long version,
         Instant createdAt,
         Instant updatedAt) {

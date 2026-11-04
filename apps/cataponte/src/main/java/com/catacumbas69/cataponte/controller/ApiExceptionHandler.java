@@ -1,5 +1,6 @@
 package com.catacumbas69.cataponte.controller;
 
+import com.catacumbas69.cataponte.service.AreaNotFoundException;
 import com.catacumbas69.cataponte.service.BridgeConflictException;
 import com.catacumbas69.cataponte.service.BridgeNotFoundException;
 import com.catacumbas69.cataponte.service.BridgeValidationException;
@@ -56,10 +57,21 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
-     * Duplicate name or stale version.
+     * Unknown area id.
      *
      * @param ex the exception
-     * @return {@code 409}
+     * @return {@code 404}
+     */
+    @ExceptionHandler(AreaNotFoundException.class)
+    public ProblemDetail handleAreaNotFound(AreaNotFoundException ex) {
+        return problem(HttpStatus.NOT_FOUND, "Area not found", ex.getMessage());
+    }
+
+    /**
+     * Maps a conflict (name taken, stale version, area with bridges) to {@code 409}.
+     *
+     * @param ex the exception
+     * @return problem details
      */
     @ExceptionHandler(BridgeConflictException.class)
     public ProblemDetail handleConflict(BridgeConflictException ex) {

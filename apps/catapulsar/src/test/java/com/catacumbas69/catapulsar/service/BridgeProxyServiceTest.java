@@ -151,4 +151,32 @@ class BridgeProxyServiceTest {
         verify(events).publish(eq("bridge"), eq("delete-requested"), eq("b1"),
                 eq(EventData.action("10.0.0.1", Map.of("status", 503))));
     }
+
+    @Test
+    void deleteArea_forwardsTheChoiceForItsBridges_andPublishesTheRequest() {
+        cataponte.expect(requestTo("http://cataponte/api/v1/areas/a1?bridges=move&to=a2"))
+                .andExpect(method(HttpMethod.DELETE))
+                .andExpect(header(BridgeProxyService.FORWARDED_FOR, "10.0.0.1"))
+                .andRespond(withStatus(HttpStatus.NO_CONTENT));
+
+        ResponseEntity<byte[]> response = service.deleteArea("a1", "move", "a2", "10.0.0.1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        cataponte.verify();
+        verify(events).publish("area", "delete-requested", "a1",
+                EventData.action("10.0.0.1", Map.of("status", 204, "request", "bridges=move&to=a2")));
+    }
+
+    @Test
+    void createArea_publishesTheRequest_withTheNewId() {
+        cataponte.expect(requestTo("http://cataponte/api/v1/areas"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withStatus(HttpStatus.CREATED).contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"id\":\"a1\",\"name\":\"media\"}"));
+
+        service.createArea("{\"name\":\"media\"}", "10.0.0.1");
+
+        verify(events).publish("area", "create-requested", "a1",
+                EventData.action("10.0.0.1", Map.of("status", 201, "request", "{\"name\":\"media\"}")));
+    }
 }

@@ -1,7 +1,9 @@
 package com.catacumbas69.cataponte.service;
 
+import com.catacumbas69.cataponte.model.AreaDocument;
 import com.catacumbas69.cataponte.model.BridgeDestination;
 import com.catacumbas69.cataponte.model.BridgeDocument;
+import com.catacumbas69.cataponte.repository.AreaRepository;
 import com.catacumbas69.cataponte.repository.BridgeRepository;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +27,7 @@ public class BridgeService {
     private static final String EXCLUSIVE = "Exclusive";
 
     private final BridgeRepository repository;
+    private final AreaRepository areas;
     private final AuditLog audit;
     /** Serialises changes that can alter the bridge graph, so two requests cannot close a loop together. */
     private final Object topologyLock = new Object();
@@ -33,10 +36,12 @@ public class BridgeService {
      * Creates the service.
      *
      * @param repository bridge definitions
+     * @param areas areas, whose patterns limit the topics of their bridges (ADR 0014)
      * @param audit audit log for configuration changes
      */
-    public BridgeService(BridgeRepository repository, AuditLog audit) {
+    public BridgeService(BridgeRepository repository, AreaRepository areas, AuditLog audit) {
         this.repository = repository;
+        this.areas = areas;
         this.audit = audit;
     }
 
@@ -66,12 +71,14 @@ public class BridgeService {
      * @param draft the new definition; id, version and timestamps are ignored
      * @param user client IP address, for the audit log
      * @return the stored bridge
-     * @throws BridgeValidationException if a cross-field rule is broken or the bridge would close a loop
+     * @throws BridgeValidationException if a cross-field rule is broken, a topic is outside its area or the
+     *         bridge would close a loop
      * @throws BridgeConflictException if the name is taken
      */
     public BridgeDocument create(BridgeDocument draft, String user) {
         normalize(draft);
         validate(draft);
+        validateArea(draft);
         if (repository.existsByName(draft.getName())) {
             throw duplicateName(draft.getName());
         }
@@ -101,6 +108,7 @@ public class BridgeService {
         normalize(draft);
         validate(draft);
         draft.setSystem(true);
+        draft.setAreaId(null);
         synchronized (topologyLock) {
             Optional<BridgeDocument> existing = repository.findByName(draft.getName());
             if (existing.isEmpty()) {
@@ -138,7 +146,8 @@ public class BridgeService {
      * @return the stored bridge
      * @throws BridgeNotFoundException if it does not exist
      * @throws BridgeConflictException if the version is stale or the name is taken
-     * @throws BridgeValidationException if a cross-field rule is broken or the bridge would close a loop
+     * @throws BridgeValidationException if a cross-field rule is broken, a topic is outside its area, an area is
+     *         given to a system bridge or the bridge would close a loop
      */
     public BridgeDocument update(String id, BridgeDocument changes, Long expectedVersion, String user) {
         BridgeDocument existing = get(id);
@@ -147,6 +156,8 @@ public class BridgeService {
         }
         normalize(changes);
         validate(changes);
+        changes.setSystem(existing.isSystem());
+        validateArea(changes);
         if (repository.existsByNameAndIdNot(changes.getName(), id)) {
             throw duplicateName(changes.getName());
         }
@@ -171,6 +182,28 @@ public class BridgeService {
         BridgeDocument existing = get(id);
         repository.deleteById(id);
         audit.bridgeChanged(user, AuditAction.DELETE_BRIDGE, existing, null);
+    }
+
+    /**
+     * Moves a bridge to another area without checking its patterns, for the bridges of a deleted area
+     * (ADR 0014): those that do not fit are marked outside the filter. Audited as an update.
+     *
+     * @param id bridge id
+     * @param areaId new area, or {@code null} for the general group
+     * @param user client IP address, for the audit log
+     * @return the bridge
+     * @throws BridgeNotFoundException if it does not exist
+     */
+    public BridgeDocument moveToArea(String id, String areaId, String user) {
+        BridgeDocument bridge = get(id);
+        if (Objects.equals(bridge.getAreaId(), areaId)) {
+            return bridge;
+        }
+        BridgeDocument before = copyOf(bridge);
+        bridge.setAreaId(areaId);
+        BridgeDocument saved = save(bridge);
+        audit.bridgeChanged(user, AuditAction.UPDATE_BRIDGE, before, saved);
+        return saved;
     }
 
     /**
@@ -245,6 +278,25 @@ public class BridgeService {
         if (bridge.isOrderedEffective() && Objects.equals(SHARED, bridge.getSource().subscriptionTypeOrDefault())) {
             throw new BridgeValidationException("ordered",
                     "Ordered bridges need a Failover or Key_Shared subscription");
+        }
+    }
+
+    /** A bridge in an area must exist in it and have every topic matching its patterns (ADR 0014). */
+    private void validateArea(BridgeDocument bridge) {
+        String areaId = bridge.getAreaId();
+        if (areaId == null || areaId.isBlank()) {
+            bridge.setAreaId(null);
+            return;
+        }
+        if (bridge.isSystem()) {
+            throw new BridgeValidationException("areaId", "System bridges stay in System; they cannot join an area");
+        }
+        AreaDocument area = areas.findById(areaId).orElseThrow(() ->
+                new BridgeValidationException("areaId", "No area with id '" + areaId + "'"));
+        List<String> outside = AreaFilter.of(area).outside(bridge);
+        if (!outside.isEmpty()) {
+            throw new BridgeValidationException("areaId", "Outside the patterns of area '" + area.getName() + "': "
+                    + String.join(", ", outside));
         }
     }
 

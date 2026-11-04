@@ -22,6 +22,8 @@ import java.util.List;
  * @param preserveProperties copy message properties; defaults to {@code true}
  * @param ordered keep source order; defaults to {@code true} unless the subscription is {@code Shared}
  * @param maxInFlight unconfirmed messages allowed; defaults to the service setting
+ * @param areaId area of the bridge (ADR 0014), or {@code null} for the general group; its patterns must match
+ *               the source and every destination; refused for system bridges
  * @param version version being edited, for conflict detection on update (RES-9); ignored on create
  */
 public record BridgeRequest(
@@ -35,6 +37,7 @@ public record BridgeRequest(
         Boolean preserveProperties,
         Boolean ordered,
         @Min(1) @Max(10_000) Integer maxInFlight,
+        @Size(max = 100) String areaId,
         Long version) {
 
     /**

@@ -42,7 +42,7 @@ catacommons) are symlinks to it — edit only the original.
 | Component | Responsibility | Owns (data) | Talks to |
 |---|---|---|---|
 | **Catapulsar** | Web UI for Pulsar (tenants, namespaces, topics, subscriptions, backlog, produce); UI for bridges, for the audit trail (BFF to Cataudit) and for the statistics (overviews from Catametricas' API); runtime settings (Cataponte, Cataudit and Catametricas URLs, intervals), published on the settings topic; events for its actions | `catapulsar_settings` | Pulsar Admin API, Pulsar binary (produce/peek, events), Cataponte REST, Cataudit REST, Catametricas REST, MongoDB |
-| **Cataponte** | Runs bridges: consumes a source topic and fans each message out to 1..n destination topics; CRUD API for bridge config; system bridges registered by the apps (`audit-<app>`); per-topic traffic counts; loop blocking; events for bridge changes. Runs N replicas, each running every enabled bridge; Pulsar spreads the messages (ADR 0012) | `cataponte_bridges`, `cataponte_traffic_minutes`, `cataponte_traffic_totals`, `cataponte_worker_status` | Pulsar binary + Admin API, MongoDB |
+| **Cataponte** | Runs bridges: consumes a source topic and fans each message out to 1..n destination topics; CRUD API for bridge config; system bridges registered by the apps (`audit-<app>`); per-topic traffic counts; loop blocking; bridge areas limited by glob patterns (ADR 0014); events for bridge and area changes. Runs N replicas, each running every enabled bridge; Pulsar spreads the messages (ADR 0012) | `cataponte_bridges`, `cataponte_areas`, `cataponte_traffic_minutes`, `cataponte_traffic_totals`, `cataponte_worker_status` | Pulsar binary + Admin API, MongoDB |
 | **Cataudit** | Owns the audit trail (ADR 0009): consumes `catacumbas69/cataudit/audit` (fed by the `audit-<app>` bridges), stores every event once, serves a query API | `cataudit_events` | Pulsar binary + Admin API, MongoDB |
 | **catacommons** | Shared library (not a service): CloudEvents envelope, event publisher with retries, Pulsar names, start-up provisioning of the tenant/namespace/topics, registration of the app's audit bridge (ADR 0008, 0009) | — | Pulsar binary + Admin API through each app's clients; Cataponte REST |
 | **Catametricas** | Collects every topic's statistics from Pulsar on an interval and stores traffic (messages/bytes in and out) and backlog per topic: latest snapshot, per minute (30 days), per hour and all-time (ADR 0007). The work is shared by every replica through collection tasks on Pulsar (ADR 0012). The only metrics API: topics, series and collector state (ADR 0013) | `catametricas_topic_snapshots`, `catametricas_topic_minutes`, `catametricas_topic_hours`, `catametricas_topic_totals`, `catametricas_task_runs`; reads its interval from the settings topic | Pulsar Admin API + binary (tasks, events, settings), MongoDB |
@@ -343,7 +343,7 @@ Every package has a `package-info.java` (DOC-2). Dependencies point downwards on
   **Not applied today** (decision 40): with test data only, a change replaces the old shape and old data is
   dropped.
 - **MONGO-3 [SHOULD]** Declare indexes in code (`@Indexed`, `@CompoundIndex`) with
-  `spring.data.mongodb.auto-index-creation=true`; `cataponte_bridges.name` is unique.
+  `spring.data.mongodb.auto-index-creation=true`; `cataponte_bridges.name` and `cataponte_areas.name` are unique.
 - **MONGO-4 [MUST]** Local connections to the ReplicaSet use `directConnection=true` against the
   NodePort; in-cluster connections use the replica-set URI.
 - **MONGO-5 [MUST]** Counters are written with `$inc` bulk upserts on a unique key, never read-modify-write:
@@ -814,7 +814,7 @@ Each phase ends with `mvn verify` green in every app, the docs updated and the a
 | 4 | Catametricas API and tasks | Query API (`topics`, `series`, `collector`); Catapulsar overviews built from it (Catametricas URL editable); collection tasks on Pulsar with claims and conditional snapshot updates; lease removed; `contario_*` → `catametricas_*` (renamed) | **Done** 2026-11-01 |
 | 5 | Cataponte replicas | `Exclusive` rejected; N replicas, status merged over replicas (`cataponte_worker_status`); ADR 0002 superseded; collections `cataponte_*` | **Done** 2026-11-01 |
 | 6 | Prometheus source (later) | Once Prometheus/OpenMetrics/Loki run on MicroShift: short ranges from PromQL in Catametricas | Later |
-| 7 | Alerts and dead letters | Dead-letter topics for our Shared/Key_Shared consumers; new service **Catavigia** with alert history; alerts and actions panel in Catapulsar; Settings dialog in tabs (decisions 42–49; ADR 0014 to be written) | Planned |
+| 7 | Alerts and dead letters | Dead-letter topics for our Shared/Key_Shared consumers; new service **Catavigia** with alert history; alerts and actions panel in Catapulsar; Settings dialog in tabs (decisions 42–49; ADR 0015 to be written) | Planned |
 
 ### Decisions taken on 2026-10-31
 
@@ -934,7 +934,25 @@ Forced collection and live mode (2026-11-04):
 53. While live mode is on, a **red banner** above the overview shows the namespace, the three limits and the time
     left, with a Stop button.
 
-Phase 7 decisions (2026-11-04, planned — ADR 0014 to be written before any code):
+Bridge areas (2026-11-04, [ADR 0014](docs/adr/0014-bridge-areas.md)):
+
+54. Cataponte owns **areas**: named groups of bridges (`cataponte_areas`), each with 0–20 **glob patterns** over
+    topic names written without `persistent://` (`*` within one segment, `**` across segments; no patterns =
+    every topic). A bridge has at most one area (`areaId`); without one it is in **Bridges**; system bridges are
+    fixed in **System** (`areaId` refused).
+55. A bridge in an area must have its **source and every destination** matching the area's patterns, on create, edit
+    and move (`400` naming the topics that do not fit). Cataponte enforces it, so it holds for the API too.
+56. Changing an area's patterns is **always accepted**: bridges that no longer fit keep running, marked
+    **outside filter** (`outsideArea`), and must fit again when edited.
+57. Deleting an area that has bridges needs a choice: **delete** them all, or **move** them to Bridges or another
+    area (`DELETE /api/v1/areas/{id}?bridges=delete|move&to=`); without it, `409`.
+58. **Every area action goes to Cataudit**: `area.created|updated|deleted` on `cataponte/events` through the
+    `audit-cataponte` bridge; moves and bulk deletions also publish one `bridge.updated`/`bridge.deleted` per bridge.
+59. Catapulsar's Bridges panel has tabs **System | Bridges | <areas> | + Area**, with counts; it opens on the last
+    tab used (browser storage), System by default. *Running* counts the open tab; **+ New Bridge** is hidden on
+    System and, in an area, creates the bridge there with topic pickers limited to the area's patterns.
+
+Phase 7 decisions (2026-11-04, planned — ADR 0015 to be written before any code):
 
 42. A message that keeps failing is **poison**: after **N deliveries** (default **10**, about 2 minutes) Pulsar moves it
     to a **dead-letter topic** and the consumer carries on. N is a shared setting, editable in Catapulsar's Settings.

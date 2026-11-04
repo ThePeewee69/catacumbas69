@@ -36,7 +36,16 @@ public enum AuditAction {
     /** A bridge was enabled. */
     ENABLE_BRIDGE("bridge", "enable-requested"),
     /** A bridge was disabled. */
-    DISABLE_BRIDGE("bridge", "disable-requested");
+    DISABLE_BRIDGE("bridge", "disable-requested"),
+    /**
+     * An area creation was requested through Catapulsar ({@code area.create-requested}); Cataponte records the
+     * change itself ({@code area.created}, ADR 0014).
+     */
+    CREATE_AREA("area", "create-requested"),
+    /** An area change was requested. */
+    UPDATE_AREA("area", "update-requested"),
+    /** An area deletion was requested (details: what to do with its bridges). */
+    DELETE_AREA("area", "delete-requested");
 
     private final String entity;
     private final String verb;

@@ -1,6 +1,7 @@
 package com.catacumbas69.cataponte.repository;
 
 import com.catacumbas69.cataponte.model.BridgeDocument;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
@@ -33,4 +34,12 @@ public interface BridgeRepository extends MongoRepository<BridgeDocument, String
      * @return the bridge, if any
      */
     Optional<BridgeDocument> findByName(String name);
+
+    /**
+     * Finds the bridges of an area.
+     *
+     * @param areaId area id
+     * @return its bridges
+     */
+    List<BridgeDocument> findByAreaId(String areaId);
 }
