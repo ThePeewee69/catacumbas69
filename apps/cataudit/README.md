@@ -16,7 +16,8 @@ Cataponte  ─┼─▶ <app>/events ──▶ Cataponte ─ audit-cataponte ─
 Catametricas┘                       └─ audit-catametricas┘        (Shared)          (_id = event id)
 ```
 
-- **Consumer**: subscription `cataudit`, type `Shared`, so every replica takes a share. A message is
+- **Consumer**: subscription `cataudit`, type `Shared`, so every replica takes a share; each replica's consumer
+  is named `cataudit@<host>-<random>` in Pulsar's statistics. A message is
   acknowledged once stored. It is also acknowledged when an event with the same id is already stored
   (duplicates are harmless). When MongoDB fails the message is negatively acknowledged and delivered again
   after 10 s; any other error while storing is logged at `ERROR` with the exception and the message is

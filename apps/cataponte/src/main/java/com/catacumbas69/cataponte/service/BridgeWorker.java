@@ -67,6 +67,8 @@ public class BridgeWorker {
     private final SubscriptionType subscriptionType;
     private final int maxInFlight;
     private final Semaphore inFlight;
+    /** Name of this replica's consumer, e.g. {@code cataponte@<instance>/<bridge>}; {@code null} = Pulsar's. */
+    private final String consumerName;
     private final List<Producer<byte[]>> producers = new ArrayList<>();
     private final AtomicReference<String> lastError = new AtomicReference<>();
     /** Partitions where the broker made this consumer the active one ({@code Failover}; -1 = not partitioned). */
@@ -90,6 +92,22 @@ public class BridgeWorker {
      */
     public BridgeWorker(BridgeDocument config, PulsarClient client, CataponteProperties.Bridge settings,
                         BridgeMetrics metrics, TrafficRecorder traffic) {
+        this(config, client, settings, metrics, traffic, null);
+    }
+
+    /**
+     * Creates a worker for a bridge definition whose consumer has a recognisable name in Pulsar's statistics.
+     *
+     * @param config bridge definition snapshot; later changes to the document do not affect the worker
+     * @param client shared Pulsar client
+     * @param settings runtime tuning
+     * @param metrics meters for this bridge
+     * @param traffic per-topic message counts stored in MongoDB
+     * @param consumerName consumer name, or {@code null} to let Pulsar choose one
+     */
+    public BridgeWorker(BridgeDocument config, PulsarClient client, CataponteProperties.Bridge settings,
+                        BridgeMetrics metrics, TrafficRecorder traffic, String consumerName) {
+        this.consumerName = consumerName;
         this.config = config;
         this.client = client;
         this.settings = settings;
@@ -351,6 +369,9 @@ public class BridgeWorker {
                 .receiverQueueSize(settings.receiverQueueSize())
                 .acknowledgmentGroupTime(settings.acknowledgmentGroupTime().toMillis(), TimeUnit.MILLISECONDS)
                 .negativeAckRedeliveryDelay(settings.negativeAckRedeliveryDelay().toMillis(), TimeUnit.MILLISECONDS);
+        if (consumerName != null) {
+            builder.consumerName(consumerName);
+        }
         if (subscriptionType == SubscriptionType.Failover) {
             builder.consumerEventListener(new ActiveListener(config.getName(), activePartitions));
         }

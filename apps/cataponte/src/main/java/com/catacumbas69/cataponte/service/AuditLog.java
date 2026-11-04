@@ -5,6 +5,7 @@ import com.catacumbas69.catacommons.events.EventPublisher;
 import com.catacumbas69.cataponte.model.AreaDocument;
 import com.catacumbas69.cataponte.model.BridgeDocument;
 import com.catacumbas69.cataponte.model.BridgeSource;
+import com.catacumbas69.cataponte.model.SubscriptionCleanupDocument;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -72,6 +73,28 @@ public class AuditLog {
                     before == null ? null : snapshot(before), after == null ? null : snapshot(after), details));
         } catch (RuntimeException e) {
             log.warn("Event not published: {} {}: {}", action, subject.getId(), e.getMessage());
+        }
+    }
+
+    /**
+     * Records that the Pulsar subscription of a deleted or changed bridge was deleted. Subject = the topic.
+     *
+     * @param cleanup the deletion, with the bridge and who asked for it
+     * @param backlog messages the subscription still had, or {@code null} if unknown
+     */
+    public void subscriptionDeleted(SubscriptionCleanupDocument cleanup, Long backlog) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("subscription", cleanup.getSubscription());
+        details.put("bridgeId", cleanup.getBridgeId());
+        details.put("bridgeName", cleanup.getBridgeName());
+        details.put("backlog", backlog);
+        details.put("requestedAt", cleanup.getRequestedAt());
+        details.put("attempts", cleanup.getAttempts());
+        try {
+            events.publish(AuditAction.DELETE_SUBSCRIPTION.entity(), AuditAction.DELETE_SUBSCRIPTION.verb(),
+                    cleanup.getTopic(), EventData.action(cleanup.getActor(), details));
+        } catch (RuntimeException e) {
+            log.warn("Event not published: subscription deleted {}: {}", cleanup.getId(), e.getMessage());
         }
     }
 

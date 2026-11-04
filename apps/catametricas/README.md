@@ -19,7 +19,7 @@ every instance, each interval ──▶ catametricas/collect-tasks ──▶ eve
 - **Tasks**: just after the start of each interval, every instance lists the namespaces and publishes one task
   per namespace to `catacumbas69/catametricas/collect-tasks`. N instances publish N copies; that is expected.
 - **Claims**: all instances consume the topic with the `Shared` subscription `catametricas` (receiver queue 1,
-  so tasks spread). Before working, an instance inserts the task id into `catametricas_task_runs`; a duplicate
+  so tasks spread), each as consumer `catametricas@<instance>` (the instance stored in the claims). Before working, an instance inserts the task id into `catametricas_task_runs`; a duplicate
   key means another instance has it, so the task is skipped.
 - **Reading**: the task's namespace is listed and each topic's statistics are read, with at most 8 calls in
   flight. System topics (`__…`) are skipped. A namespace that no longer exists marks its topics as gone.

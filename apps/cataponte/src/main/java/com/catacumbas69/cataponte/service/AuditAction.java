@@ -20,7 +20,9 @@ public enum AuditAction {
     /** An area was changed. */
     UPDATE_AREA(Entities.AREA, "updated"),
     /** An area was deleted. */
-    DELETE_AREA(Entities.AREA, "deleted");
+    DELETE_AREA(Entities.AREA, "deleted"),
+    /** The Pulsar subscription of a deleted or changed bridge was deleted (orch.md decision 60). */
+    DELETE_SUBSCRIPTION(Entities.SUBSCRIPTION, "deleted");
 
     private final String entity;
     private final String verb;
@@ -52,6 +54,7 @@ public enum AuditAction {
     private static final class Entities {
         static final String BRIDGE = "bridge";
         static final String AREA = "area";
+        static final String SUBSCRIPTION = "subscription";
 
         private Entities() {
         }

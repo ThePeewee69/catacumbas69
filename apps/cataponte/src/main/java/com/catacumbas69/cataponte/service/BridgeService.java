@@ -29,6 +29,7 @@ public class BridgeService {
     private final BridgeRepository repository;
     private final AreaRepository areas;
     private final AuditLog audit;
+    private final SubscriptionCleanup subscriptions;
     /** Serialises changes that can alter the bridge graph, so two requests cannot close a loop together. */
     private final Object topologyLock = new Object();
 
@@ -38,11 +39,14 @@ public class BridgeService {
      * @param repository bridge definitions
      * @param areas areas, whose patterns limit the topics of their bridges (ADR 0014)
      * @param audit audit log for configuration changes
+     * @param subscriptions deletes the subscriptions bridges no longer use (orch.md decision 60)
      */
-    public BridgeService(BridgeRepository repository, AreaRepository areas, AuditLog audit) {
+    public BridgeService(BridgeRepository repository, AreaRepository areas, AuditLog audit,
+                         SubscriptionCleanup subscriptions) {
         this.repository = repository;
         this.areas = areas;
         this.audit = audit;
+        this.subscriptions = subscriptions;
     }
 
     /**
@@ -82,6 +86,7 @@ public class BridgeService {
         if (repository.existsByName(draft.getName())) {
             throw duplicateName(draft.getName());
         }
+        rejectSharedSubscription(draft, null);
         draft.setId(null);
         draft.setVersion(null);
         draft.setCreatedAt(null);
@@ -161,12 +166,16 @@ public class BridgeService {
         if (repository.existsByNameAndIdNot(changes.getName(), id)) {
             throw duplicateName(changes.getName());
         }
+        rejectSharedSubscription(changes, id);
         BridgeDocument before = copyOf(existing);
         existing.copyDefinitionFrom(changes);
         synchronized (topologyLock) {
             rejectLoops(existing);
             BridgeDocument saved = save(existing);
             audit.bridgeChanged(user, AuditAction.UPDATE_BRIDGE, before, saved);
+            if (!sameSubscription(before, saved)) {
+                releaseSubscription(before, user);
+            }
             return saved;
         }
     }
@@ -182,6 +191,7 @@ public class BridgeService {
         BridgeDocument existing = get(id);
         repository.deleteById(id);
         audit.bridgeChanged(user, AuditAction.DELETE_BRIDGE, existing, null);
+        releaseSubscription(existing, user);
     }
 
     /**
@@ -279,6 +289,43 @@ public class BridgeService {
             throw new BridgeValidationException("ordered",
                     "Ordered bridges need a Failover or Key_Shared subscription");
         }
+    }
+
+    /**
+     * Two bridges reading the same topic with the same subscription would split its messages (or, on Failover,
+     * only one would receive), so it is refused (orch.md decision 61).
+     */
+    private void rejectSharedSubscription(BridgeDocument bridge, String ownId) {
+        if (bridge.getSource() == null) {
+            return;
+        }
+        repository.findBySourceTopicAndSourceSubscription(bridge.getSource().getTopic(),
+                        bridge.getSource().getSubscription()).stream()
+                .filter(other -> !Objects.equals(other.getId(), ownId))
+                .findFirst()
+                .ifPresent(other -> {
+                    throw new BridgeConflictException("Bridge '" + other.getName() + "' already reads "
+                            + bridge.getSource().getTopic() + " with subscription '"
+                            + bridge.getSource().getSubscription() + "'; choose another subscription name");
+                });
+    }
+
+    /** Queues the deletion of a subscription the bridge no longer uses, unless another bridge uses it. */
+    private void releaseSubscription(BridgeDocument old, String user) {
+        if (old.getSource() == null) {
+            return;
+        }
+        boolean shared = !repository.findBySourceTopicAndSourceSubscription(old.getSource().getTopic(),
+                old.getSource().getSubscription()).isEmpty();
+        if (!shared) {
+            subscriptions.schedule(old, user);
+        }
+    }
+
+    private static boolean sameSubscription(BridgeDocument a, BridgeDocument b) {
+        return a.getSource() != null && b.getSource() != null
+                && Objects.equals(a.getSource().getTopic(), b.getSource().getTopic())
+                && Objects.equals(a.getSource().getSubscription(), b.getSource().getSubscription());
     }
 
     /** A bridge in an area must exist in it and have every topic matching its patterns (ADR 0014). */

@@ -59,6 +59,8 @@ public class BridgeIndexes {
                 .createIndex(new Index().on("name", Sort.Direction.ASC).unique().named("bridges_name_unique"));
         mongoTemplate.indexOps(BridgeDocument.class)
                 .createIndex(new Index().on("areaId", Sort.Direction.ASC).named("bridges_area"));
+        mongoTemplate.indexOps(BridgeDocument.class).createIndex(new Index().on("source.topic", Sort.Direction.ASC)
+                .on("source.subscription", Sort.Direction.ASC).named("bridges_source_subscription"));
         mongoTemplate.indexOps(AreaDocument.class)
                 .createIndex(new Index().on("name", Sort.Direction.ASC).unique().named("areas_name_unique"));
         // Upsert keys of the traffic collections; also serve the per-bridge queries.

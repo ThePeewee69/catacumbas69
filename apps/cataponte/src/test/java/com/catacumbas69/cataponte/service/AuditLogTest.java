@@ -15,6 +15,7 @@ import com.catacumbas69.catacommons.events.EventPublisher;
 import com.catacumbas69.cataponte.TestBridges;
 import com.catacumbas69.cataponte.model.AreaDocument;
 import com.catacumbas69.cataponte.model.BridgeDocument;
+import com.catacumbas69.cataponte.model.SubscriptionCleanupDocument;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -83,5 +84,23 @@ class AuditLogTest {
         assertThat(data.getValue().before()).containsEntry("name", "media").containsKey("patterns");
         assertThat(data.getValue().after()).isNull();
         assertThat(data.getValue().details()).containsEntry("bridges", "deleted");
+    }
+
+    @Test
+    void subscriptionDeleted_publishesASubscriptionEvent_byWhoDeletedTheBridge() {
+        SubscriptionCleanupDocument cleanup = new SubscriptionCleanupDocument();
+        cleanup.setId("t|s");
+        cleanup.setTopic(TestBridges.SOURCE);
+        cleanup.setSubscription("cataponte-1");
+        cleanup.setBridgeName("bridge-1");
+        cleanup.setActor("10.0.0.1");
+
+        audit.subscriptionDeleted(cleanup, 80L);
+
+        ArgumentCaptor<EventData> data = ArgumentCaptor.forClass(EventData.class);
+        verify(events).publish(eq("subscription"), eq("deleted"), eq(TestBridges.SOURCE), data.capture());
+        assertThat(data.getValue().actor()).isEqualTo("10.0.0.1");
+        assertThat(data.getValue().details()).containsEntry("subscription", "cataponte-1")
+                .containsEntry("backlog", "80").containsEntry("bridgeName", "bridge-1");
     }
 }

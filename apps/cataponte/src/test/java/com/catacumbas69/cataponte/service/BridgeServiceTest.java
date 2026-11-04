@@ -33,7 +33,8 @@ class BridgeServiceTest {
     private final BridgeRepository repository = mock(BridgeRepository.class);
     private final AreaRepository areas = mock(AreaRepository.class);
     private final AuditLog audit = mock(AuditLog.class);
-    private final BridgeService service = new BridgeService(repository, areas, audit);
+    private final SubscriptionCleanup subscriptions = mock(SubscriptionCleanup.class);
+    private final BridgeService service = new BridgeService(repository, areas, audit, subscriptions);
 
     @BeforeEach
     void saveReturnsArgument() {
@@ -322,6 +323,54 @@ class BridgeServiceTest {
 
         verify(repository).deleteById("1");
         verify(audit).bridgeChanged(USER, AuditAction.DELETE_BRIDGE, stored, null);
+        verify(subscriptions).schedule(stored, USER);
+    }
+
+    @Test
+    void delete_keepsTheSubscription_whenAnotherBridgeUsesIt() {
+        BridgeDocument stored = TestBridges.unordered("1", DEST_A);
+        when(repository.findById("1")).thenReturn(Optional.of(stored));
+        when(repository.findBySourceTopicAndSourceSubscription(SOURCE, "cataponte-1"))
+                .thenReturn(List.of(TestBridges.unordered("2", DEST_B)));
+
+        service.delete("1", USER);
+
+        verify(subscriptions, never()).schedule(any(), any());
+    }
+
+    @Test
+    void create_refusesTheSourceAndSubscriptionOfAnotherBridge() {
+        when(repository.findBySourceTopicAndSourceSubscription(SOURCE, "cataponte-1"))
+                .thenReturn(List.of(TestBridges.unordered("9", DEST_B)));
+
+        assertThatThrownBy(() -> service.create(TestBridges.unordered("1", DEST_A), USER))
+                .isInstanceOf(BridgeConflictException.class)
+                .hasMessageContaining("already reads");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void update_mayKeepItsOwnSubscription() {
+        BridgeDocument existing = TestBridges.unordered("1", DEST_A);
+        when(repository.findById("1")).thenReturn(Optional.of(existing));
+        when(repository.findBySourceTopicAndSourceSubscription(SOURCE, "cataponte-1")).thenReturn(List.of(existing));
+
+        service.update("1", TestBridges.unordered("1", DEST_B), null, USER);
+
+        verify(subscriptions, never()).schedule(any(), any());
+    }
+
+    @Test
+    void update_releasesTheOldSubscription_whenTheSubscriptionChanges() {
+        BridgeDocument existing = TestBridges.unordered("1", DEST_A);
+        when(repository.findById("1")).thenReturn(Optional.of(existing));
+        BridgeDocument changes = TestBridges.unordered("1", DEST_A);
+        changes.getSource().setSubscription("cataponte-renamed");
+
+        service.update("1", changes, null, USER);
+
+        verify(subscriptions).schedule(argThat(old -> "cataponte-1".equals(old.getSource().getSubscription())),
+                eq(USER));
     }
 
     @Test

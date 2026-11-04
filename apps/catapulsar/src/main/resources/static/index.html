@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Catapulsar</title>
 <link rel="icon" type="image/svg+xml" href="/catapulsar-icon.svg">
-<link rel="stylesheet" href="/catapulsar.css?v=22">
-<script src="/catapulsar.js?v=22" defer></script>
+<link rel="stylesheet" href="/catapulsar.css?v=24">
+<script src="/catapulsar.js?v=24" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
 </head>
 <body x-data="app()" x-init="init()">
@@ -257,8 +257,8 @@
       <div class="form-row">
         <div class="field">
           <label>Name *</label>
-          <input type="text" x-model="bridges.form.name" placeholder="e.g. orders-to-dlq"
-                 @keydown.enter="saveBridge()">
+          <input type="text" x-model="bridges.form.name" placeholder="e.g. orders-to-dlq" x-name-chars="cataponte" title="Spaces and other characters a name cannot have become &quot;-&quot; as you type"
+                 @input="onBridgeNameInput()" @keydown.enter="saveBridge()">
         </div>
         <div class="field">
           <label>Description</label>
@@ -312,7 +312,9 @@
       <div class="form-row">
         <div class="field">
           <label>Subscription name *</label>
-          <input type="text" x-model="bridges.form.source.subscription" placeholder="cataponte-bridge">
+          <input type="text" x-model="bridges.form.source.subscription" placeholder="cataponte-<bridge name>" x-name-chars="cataponte"
+                 @input="bridges.form.subAuto = false"
+                 title="Must be unique for this source topic: two bridges on one subscription would split its messages">
         </div>
         <div class="field" style="max-width:150px;">
           <label>Type</label>
@@ -404,7 +406,7 @@
       <div class="form-row">
         <div class="field">
           <label for="area-name">Name *</label>
-          <input id="area-name" type="text" x-model="bridges.areaForm.name" placeholder="e.g. home-media">
+          <input id="area-name" type="text" x-model="bridges.areaForm.name" placeholder="e.g. home-media" x-name-chars="cataponte" title="Spaces and other characters a name cannot have become &quot;-&quot; as you type">
         </div>
         <div class="field">
           <label for="area-description">Description</label>
@@ -413,7 +415,7 @@
       </div>
       <div class="field" style="margin-bottom:8px;">
         <label for="area-patterns">Topic patterns (one per line; none = every topic)</label>
-        <textarea id="area-patterns" rows="5" class="mono" x-model="bridges.areaForm.patternsText"
+        <textarea id="area-patterns" rows="5" class="mono" x-model="bridges.areaForm.patternsText" x-name-chars="pattern"
                   placeholder="home/media/*&#10;home/**&#10;*/*/events"></textarea>
         <div class="muted" style="font-size:12px;margin-top:4px;">
           Written without <span class="mono">persistent://</span>, as <span class="mono">tenant/namespace/topic</span>.
@@ -535,7 +537,7 @@
                     </template>
 
                     <div class="new-topic-inline" style="padding:4px 10px 4px 44px;">
-                      <input type="text" x-model="newTopic" placeholder="new topic…"
+                      <input type="text" x-model="newTopic" placeholder="new topic…" x-name-chars="pulsar" title="Spaces and other characters a name cannot have become &quot;-&quot; as you type"
                              @keydown.enter="createTopic()"
                              style="font-size:12px;padding:5px 8px;">
                       <button class="btn btn-primary" style="padding:5px 10px;font-size:12px;"
@@ -916,7 +918,8 @@
 
             <!-- Bridge cards -->
             <template x-for="bridge in tabBridges()" :key="bridge.id">
-              <div class="bridge-card" :class="{'bridge-disabled': !bridge.enabled}">
+              <div class="bridge-card" :id="'bridge-card-' + bridge.id"
+                   :class="{'bridge-disabled': !bridge.enabled, 'bridge-highlight': bridges.highlight === bridge.id}">
                 <div class="bridge-card-header">
                   <div class="bridge-status-dot"
                        :class="{'running': bridge.enabled && bridges.status[bridge.id]?.running,
@@ -1292,14 +1295,31 @@
                             <th>Name</th><th>Type</th><th>Backlog</th><th>Msg/s</th><th>Consumers</th><th></th>
                           </tr>
                         </thead>
-                        <tbody>
-                          <template x-for="[name, sub] in Object.entries(stats.subscriptions)" :key="name">
+                        <template x-for="[name, sub] in Object.entries(stats.subscriptions)" :key="name">
+                          <tbody>
                             <tr>
-                              <td><span class="mono" x-text="name"></span></td>
+                              <td>
+                                <span class="mono" x-text="name"></span>
+                                <template x-if="bridgeForSub(name)">
+                                  <button type="button" class="sub-bridge" @click="openBridgeOf(bridgeForSub(name))"
+                                          :title="'Open bridge ' + bridgeForSub(name).name + ' in the Bridges panel'">
+                                    <span class="tag tag-orange">bridge</span>
+                                    <span class="sub-bridge-name" x-text="bridgeForSub(name).name"></span>
+                                    <span class="sub-bridge-dest mono" x-text="'→ ' + bridgeDestTopics(bridgeForSub(name)).join(', ')"></span>
+                                  </button>
+                                </template>
+                              </td>
                               <td><span class="tag tag-blue" x-text="sub.type ?? '-'"></span></td>
                               <td><span class="mono" x-text="fmtNum(sub.msgBacklog ?? 0)"></span></td>
                               <td x-text="fmt(sub.msgRateOut ?? 0)"></td>
-                              <td x-text="(sub.consumers ?? []).length"></td>
+                              <td>
+                                <button type="button" class="link-btn consumers-toggle" @click="toggleSubConsumers(name)"
+                                        :aria-expanded="!!subConsumersOpen[name]" :disabled="(sub.consumers ?? []).length === 0"
+                                        :title="(sub.consumers ?? []).length ? 'Show who is connected' : 'Nobody is connected'">
+                                  <span x-text="(sub.consumers ?? []).length"></span>
+                                  <span x-show="(sub.consumers ?? []).length" x-text="subConsumersOpen[name] ? '▾' : '▸'"></span>
+                                </button>
+                              </td>
                               <td class="cell-actions">
                                 <span class="tag tag-binary" x-show="isSystemSub(name)"
                                       title="Pulsar's own subscription: it can be peeked but not changed">system</span>
@@ -1309,8 +1329,39 @@
                                         @click="clearBacklog(name, sub.msgBacklog)">Clear backlog</button>
                               </td>
                             </tr>
-                          </template>
-                        </tbody>
+                            <template x-if="subConsumersOpen[name] && (sub.consumers ?? []).length">
+                              <tr class="consumers-row">
+                                <td colspan="6">
+                                  <table class="consumers-table">
+                                    <thead>
+                                      <tr><th>Consumer</th><th>Address</th><th>Connected since</th><th>Client</th><th>Msg/s</th><th>Unacked</th></tr>
+                                    </thead>
+                                    <tbody>
+                                      <template x-for="(c, i) in sub.consumers" :key="i">
+                                        <tr>
+                                          <td>
+                                            <span class="mono" x-text="c.consumerName || '—'"></span>
+                                            <template x-if="sub.activeConsumerName && sub.activeConsumerName === c.consumerName">
+                                              <span class="tag tag-blue" title="Failover: this consumer receives the messages">active</span>
+                                            </template>
+                                            <template x-if="c.blockedConsumerOnUnackedMsgs">
+                                              <span class="tag tag-orange" title="Too many unacknowledged messages: Pulsar stopped sending to it">blocked</span>
+                                            </template>
+                                          </td>
+                                          <td class="mono" x-text="c.address || '—'"></td>
+                                          <td x-text="fmtDate(c.connectedSince)"></td>
+                                          <td class="mono" x-text="c.clientVersion || '—'"></td>
+                                          <td x-text="fmt(c.msgRateOut ?? 0)"></td>
+                                          <td x-text="fmtNum(c.unackedMessages ?? 0)"></td>
+                                        </tr>
+                                      </template>
+                                    </tbody>
+                                  </table>
+                                </td>
+                              </tr>
+                            </template>
+                          </tbody>
+                        </template>
                       </table>
                     </div>
                   </div>
@@ -1373,7 +1424,7 @@
               <div class="form-row">
                 <div class="field">
                   <label>Subscription name</label>
-                  <input type="text" x-model="newSub" placeholder="e.g. my-consumer"
+                  <input type="text" x-model="newSub" placeholder="e.g. my-consumer" x-name-chars="pulsar" title="Spaces and other characters a name cannot have become &quot;-&quot; as you type"
                          @keydown.enter="createSub()">
                 </div>
                 <button class="btn btn-primary" @click="createSub()" :disabled="!newSub || loading.newSub">
@@ -1404,6 +1455,17 @@
                         <span class="tag tag-binary" x-show="isSystemSub(item.name)"
                               title="Pulsar's own subscription: it can be peeked but not changed">system</span>
                       </span>
+                      <template x-if="bridgeForSub(item.name)">
+                        <span class="backlog-sub-bridge">
+                          <span class="tag tag-orange">bridge</span>
+                          <span x-text="bridgeForSub(item.name).name"></span>
+                          <span class="mono" x-text="'→ ' + bridgeDestTopics(bridgeForSub(item.name)).join(', ')"></span>
+                        </span>
+                      </template>
+                      <template x-if="consumersLine(item.stats)">
+                        <span class="backlog-sub-consumers mono" :title="'Connected: ' + consumersLine(item.stats)"
+                              x-text="'⇢ ' + consumersLine(item.stats)"></span>
+                      </template>
                       <template x-if="item.stats">
                         <span class="backlog-sub-stats">
                           <span class="backlog-count" :class="{ zero: !item.stats.msgBacklog }"

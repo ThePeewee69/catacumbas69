@@ -17,6 +17,7 @@ public class BridgeWorkerFactory {
     private final CataponteProperties properties;
     private final MeterRegistry meterRegistry;
     private final TrafficRecorder traffic;
+    private final CataponteInstance instance;
 
     /**
      * Creates the factory.
@@ -25,13 +26,15 @@ public class BridgeWorkerFactory {
      * @param properties application properties
      * @param meterRegistry registry for per-bridge meters
      * @param traffic per-topic message counts stored in MongoDB
+     * @param instance this replica, named in the consumers it creates
      */
     public BridgeWorkerFactory(PulsarClient client, CataponteProperties properties, MeterRegistry meterRegistry,
-                               TrafficRecorder traffic) {
+                               TrafficRecorder traffic, CataponteInstance instance) {
         this.client = client;
         this.properties = properties;
         this.meterRegistry = meterRegistry;
         this.traffic = traffic;
+        this.instance = instance;
     }
 
     /**
@@ -42,6 +45,7 @@ public class BridgeWorkerFactory {
      */
     public BridgeWorker create(BridgeDocument bridge) {
         return new BridgeWorker(bridge, client, properties.bridge(),
-                new BridgeMetrics(meterRegistry, bridge.getName()), traffic);
+                new BridgeMetrics(meterRegistry, bridge.getName()), traffic,
+                "cataponte@" + instance.id() + "/" + bridge.getName());
     }
 }

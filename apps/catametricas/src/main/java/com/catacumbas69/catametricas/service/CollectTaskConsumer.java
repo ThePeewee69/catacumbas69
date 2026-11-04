@@ -43,6 +43,7 @@ public class CollectTaskConsumer implements ApplicationListener<ApplicationReady
     private final StatsCollector collector;
     private final ObjectMapper objectMapper;
     private final CatacommonsScheduler scheduler;
+    private final String consumerName;
     private volatile Consumer<byte[]> consumer;
     private volatile String lastError;
     private volatile boolean stopping;
@@ -55,9 +56,11 @@ public class CollectTaskConsumer implements ApplicationListener<ApplicationReady
      * @param collector runs the tasks
      * @param objectMapper reads the tasks
      * @param scheduler runs subscription retries
+     * @param state this instance, named in its consumer ({@code catametricas@<instance>})
      */
     public CollectTaskConsumer(PulsarClient client, CatametricasProperties properties, StatsCollector collector,
-                               ObjectMapper objectMapper, CatacommonsScheduler scheduler) {
+                               ObjectMapper objectMapper, CatacommonsScheduler scheduler, CollectorState state) {
+        this.consumerName = "catametricas@" + state.instance();
         this.client = client;
         this.settings = properties.tasks();
         this.collector = collector;
@@ -115,6 +118,7 @@ public class CollectTaskConsumer implements ApplicationListener<ApplicationReady
         client.newConsumer(Schema.BYTES)
                 .topic(TasksConfig.tasksTopic())
                 .subscriptionName(settings.subscription())
+                .consumerName(consumerName)
                 .subscriptionType(SubscriptionType.Shared)
                 .receiverQueueSize(settings.receiverQueueSize())
                 .negativeAckRedeliveryBackoff(MultiplierRedeliveryBackoff.builder()

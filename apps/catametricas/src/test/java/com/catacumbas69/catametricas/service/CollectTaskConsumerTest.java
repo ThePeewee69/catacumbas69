@@ -18,7 +18,8 @@ class CollectTaskConsumerTest {
 
     private final StatsCollector collector = mock(StatsCollector.class);
     private final CollectTaskConsumer consumer = new CollectTaskConsumer(mock(PulsarClient.class),
-            TestProperties.properties(), collector, new ObjectMapper(), mock(CatacommonsScheduler.class));
+            TestProperties.properties(), collector, new ObjectMapper(), mock(CatacommonsScheduler.class),
+            mock(CollectorState.class));
 
     @Test
     void runsTheTaskInTheMessage() {

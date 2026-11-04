@@ -411,3 +411,17 @@ td .payload { font-family: var(--mono); font-size: 12px; max-width: 320px; word-
 .area-preview { max-height: 160px; }
 .bridges-panel .muted, .bridge-form-box .muted { color: var(--muted); }
 .bridge-card-title .tag { align-self: flex-start; }
+
+/* ── Subscriptions: bridge and consumers ── */
+.sub-bridge { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; background: none; border: none; padding: 0; cursor: pointer; color: var(--text); font: inherit; font-size: 12px; text-align: left; }
+.sub-bridge:hover .sub-bridge-name { text-decoration: underline; }
+.sub-bridge-name { font-weight: 600; }
+.sub-bridge-dest { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.consumers-toggle { display: inline-flex; gap: 4px; align-items: center; }
+.consumers-toggle:disabled { cursor: default; text-decoration: none; opacity: .8; }
+.consumers-row > td { background: rgba(255,255,255,.02); padding-top: 4px; }
+.consumers-table { width: 100%; font-size: 12px; }
+.consumers-table th { font-size: 10px; }
+.backlog-sub-bridge, .backlog-sub-consumers { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 3px; overflow-wrap: anywhere; }
+.backlog-sub-consumers { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bridge-card.bridge-highlight { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(99,102,241,.35); }

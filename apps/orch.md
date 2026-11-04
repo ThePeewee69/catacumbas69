@@ -42,7 +42,7 @@ catacommons) are symlinks to it — edit only the original.
 | Component | Responsibility | Owns (data) | Talks to |
 |---|---|---|---|
 | **Catapulsar** | Web UI for Pulsar (tenants, namespaces, topics, subscriptions, backlog, produce); UI for bridges, for the audit trail (BFF to Cataudit) and for the statistics (overviews from Catametricas' API); runtime settings (Cataponte, Cataudit and Catametricas URLs, intervals), published on the settings topic; events for its actions | `catapulsar_settings` | Pulsar Admin API, Pulsar binary (produce/peek, events), Cataponte REST, Cataudit REST, Catametricas REST, MongoDB |
-| **Cataponte** | Runs bridges: consumes a source topic and fans each message out to 1..n destination topics; CRUD API for bridge config; system bridges registered by the apps (`audit-<app>`); per-topic traffic counts; loop blocking; bridge areas limited by glob patterns (ADR 0014); events for bridge and area changes. Runs N replicas, each running every enabled bridge; Pulsar spreads the messages (ADR 0012) | `cataponte_bridges`, `cataponte_areas`, `cataponte_traffic_minutes`, `cataponte_traffic_totals`, `cataponte_worker_status` | Pulsar binary + Admin API, MongoDB |
+| **Cataponte** | Runs bridges: consumes a source topic and fans each message out to 1..n destination topics; CRUD API for bridge config; system bridges registered by the apps (`audit-<app>`); per-topic traffic counts; loop blocking; bridge areas limited by glob patterns (ADR 0014); events for bridge and area changes. Runs N replicas, each running every enabled bridge; Pulsar spreads the messages (ADR 0012) | `cataponte_bridges`, `cataponte_areas`, `cataponte_subscription_cleanups`, `cataponte_traffic_minutes`, `cataponte_traffic_totals`, `cataponte_worker_status` | Pulsar binary + Admin API, MongoDB |
 | **Cataudit** | Owns the audit trail (ADR 0009): consumes `catacumbas69/cataudit/audit` (fed by the `audit-<app>` bridges), stores every event once, serves a query API | `cataudit_events` | Pulsar binary + Admin API, MongoDB |
 | **catacommons** | Shared library (not a service): CloudEvents envelope, event publisher with retries, Pulsar names, start-up provisioning of the tenant/namespace/topics, registration of the app's audit bridge (ADR 0008, 0009) | — | Pulsar binary + Admin API through each app's clients; Cataponte REST |
 | **Catametricas** | Collects every topic's statistics from Pulsar on an interval and stores traffic (messages/bytes in and out) and backlog per topic: latest snapshot, per minute (30 days), per hour and all-time (ADR 0007). The work is shared by every replica through collection tasks on Pulsar (ADR 0012). The only metrics API: topics, series and collector state (ADR 0013) | `catametricas_topic_snapshots`, `catametricas_topic_minutes`, `catametricas_topic_hours`, `catametricas_topic_totals`, `catametricas_task_runs`; reads its interval from the settings topic | Pulsar Admin API + binary (tasks, events, settings), MongoDB |
@@ -951,6 +951,27 @@ Bridge areas (2026-11-04, [ADR 0014](docs/adr/0014-bridge-areas.md)):
 59. Catapulsar's Bridges panel has tabs **System | Bridges | <areas> | + Area**, with counts; it opens on the last
     tab used (browser storage), System by default. *Running* counts the open tab; **+ New Bridge** is hidden on
     System and, in an area, creates the bridge there with topic pickers limited to the area's patterns.
+
+Bridge subscriptions and consumers (2026-11-04):
+
+60. Deleting a bridge **deletes its Pulsar subscription**, and so does changing a bridge's source topic or
+    subscription name (the old one), unless another bridge still uses it. Cataponte queues the deletion in
+    `cataponte_subscription_cleanups` and tries it after 30 s (the bridge's workers on every replica stop first;
+    deleting while they are connected would make them subscribe again), without `force`, then every minute until it
+    is gone. It is published as `subscription.deleted` (actor = who deleted the bridge, details = bridge and
+    backlog), so Cataudit has it. Catapulsar **warns before the last confirmation**, with the subscription and the
+    messages left in its backlog (or that it is kept because another bridge uses it).
+61. Two bridges may not read the **same topic with the same subscription** (`409`): they would split its messages,
+    or on `Failover` only one would receive. The bridge form suggests `cataponte-<bridge name>`.
+62. Our consumers have **recognisable names** in Pulsar's statistics: `cataponte@<instance>/<bridge>`,
+    `catametricas@<instance>`, `cataudit@<instance>` (instance = host name plus a random suffix).
+63. Catapulsar's topic view shows, for each subscription (Subscription Details and the Backlog list), the **bridge**
+    that uses it with its destinations (a link to the bridge) and **who is connected**: consumer name, address,
+    connected since, client version, rate, unacked, and which one is active on `Failover`. All from Pulsar, except
+    the bridge definitions, which come from Cataponte.
+64. Name fields in Catapulsar (new topic, new subscription, bridge name and subscription, area name) **correct as you
+    type or paste**: a character the name cannot have, a space included, becomes `-`, and a first character it
+    cannot start with is not written. Area patterns keep `*`, `/` and `:`, and drop spaces. The APIs still validate.
 
 Phase 7 decisions (2026-11-04, planned — ADR 0015 to be written before any code):
 

@@ -9,9 +9,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import org.apache.pulsar.client.api.Consumer;
@@ -65,6 +68,8 @@ public class AuditConsumer implements ApplicationListener<ApplicationReadyEvent>
     private final Counter invalid;
     private final Counter retries;
     private final Counter errors;
+    /** Name of this replica's consumer, {@code cataudit@<host>-<random>}, shown in Pulsar's statistics. */
+    private final String consumerName = "cataudit@" + hostName() + "-" + UUID.randomUUID().toString().substring(0, 8);
     private volatile Consumer<byte[]> consumer;
     private volatile String lastError;
     private volatile boolean stopping;
@@ -146,6 +151,7 @@ public class AuditConsumer implements ApplicationListener<ApplicationReadyEvent>
         client.newConsumer(Schema.BYTES)
                 .topic(CatacumbasTopics.audit())
                 .subscriptionName(settings.subscription())
+                .consumerName(consumerName)
                 .subscriptionType(SubscriptionType.Shared)
                 .receiverQueueSize(settings.receiverQueueSize())
                 .negativeAckRedeliveryDelay(settings.negativeAckRedeliveryDelay().toMillis(), TimeUnit.MILLISECONDS)
@@ -233,5 +239,13 @@ public class AuditConsumer implements ApplicationListener<ApplicationReadyEvent>
                 .description("Audit messages received, by outcome")
                 .tag("outcome", outcome)
                 .register(registry);
+    }
+
+    private static String hostName() {
+        try {
+            return InetAddress.getLocalHost().getHostName();
+        } catch (UnknownHostException e) {
+            return "cataudit";
+        }
     }
 }

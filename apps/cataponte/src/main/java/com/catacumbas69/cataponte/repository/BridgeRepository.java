@@ -42,4 +42,13 @@ public interface BridgeRepository extends MongoRepository<BridgeDocument, String
      * @return its bridges
      */
     List<BridgeDocument> findByAreaId(String areaId);
+
+    /**
+     * Finds the bridges that read a topic with a subscription.
+     *
+     * @param topic source topic
+     * @param subscription subscription name
+     * @return those bridges
+     */
+    List<BridgeDocument> findBySourceTopicAndSourceSubscription(String topic, String subscription);
 }

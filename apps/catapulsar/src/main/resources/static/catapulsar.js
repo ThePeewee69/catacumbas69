@@ -67,6 +67,59 @@ function areaAllows(patterns, topic) {
   return patterns.some(p => areaPatternMatcher(p)(topic));
 }
 
+/**
+ * Characters each kind of name may contain, as the APIs check them: Pulsar names in Catapulsar (topics,
+ * subscriptions), Cataponte names (bridges, their subscriptions, areas) and area patterns.
+ */
+const NAME_RULES = {
+  pulsar: { allowed: /[A-Za-z0-9._=:-]/, first: /[A-Za-z0-9_]/ },
+  cataponte: { allowed: /[A-Za-z0-9._-]/, first: /[A-Za-z0-9]/ },
+  pattern: { allowed: /[A-Za-z0-9._=:*/\n-]/, first: null, dropSpaces: true },
+};
+
+/**
+ * Replaces the characters a name cannot have (spaces included) with "-", and drops those it cannot start with.
+ * In area patterns spaces are dropped instead.
+ * @param {string} text typed or pasted text
+ * @param {{allowed: RegExp, first: ?RegExp}} rule the name's rule
+ * @param {boolean} atStart whether the text goes at the start of the field
+ * @returns {string} the text to insert
+ */
+function cleanNameText(text, rule, atStart) {
+  let input = text.replace(/\r\n?/g, '\n');
+  if (rule.dropSpaces) input = input.replace(/[ \t]/g, '');   // a space around a pattern is a slip, not a "-"
+  let clean = [...input].map(c => (rule.allowed.test(c) ? c : '-')).join('');
+  if (rule.first && atStart) {
+    while (clean && !rule.first.test(clean[0])) clean = clean.slice(1);
+  }
+  return clean;
+}
+
+/*
+ * x-name-chars="pulsar|cataponte|pattern": as you type or paste, characters the name cannot have become "-"
+ * (a space too), and a first character it cannot start with is not written. The API still validates.
+ */
+document.addEventListener('alpine:init', () => {
+  window.Alpine.directive('name-chars', (el, { expression }) => {
+    const rule = NAME_RULES[expression] ?? NAME_RULES.pulsar;
+    el.addEventListener('beforeinput', e => {
+      if (e.isComposing || !e.inputType?.startsWith('insert')) return;
+      if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') {
+        if (expression !== 'pattern') e.preventDefault();
+        return;
+      }
+      const text = e.data ?? e.dataTransfer?.getData('text/plain') ?? '';
+      const start = el.selectionStart ?? el.value.length, end = el.selectionEnd ?? start;
+      const atStart = start === 0 || (expression === 'pattern' && el.value[start - 1] === '\n');
+      const clean = cleanNameText(text, rule, atStart);
+      if (clean === text) return;
+      e.preventDefault();
+      el.setRangeText(clean, start, end, 'end');
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  });
+});
+
 /** Reads the per-browser auto-refresh switch; on unless explicitly turned off. */
 function autoRefreshStored() {
   try { return localStorage.getItem(AUTO_REFRESH_KEY) !== 'off'; } catch { return true; }
@@ -145,7 +198,9 @@ function app() {
       areaForm: null,    // null=closed; { id, name, description, patternsText, version }
       areaSaving: false,
       areaDelete: null,  // null=closed; { area, choice: 'delete'|'move', to: '' }
+      highlight: null,   // id of the bridge card just opened from a topic view
     },
+    subConsumersOpen: {},  // subscription name → consumer list shown (topic view)
 
     // ── Audit trail (Cataudit, ADR 0009) ───────────────────────────────────
     auditView: false,
@@ -206,6 +261,7 @@ function app() {
           work.push(this.loadAudit(true));
         } else if (this.sel.topic && this.tab === 'stats' && this.stats) {
           work.push(this.refreshStats());
+          if (this.auto.tick % INTERVAL_RELOAD_TICKS === 0) work.push(this.refreshBridgeList());
         } else if (this.sel.topic && this.tab === 'subs') {
           work.push(this.refreshSubs());
         } else if (this.sel.topic && this.tab === 'backlog') {
@@ -889,8 +945,10 @@ function app() {
       this.tab = 'stats'; this.stats = null;
       this.produce = { payload: '', key: '', lastId: null };
       this.backlog = { sub: '', count: 10, messages: [], queried: false };
+      this.subConsumersOpen = {};
       await this.loadStats();
       await this.loadSubs();
+      this.refreshBridgeList();   // which subscriptions belong to bridges; ignored when Cataponte is down
     },
 
     async createTopic() {
@@ -1364,7 +1422,8 @@ function app() {
     confirmDeleteArea() {
       const d = this.bridges.areaDelete;
       if (d.choice === 'delete'
-          && !confirm(`Delete area "${d.area.name}" and its ${d.count} bridge(s)? Their relays stop immediately.`)) {
+          && !confirm(`Delete area "${d.area.name}" and its ${d.count} bridge(s)? Their relays stop immediately,`
+            + ' and their subscriptions are deleted about 30 s later with whatever is in their backlog.')) {
         return;
       }
       this.deleteArea(d.area, d.choice, d.choice === 'move' ? d.to : null);
@@ -1533,7 +1592,8 @@ function app() {
 
     async deleteBridge(id) {
       const bridge = this.bridges.list.find(b => b.id === id);
-      if (!confirm(`Delete bridge "${bridge?.name ?? id}"?\nThis will stop the relay immediately.`)) return;
+      const warning = bridge ? await this.subscriptionWarning(bridge) : '';
+      if (!confirm(`Delete bridge "${bridge?.name ?? id}"?\nThis will stop the relay immediately.${warning}`)) return;
       try {
         await this.bridgesApi(`${BRIDGES_API}/${id}`, { method: 'DELETE' });
         this.notify('Bridge deleted');
@@ -1547,7 +1607,8 @@ function app() {
     openNewBridge() {
       this.bridges.form = {
         id: null, name: '', description: '', enabled: true,
-        source: { topic: '', subscription: 'cataponte-bridge', subscriptionType: 'Failover' },
+        source: { topic: '', subscription: '', subscriptionType: 'Failover' },
+        subAuto: true,   // the subscription follows the name (cataponte-<name>) until it is edited
         ordered: true,
         destinations: [],
         preserveKey: true, preserveProperties: true,
@@ -1559,6 +1620,8 @@ function app() {
 
     openEditBridge(bridge) {
       const f = JSON.parse(JSON.stringify(bridge));
+      f.subAuto = false;
+      f.originalSource = { topic: bridge.source?.topic, subscription: bridge.source?.subscription };
       f.destinations = this.bridgeDestTopics(f).map(topic => ({ topic }));
       delete f.destination;
       this.bridges.form = f;
@@ -1641,9 +1704,21 @@ function app() {
       this.bridges.form = null;
     },
 
+    /** Keeps the subscription name at cataponte-<bridge name> until the user edits it. */
+    onBridgeNameInput() {
+      const f = this.bridges.form;
+      if (f?.subAuto) f.source.subscription = f.name ? `cataponte-${f.name}` : '';
+    },
+
     async saveBridge() {
       const f = this.bridges.form;
       const isNew = !f.id;
+      const o = f.originalSource;
+      if (!isNew && o && (o.topic !== f.source.topic || o.subscription !== f.source.subscription)) {
+        const old = this.bridges.list.find(b => b.id === f.id);
+        const warning = old ? await this.subscriptionWarning(old) : '';
+        if (!confirm(`Save bridge "${f.name}" with another source or subscription?${warning.replace('Its subscription', 'Its old subscription')}`)) return;
+      }
       this.bridges.formSaving = true;
       try {
         const payload = {
@@ -1704,6 +1779,86 @@ function app() {
      */
     isSystemSub(name) {
       return typeof name === 'string' && name.startsWith('__');
+    },
+
+    /** @returns {string} full name of the selected topic, e.g. persistent://home/media/events */
+    currentTopicName() {
+      const t = this.sel.topic || '';
+      return t.includes('://') ? t : `persistent://${this.sel.tenant}/${this.sel.namespace}/${t}`;
+    },
+
+    /**
+     * The bridge that reads the selected topic (or the partitioned topic it belongs to) with a subscription.
+     * @param {string} name subscription name
+     * @returns {?object} the bridge, or null
+     */
+    bridgeForSub(name) {
+      const topic = this.currentTopicName();
+      const base = topic.replace(/-partition-\d+$/, '');
+      return this.bridges.list.find(b => b.source?.subscription === name
+        && (b.source?.topic === topic || b.source?.topic === base)) ?? null;
+    },
+
+    /**
+     * @param {object} bridge a bridge
+     * @returns {string} the Bridges tab it is shown in
+     */
+    bridgeTabOf(bridge) {
+      if (bridge.system) return 'system';
+      return this.areaById(bridge.areaId) ? bridge.areaId : 'general';
+    },
+
+    /**
+     * Opens the Bridges panel on the tab of a bridge and highlights its card.
+     * @param {object} bridge the bridge
+     */
+    async openBridgeOf(bridge) {
+      try { localStorage.setItem(BRIDGES_TAB_KEY, this.bridgeTabOf(bridge)); } catch { /* not remembered */ }
+      this.bridges.highlight = bridge.id;
+      this.openBridges();
+      await this.loadAreas();
+      this.selectBridgeTab(this.bridgeTabOf(bridge));
+      setTimeout(() => document.getElementById(`bridge-card-${bridge.id}`)?.scrollIntoView({ block: 'center' }), 300);
+      setTimeout(() => { if (this.bridges.highlight === bridge.id) this.bridges.highlight = null; }, 4000);
+    },
+
+    /** @param {string} name subscription whose consumer list is shown or hidden */
+    toggleSubConsumers(name) {
+      this.subConsumersOpen = { ...this.subConsumersOpen, [name]: !this.subConsumersOpen[name] };
+    },
+
+    /**
+     * Short "who is connected" line for a subscription: the consumer names, or their addresses.
+     * @param {object} stats subscription statistics
+     * @returns {string} e.g. "cataponte@pod-1/fanout, 10.42.0.7:51234", or '' with no consumers
+     */
+    consumersLine(stats) {
+      return (stats?.consumers ?? []).map(c => c.consumerName || c.address || '?').join(', ');
+    },
+
+    /**
+     * Warning about the subscription of a bridge that is deleted or moved to another one (orch.md decision 60):
+     * kept when another bridge uses it, otherwise deleted by Cataponte about 30 s later with its backlog.
+     * @param {object} bridge the bridge as it is now
+     * @returns {Promise<string>} the text to add to the confirmation
+     */
+    async subscriptionWarning(bridge) {
+      const topic = bridge.source?.topic, sub = bridge.source?.subscription;
+      if (!topic || !sub) return '';
+      const other = this.bridges.list.find(b => b.id !== bridge.id && b.source?.topic === topic && b.source?.subscription === sub);
+      if (other) return `\n\nIts subscription "${sub}" is kept: bridge "${other.name}" uses it too.`;
+      let backlog = null;
+      const m = topic.match(/^persistent:\/\/([^/]+)\/([^/]+)\/(.+)$/);
+      if (m) {
+        try {
+          const stats = await this.api(`/api/v1/topics/${m[1]}/${m[2]}/${encodeURIComponent(m[3])}/stats`);
+          backlog = stats?.subscriptions?.[sub]?.msgBacklog ?? 0;
+        } catch { /* unknown */ }
+      }
+      const what = backlog == null ? 'with whatever is in its backlog (could not be read)'
+        : backlog === 0 ? 'its backlog is empty'
+        : `with the ${this.fmtNum(backlog)} message(s) still in its backlog; they will not reach the destinations`;
+      return `\n\nIts subscription "${sub}" on ${topic} will also be deleted about 30 s later (${what}).`;
     },
     sumBacklog(stats) {
       if (!stats?.subscriptions) return 0;

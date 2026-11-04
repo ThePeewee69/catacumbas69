@@ -28,7 +28,8 @@ Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs
   `cataponte_traffic_totals` (all time), both kept forever. Each replica adds what it relayed itself. `SOURCE` counts messages delivered to every
   destination; `DESTINATION` counts each accepted send. If MongoDB is down the counts wait in memory.
 - **Audit = events** (ADR 0008/0009, orch.md §4.4): every bridge change is published as
-  `com.catacumbas69.cataponte.bridge.<created|updated|deleted|enabled|disabled>.v1` on
+  `com.catacumbas69.cataponte.bridge.<created|updated|deleted|enabled|disabled>.v1` (and `subscription.deleted`,
+  see *Subscriptions*) on
   `catacumbas69/cataponte/events`, keyed by bridge id. Each event carries the definition before and after
   (flattened) and the actor: the client address from Catapulsar's `X-Forwarded-For`, the app name for system
   bridges, or `cataponte` for its own `audit-cataponte`. Cataudit owns the trail. The namespace and topic are created at start-up through the Pulsar admin API
@@ -54,7 +55,15 @@ Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs
   its workers' status to `cataponte_worker_status` every 5 s, so `GET /api/v1/bridges/status` answers for all
   of them: most advanced state, summed counters, `replicas` and `activeReplicas`. Two writes on different
   replicas at the same instant could still close a loop; the reconciler then blocks those bridges.
-- **Collections**: `cataponte_bridges`, `cataponte_areas`, `cataponte_traffic_minutes`, `cataponte_traffic_totals` and
+- **Subscriptions** (orch.md decisions 60–62): two bridges may not read the same topic with the same subscription
+  (`409`). Deleting a bridge, or changing its source topic or subscription name, deletes the subscription it no
+  longer uses, unless another bridge uses it: the deletion is queued in `cataponte_subscription_cleanups`, tried
+  after `cataponte.subscription-cleanup.delay` (30 s, so every replica's worker has stopped) without `force`, and
+  again every `retry-delay` (1 min) until Pulsar has removed it. Each replica looks for due deletions every
+  `interval` (15 s); a lease in the document makes one replica take each. Then `subscription.deleted` is published
+  (subject = topic; details = subscription, bridge, backlog left; actor = who deleted or changed the bridge).
+  Bridge consumers are named `cataponte@<instance>/<bridge>`, so Pulsar's statistics say which replica is connected.
+- **Collections**: `cataponte_bridges`, `cataponte_areas`, `cataponte_subscription_cleanups`, `cataponte_traffic_minutes`, `cataponte_traffic_totals` and
   `cataponte_worker_status`. Their indexes are created shortly after start-up (retried while MongoDB is down).
 
 ## Run locally (IntelliJ on necromancer)
