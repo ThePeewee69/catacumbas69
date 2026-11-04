@@ -83,7 +83,9 @@ public class BridgeController {
     @GetMapping
     public List<BridgeResponse> list() {
         Map<String, AreaDocument> byId = areas.byId();
-        return service.findAll().stream().map(bridge -> respond(bridge, byId.get(bridge.getAreaId()))).toList();
+        return service.findAll().stream()
+                .map(bridge -> respond(bridge, bridge.getAreaId() == null ? null : byId.get(bridge.getAreaId())))
+                .toList();
     }
 
     /**
