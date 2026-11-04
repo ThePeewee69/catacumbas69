@@ -45,10 +45,12 @@ know the collection's shape and be able to write to it.
   at the app's next start.
 - Cataudit consumes with a `Shared` subscription `cataudit` and reads messages as bytes into the `CloudEvent`
   record. It inserts with `_id` = event id; a duplicate key counts as success. When MongoDB fails the message
-  is negatively acknowledged and redelivered after 10 s. A message that is not a CloudEvent is logged at
+  is negatively acknowledged and redelivered after 10 s; so is a message whose storing fails for any other
+  reason, logged at `ERROR` (2026-11-04, orch.md RES-15). A message that is not a CloudEvent is logged at
   `ERROR` and acknowledged.
 - `cataudit_events` keeps the event and also stores `app`, `entity` and `action` split out of the type, and
-  `receivedAt`. Indexes: `time`, and `app`/`subject`/`actor`/`entity+action` each with `time`. Events are
+  `receivedAt`. `before`, `after` and `details` are stored as lists of `{key, value}` pairs (2026-11-04,
+  orch.md MONGO-7): their keys contain dots (`source.topic`), which MongoDB map keys cannot. Indexes: `time`, and `app`/`subject`/`actor`/`entity+action` each with `time`. Events are
   kept **forever**.
 - API: `GET /api/v1/audit?app&entity&action&subject(prefix)&actor&from&to&page&size` returns newest first
   with the total. Also `GET /api/v1/audit/{id}` and `GET /api/v1/audit/facets`. Catapulsar forwards these

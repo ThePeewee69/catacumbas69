@@ -8,12 +8,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.catacumbas69.cataudit.model.AuditEvent;
+import com.catacumbas69.cataudit.model.AuditValue;
 import com.catacumbas69.cataudit.service.AuditPage;
 import com.catacumbas69.cataudit.service.AuditQuery;
 import com.catacumbas69.cataudit.service.AuditStore;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -39,7 +39,8 @@ class AuditControllerTest {
 
     private static final AuditEvent EVENT = new AuditEvent("e1", "/catacumbas69/catapulsar",
             "com.catacumbas69.catapulsar.topic.created.v1", "catapulsar", "topic", "created", "persistent://a/b/c",
-            Instant.parse("2026-10-31T19:00:00Z"), "10.0.0.1", null, null, Map.of(), Instant.EPOCH);
+            Instant.parse("2026-10-31T19:00:00Z"), "10.0.0.1", null,
+            List.of(new AuditValue("source.topic", "persistent://a/b/c")), List.of(), Instant.EPOCH);
 
     @Autowired
     private MockMvc mvc;
@@ -56,6 +57,7 @@ class AuditControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].type").value("com.catacumbas69.catapulsar.topic.created.v1"))
                 .andExpect(jsonPath("$.items[0].action").value("created"))
+                .andExpect(jsonPath("$.items[0].after['source.topic']").value("persistent://a/b/c"))
                 .andExpect(jsonPath("$.total").value(1001));
 
         ArgumentCaptor<AuditQuery> query = ArgumentCaptor.forClass(AuditQuery.class);

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.catacumbas69.catacommons.events.CloudEvent;
 import com.catacumbas69.catacommons.events.EventData;
 import com.catacumbas69.cataudit.model.AuditEvent;
+import com.catacumbas69.cataudit.model.AuditValue;
 import java.time.Instant;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -29,7 +30,7 @@ class AuditEventsTest {
         assertThat(stored.subject()).isEqualTo("persistent://a/b/c");
         assertThat(stored.time()).isEqualTo(Instant.parse("2026-10-31T19:00:00Z"));
         assertThat(stored.actor()).isEqualTo("10.0.0.1");
-        assertThat(stored.details()).containsEntry("subscription", "s1");
+        assertThat(stored.details()).containsExactly(new AuditValue("subscription", "s1"));
         assertThat(stored.receivedAt()).isEqualTo(NOW);
     }
 

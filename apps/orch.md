@@ -357,6 +357,9 @@ Every package has a `package-info.java` (DOC-2). Dependencies point downwards on
   first collection of a namespace only sets the baseline. History of deleted topics is kept (`active=false`).
   The snapshot is replaced only by a newer sample (conditional `findAndReplace`), and only the instance that
   replaced it adds the delta, so a repeated or late collection task never counts twice (ADR 0012).
+- **MONGO-7 [MUST]** Maps whose keys come from outside (event `before`/`after`/`details`, flattened as
+  `source.topic`) are stored as lists of `{key, value}` pairs, never as map keys: MongoDB map keys cannot
+  contain dots and Spring Data refuses them. The API turns them back into maps.
 
 ---
 
@@ -546,6 +549,8 @@ other service is slow or down.
   cycle (state `BLOCKED`), even when the documents were written to MongoDB directly.
 - **RES-14 [MUST]** Traffic counts that cannot be written to MongoDB stay in memory and are retried on the
   next flush; a write failure never affects relaying.
+- **RES-15 [MUST]** A consumed message is always acknowledged or negatively acknowledged, whatever fails while
+  handling it; an unexpected error is logged at `ERROR` with the exception and the message is delivered again.
 - **RES-12 [MUST]** The UI degrades per feature: if Cataponte is down, the Bridges panel shows the error
   and the rest of Catapulsar keeps working; every request shows a clear toast on failure.
 
@@ -712,6 +717,11 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-03/04, fixes found running the apps** (`mvn clean install` at `apps/` green: catacommons 25,
+  Catapulsar 102, Cataponte 91, Catametricas 51, Cataudit 18 tests, 0 Checkstyle violations): namespace retention
+  2 GB with the backlog quota below it (decision 41), Pulsar client loggers lowered (OBS-9), Pulsar system names
+  accepted and `__*` subscriptions read-only (SEC-4, SEC-7), backlog size per subscription in Catapulsar, Cataudit
+  event values stored as pairs (MONGO-7) and every message acknowledged or negatively acknowledged (RES-15).
 - **2026-11-01, phase 5 of §15 and no backward compatibility** (`mvn clean install` at `apps/` green:
   catacommons 20, Catapulsar 98, Cataponte 91, Catametricas 51, Cataudit 14 tests, 0 Checkstyle violations):
   Cataponte runs N replicas; `Exclusive` refused; status merged over replicas (`cataponte_worker_status`,
@@ -751,7 +761,7 @@ Closed on 2026-10-30:
 
 ## 15. Target architecture (proposed — ADR 0008–0013)
 
-Status: **phases 1–5 implemented** (2026-10-31 – 2026-11-01); phase 6 later. Until a phase below is implemented, the
+Status: **phases 1–5 implemented** (2026-10-31 – 2026-11-01); phase 7 planned (decisions 42–49); phase 6 later. Until a phase below is implemented, the
 rules in sections 1–14 stay in force. When a phase lands, the rules it changes are updated in the same change
 and its ADRs become "Accepted".
 
@@ -794,6 +804,7 @@ Each phase ends with `mvn verify` green in every app, the docs updated and the a
 | 4 | Catametricas API and tasks | Query API (`topics`, `series`, `collector`); Catapulsar overviews built from it (Catametricas URL editable); collection tasks on Pulsar with claims and conditional snapshot updates; lease removed; `contario_*` → `catametricas_*` (renamed) | **Done** 2026-11-01 |
 | 5 | Cataponte replicas | `Exclusive` rejected; N replicas, status merged over replicas (`cataponte_worker_status`); ADR 0002 superseded; collections `cataponte_*` | **Done** 2026-11-01 |
 | 6 | Prometheus source (later) | Once Prometheus/OpenMetrics/Loki run on MicroShift: short ranges from PromQL in Catametricas | Later |
+| 7 | Alerts and dead letters | Dead-letter topics for our Shared/Key_Shared consumers; new service **Catavigia** with alert history; alerts and actions panel in Catapulsar; Settings dialog in tabs (decisions 42–49; ADR 0014 to be written) | Planned |
 
 ### Decisions taken on 2026-10-31
 
@@ -897,3 +908,26 @@ Start-up fix (2026-11-01):
     decision 9 stopped provisioning before the topics were created. Namespace retention is now **2 GB**, the backlog
     quota stays **1 GB**, and `CatacommonsProperties` **refuses to start** when the quota is not below the retention
     (compared in whole megabytes; a retention of zero or less is not checked).
+
+Phase 7 decisions (2026-11-04, planned — ADR 0014 to be written before any code):
+
+42. A message that keeps failing is **poison**: after **N deliveries** (default **10**, about 2 minutes) Pulsar moves it
+    to a **dead-letter topic** and the consumer carries on. N is a shared setting, editable in Catapulsar's Settings.
+43. Dead-letter topics for **every Shared/Key_Shared consumer of ours**: Cataudit (`audit`), Catametricas collection
+    tasks (this changes decision 33: a task that fails N times goes to the DLQ instead of running however late) and
+    Cataponte bridges with `Shared`/`Key_Shared` subscriptions. `Failover` bridges stay as they are (Pulsar has no DLQ
+    for them).
+44. A new service, **Catavigia**, watches everything periodically and **keeps the history** of each alert (opened,
+    closed). Alerts: poison messages (DLQ with messages), bridges `FAILED`/`BLOCKED`, Catametricas collection failing,
+    services unavailable, subscription backlog above a limit, Pulsar brokers and bookies available/unavailable,
+    MongoDB available/unavailable.
+45. Backlog and DLQ numbers come from **Catametricas** (current backlog per topic, at most one collection interval old).
+46. Actions are taken by **the owner of each resource** through its existing API (ADR 0010): Catapulsar for DLQ
+    messages (peek, send back to the original topic, discard), Cataponte for bridges. Catavigia only watches.
+47. Catapulsar gets an **alerts and actions** panel. Its Settings dialog is split into **tabs** (connections, refresh
+    and collection, alerts), with the alert limits in the alerts tab.
+48. Like every app, Catavigia publishes an **event for every action** (`alert.opened`, `alert.closed`, changes of its
+    configuration) on `catacumbas69/catavigia/events`, and registers its `audit-catavigia` bridge so Cataudit stores
+    them.
+49. Catavigia exposes `alerts_open{type,severity}` on `/actuator/prometheus`, for Grafana once Prometheus runs on
+    MicroShift. External notifications (Telegram, email) are left for later.

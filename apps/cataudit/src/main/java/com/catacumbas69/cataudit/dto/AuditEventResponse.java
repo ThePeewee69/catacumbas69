@@ -1,6 +1,7 @@
 package com.catacumbas69.cataudit.dto;
 
 import com.catacumbas69.cataudit.model.AuditEvent;
+import com.catacumbas69.cataudit.model.AuditValue;
 import java.time.Instant;
 import java.util.Map;
 
@@ -31,6 +32,7 @@ public record AuditEventResponse(String id, Instant time, String app, String ent
      */
     public static AuditEventResponse from(AuditEvent event) {
         return new AuditEventResponse(event.id(), event.time(), event.app(), event.entity(), event.action(),
-                event.type(), event.subject(), event.actor(), event.before(), event.after(), event.details());
+                event.type(), event.subject(), event.actor(), AuditValue.mapOf(event.before()),
+                AuditValue.mapOf(event.after()), AuditValue.mapOf(event.details()));
     }
 }

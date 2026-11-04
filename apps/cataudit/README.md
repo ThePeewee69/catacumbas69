@@ -19,10 +19,15 @@ Catametricas┘                       └─ audit-catametricas┘        (Share
 - **Consumer**: subscription `cataudit`, type `Shared`, so every replica takes a share. A message is
   acknowledged once stored. It is also acknowledged when an event with the same id is already stored
   (duplicates are harmless). When MongoDB fails the message is negatively acknowledged and delivered again
-  after 10 s. A message that is not a CloudEvent is logged at `ERROR` and dropped. Subscribing runs in the
+  after 10 s; any other error while storing is logged at `ERROR` with the exception and the message is
+  delivered again the same way, for now without limit (RES-15; phase 7 adds a dead-letter topic after N
+  deliveries, orch.md decision 42). A message that is not a CloudEvent is logged at `ERROR`
+  and dropped. Subscribing runs in the
   background and is retried, so Cataudit starts while Pulsar is down.
 - **Storage**: `cataudit_events` holds the CloudEvent fields plus `app`, `entity` and `action` taken from the
-  type `com.catacumbas69.<app>.<entity>.<action>.v1`, and `receivedAt`. Events are kept **forever**. Indexes
+  type `com.catacumbas69.<app>.<entity>.<action>.v1`, and `receivedAt`. `before`, `after` and `details` are
+  stored as lists of `{key, value}` pairs, because their keys contain dots (`source.topic`) and MongoDB map
+  keys cannot (MONGO-7); the API returns them as maps. Events are kept **forever**. Indexes
   cover `time` and `app`, `subject`, `actor` and `entity+action`, each with `time`.
 - **Pulsar**: at start-up catacommons creates the namespace `catacumbas69/cataudit` and the topic `audit`, with
   the CloudEvent schema. Cataudit registers no audit bridge of its own.
@@ -82,6 +87,6 @@ Unit tests need no Docker, MongoDB or Pulsar.
 |---|---|
 | `/actuator/health/liveness`, `/actuator/health/readiness` | probes; readiness does not depend on Pulsar, so the API stays up |
 | `/actuator/health` | `auditConsumer` component: up while the audit topic is consumed, last error otherwise |
-| `/actuator/prometheus` | `cataudit_events_total{outcome=stored\|duplicate\|invalid\|retry}`, `catacommons_messages_total` |
+| `/actuator/prometheus` | `cataudit_events_total{outcome=stored\|duplicate\|invalid\|retry\|error}`, `catacommons_messages_total` |
 
 Container image: `Dockerfile` (multi-stage, layered jar, non-root, port 8084), built from `apps/`.

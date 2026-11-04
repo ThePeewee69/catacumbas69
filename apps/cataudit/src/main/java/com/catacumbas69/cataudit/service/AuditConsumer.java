@@ -50,7 +50,7 @@ public class AuditConsumer implements ApplicationListener<ApplicationReadyEvent>
         DUPLICATE,
         /** Not a CloudEvent with an id; dropped. */
         INVALID,
-        /** MongoDB failed; delivered again later. */
+        /** Not stored (MongoDB failed, or any other error); delivered again later, without limit. */
         RETRY
     }
 
@@ -64,6 +64,7 @@ public class AuditConsumer implements ApplicationListener<ApplicationReadyEvent>
     private final Counter duplicates;
     private final Counter invalid;
     private final Counter retries;
+    private final Counter errors;
     private volatile Consumer<byte[]> consumer;
     private volatile String lastError;
     private volatile boolean stopping;
@@ -92,6 +93,7 @@ public class AuditConsumer implements ApplicationListener<ApplicationReadyEvent>
         this.duplicates = counter(meterRegistry, "duplicate");
         this.invalid = counter(meterRegistry, "invalid");
         this.retries = counter(meterRegistry, "retry");
+        this.errors = counter(meterRegistry, "error");
     }
 
     /**
@@ -171,8 +173,17 @@ public class AuditConsumer implements ApplicationListener<ApplicationReadyEvent>
         }
     }
 
+    /** Every message is acknowledged or negatively acknowledged, whatever happens while handling it. */
     private void onMessage(Consumer<byte[]> source, Message<byte[]> message) {
-        if (handle(message.getValue()) == Outcome.RETRY) {
+        Outcome outcome;
+        try {
+            outcome = handle(message.getValue());
+        } catch (RuntimeException e) {
+            errors.increment();
+            LOG.error("Audit message {} not handled, will be delivered again", message.getMessageId(), e);
+            outcome = Outcome.RETRY;
+        }
+        if (outcome == Outcome.RETRY) {
             source.negativeAcknowledge(message);
         } else {
             source.acknowledgeAsync(message);
@@ -208,6 +219,11 @@ public class AuditConsumer implements ApplicationListener<ApplicationReadyEvent>
         } catch (DataAccessException e) {
             retries.increment();
             LOG.warn("Audit event {} not stored, will be delivered again: {}", event.get().id(), e.getMessage());
+            return Outcome.RETRY;
+        } catch (RuntimeException e) {
+            // not MongoDB being down: it will not fix itself, so log it in full every time it comes back
+            errors.increment();
+            LOG.error("Audit event {} could not be stored, will be delivered again", event.get().id(), e);
             return Outcome.RETRY;
         }
     }

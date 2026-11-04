@@ -1,7 +1,7 @@
 package com.catacumbas69.cataudit.model;
 
 import java.time.Instant;
-import java.util.Map;
+import java.util.List;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -19,9 +19,9 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param subject the thing itself (topic, bridge id, setting key…)
  * @param time when it happened
  * @param actor who did it: client IP address or app name
- * @param before state before, or {@code null}
- * @param after state after, or {@code null}
- * @param details other values, or {@code null}
+ * @param before state before, or {@code null}; pairs, see {@link AuditValue}
+ * @param after state after, or {@code null}; pairs
+ * @param details other values, or {@code null}; pairs
  * @param receivedAt when Cataudit stored it
  */
 @Document(collection = AuditEvent.COLLECTION)
@@ -35,9 +35,9 @@ public record AuditEvent(
         String subject,
         Instant time,
         String actor,
-        Map<String, String> before,
-        Map<String, String> after,
-        Map<String, String> details,
+        List<AuditValue> before,
+        List<AuditValue> after,
+        List<AuditValue> details,
         Instant receivedAt) {
 
     /** Collection owned by Cataudit. */

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.catacumbas69.catacommons.CatacommonsScheduler;
 import com.catacumbas69.cataudit.TestProperties;
 import com.catacumbas69.cataudit.model.AuditEvent;
+import com.catacumbas69.cataudit.model.AuditValue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.nio.charset.StandardCharsets;
@@ -27,7 +28,7 @@ class AuditConsumerTest {
             {"specversion":"1.0","id":"e1","source":"/catacumbas69/cataponte",
              "type":"com.catacumbas69.cataponte.bridge.created.v1","subject":"b1","time":"2026-10-31T19:00:00Z",
              "datacontenttype":"application/json",
-             "data":{"actor":"10.0.0.1","after":{"name":"fanout"}}}
+             "data":{"actor":"10.0.0.1","after":{"name":"fanout","source.topic":"persistent://a/b/c"}}}
             """;
 
     private final AuditStore store = mock(AuditStore.class);
@@ -45,7 +46,8 @@ class AuditConsumerTest {
         ArgumentCaptor<AuditEvent> stored = ArgumentCaptor.forClass(AuditEvent.class);
         verify(store).insert(stored.capture());
         assertThat(stored.getValue().type()).isEqualTo("com.catacumbas69.cataponte.bridge.created.v1");
-        assertThat(stored.getValue().after()).containsEntry("name", "fanout");
+        assertThat(stored.getValue().after()).containsExactly(new AuditValue("name", "fanout"),
+                new AuditValue("source.topic", "persistent://a/b/c"));
     }
 
     @Test
@@ -65,6 +67,13 @@ class AuditConsumerTest {
     @Test
     void asksForRedelivery_whenMongoIsDown() {
         when(store.insert(any())).thenThrow(new DataAccessResourceFailureException("down"));
+
+        assertThat(consumer.handle(bytes(EVENT))).isEqualTo(AuditConsumer.Outcome.RETRY);
+    }
+
+    @Test
+    void asksForRedelivery_onAnyOtherStoreError() {
+        when(store.insert(any())).thenThrow(new IllegalStateException("mapping failed"));
 
         assertThat(consumer.handle(bytes(EVENT))).isEqualTo(AuditConsumer.Outcome.RETRY);
     }

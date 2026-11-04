@@ -4,6 +4,7 @@ import com.catacumbas69.catacommons.events.CloudEvent;
 import com.catacumbas69.catacommons.events.EventData;
 import com.catacumbas69.catacommons.events.EventPublisher;
 import com.catacumbas69.cataudit.model.AuditEvent;
+import com.catacumbas69.cataudit.model.AuditValue;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.Optional;
@@ -46,8 +47,9 @@ public final class AuditEvents {
         EventData data = event.data();
         return Optional.of(new AuditEvent(event.id(), event.source(), type, app, entity, action, event.subject(),
                 timeOf(event.time(), receivedAt), data == null ? null : data.actor(),
-                data == null ? null : data.before(), data == null ? null : data.after(),
-                data == null ? null : data.details(), receivedAt));
+                data == null ? null : AuditValue.listOf(data.before()),
+                data == null ? null : AuditValue.listOf(data.after()),
+                data == null ? null : AuditValue.listOf(data.details()), receivedAt));
     }
 
     private static String appOf(String source) {
