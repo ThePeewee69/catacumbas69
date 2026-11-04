@@ -425,3 +425,6 @@ td .payload { font-family: var(--mono); font-size: 12px; max-width: 320px; word-
 .backlog-sub-bridge, .backlog-sub-consumers { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 3px; overflow-wrap: anywhere; }
 .backlog-sub-consumers { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bridge-card.bridge-highlight { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(99,102,241,.35); }
+
+/* ── Sidebar tree ── */
+.tree-tools { display: flex; justify-content: flex-end; padding: 4px 12px 2px; font-size: 12px; }

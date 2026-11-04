@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Catapulsar</title>
 <link rel="icon" type="image/svg+xml" href="/catapulsar-icon.svg">
-<link rel="stylesheet" href="/catapulsar.css?v=24">
-<script src="/catapulsar.js?v=24" defer></script>
+<link rel="stylesheet" href="/catapulsar.css?v=25">
+<script src="/catapulsar.js?v=25" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
 </head>
 <body x-data="app()" x-init="init()">
@@ -505,38 +505,49 @@
       <div style="padding:24px;text-align:center;color:var(--muted)"><div class="spinner"></div></div>
     </template>
 
+    <template x-if="!loading.tenants && Object.keys(tree.open).length > 1">
+      <div class="tree-tools">
+        <button type="button" class="link-btn" @click="collapseTree()"
+                title="Close every node except the path to what is selected">Collapse all</button>
+      </div>
+    </template>
+
     <template x-for="tenant in tenants" :key="tenant">
       <div class="tree-section">
         <div class="tree-item" :class="{active: sel.tenant===tenant && !sel.namespace}"
-             @click="selectTenant(tenant)">
+             :aria-expanded="isTreeOpen(tenant)"
+             :title="sel.tenant===tenant && !sel.namespace ? 'Click again to ' + (isTreeOpen(tenant) ? 'close' : 'open') : ''"
+             @click="clickTreeTenant(tenant)">
           <span class="icon">🏠</span>
           <span class="label" x-text="tenant"></span>
         </div>
 
-        <template x-if="sel.tenant===tenant">
+        <template x-if="isTreeOpen(tenant)">
           <div>
-            <template x-for="ns in namespaces" :key="ns">
+            <template x-for="ns in treeNamespaces(tenant)" :key="ns">
               <div class="tree-section">
                 <div class="tree-item tree-indent1"
-                     :class="{active: sel.namespace===ns && !sel.topic}"
-                     @click="selectNamespace(ns)">
+                     :class="{active: sel.tenant===tenant && sel.namespace===ns && !sel.topic}"
+                     :aria-expanded="isTreeOpen(tenant + '/' + ns)"
+                     @click="clickTreeNamespace(tenant, ns)">
                   <span class="icon">📁</span>
                   <span class="label" x-text="ns"></span>
                 </div>
 
-                <template x-if="sel.namespace===ns">
+                <template x-if="isTreeOpen(tenant + '/' + ns)">
                   <div>
-                    <template x-for="topic in topics" :key="topic">
+                    <template x-for="topic in treeTopics(tenant, ns)" :key="topic">
                       <div class="tree-item tree-indent2"
-                           :class="{active: sel.topic===topic}"
-                           @click="selectTopic(topic)">
+                           :class="{active: sel.tenant===tenant && sel.namespace===ns && sel.topic===topic}"
+                           @click="clickTreeTopic(tenant, ns, topic)">
                         <span class="icon">📨</span>
                         <span class="label" x-text="topic"></span>
-                        <button class="del-btn" @click.stop="deleteTopic(topic)" title="Delete topic">✕</button>
+                        <button class="del-btn" @click.stop="deleteTreeTopic(tenant, ns, topic)" title="Delete topic">✕</button>
                       </div>
                     </template>
 
-                    <div class="new-topic-inline" style="padding:4px 10px 4px 44px;">
+                    <div class="new-topic-inline" style="padding:4px 10px 4px 44px;"
+                         x-show="sel.tenant===tenant && sel.namespace===ns">
                       <input type="text" x-model="newTopic" placeholder="new topic…" x-name-chars="pulsar" title="Spaces and other characters a name cannot have become &quot;-&quot; as you type"
                              @keydown.enter="createTopic()"
                              style="font-size:12px;padding:5px 8px;">

@@ -972,6 +972,10 @@ Bridge subscriptions and consumers (2026-11-04):
 64. Name fields in Catapulsar (new topic, new subscription, bridge name and subscription, area name) **correct as you
     type or paste**: a character the name cannot have, a space included, becomes `-`, and a first character it
     cannot start with is not written. Area patterns keep `*`, `/` and `:`, and drop spaces. The APIs still validate.
+65. Catapulsar's sidebar **keeps open every tenant and namespace you open**, remembered per browser. Clicking a name
+    selects it and opens it; clicking the selected one opens or closes it. **Collapse all** closes everything but the
+    path to the selection. Auto-refresh reloads only the selected node; the others reload when selected or after a
+    page reload.
 
 Phase 7 decisions (2026-11-04, planned — ADR 0015 to be written before any code):
 

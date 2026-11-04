@@ -2,6 +2,8 @@
 const BRIDGES_API = '/api/v1/bridges';
 /** Bridge areas API (ADR 0014), forwarded to Cataponte like the bridges. */
 const AREAS_API = '/api/v1/areas';
+/** localStorage key of the sidebar nodes left open: tenant names and tenant/namespace keys. */
+const TREE_OPEN_KEY = 'treeOpen';
 /** localStorage key of the last Bridges tab used: 'system', 'general' or an area id. */
 const BRIDGES_TAB_KEY = 'bridgesTab';
 /** localStorage key of the auto-refresh on/off switch (per browser). */
@@ -120,6 +122,16 @@ document.addEventListener('alpine:init', () => {
   });
 });
 
+/** Reads the sidebar nodes left open in this browser. */
+function storedTreeOpen() {
+  try {
+    const keys = JSON.parse(localStorage.getItem(TREE_OPEN_KEY) || '[]');
+    return Array.isArray(keys) ? Object.fromEntries(keys.filter(k => typeof k === 'string').map(k => [k, true])) : {};
+  } catch {
+    return {};
+  }
+}
+
 /** Reads the per-browser auto-refresh switch; on unless explicitly turned off. */
 function autoRefreshStored() {
   try { return localStorage.getItem(AUTO_REFRESH_KEY) !== 'off'; } catch { return true; }
@@ -201,6 +213,8 @@ function app() {
       highlight: null,   // id of the bridge card just opened from a topic view
     },
     subConsumersOpen: {},  // subscription name → consumer list shown (topic view)
+    // Sidebar: nodes left open (remembered per browser) and the lists of the open nodes that are not selected.
+    tree: { open: storedTreeOpen(), namespaces: {}, topics: {} },
 
     // ── Audit trail (Cataudit, ADR 0009) ───────────────────────────────────
     auditView: false,
@@ -217,6 +231,7 @@ function app() {
       await this.loadRefreshInterval();
       this.scheduleRefresh();
       await this.loadTenants();
+      this.loadOpenTreeNodes();
       await this.loadOverview();
     },
 
@@ -630,9 +645,13 @@ function app() {
           tenant && namespace ? this.api(`/api/v1/topics/${tenant}/${namespace}`) : null,
         ]);
         this.replaceIfChanged('tenants', tenants);
-        if (namespaces && this.sel.tenant === tenant) this.replaceIfChanged('namespaces', namespaces);
+        if (namespaces && this.sel.tenant === tenant) {
+          this.replaceIfChanged('namespaces', namespaces);
+          this.tree.namespaces[tenant] = this.namespaces;
+        }
         if (topics && this.sel.tenant === tenant && this.sel.namespace === namespace) {
           this.replaceIfChanged('topics', topics);
+          this.tree.topics[`${tenant}/${namespace}`] = this.topics;
         }
       } catch { /* keep the current lists */ }
     },
@@ -918,25 +937,166 @@ function app() {
 
     async selectTenant(t) {
       this.closePanels();
+      this.setTreeOpen(t, true);
       this.sel = { tenant: t, namespace: null, topic: null };
       this.loadOverview();
       this.namespaces = []; this.topics = [];
       this.stats = null; this.subscriptions = [];
       this.loading.namespaces = true;
-      try { this.namespaces = await this.api(`/api/v1/namespaces/${t}`); }
+      try {
+        this.namespaces = await this.api(`/api/v1/namespaces/${t}`);
+        this.tree.namespaces = { ...this.tree.namespaces, [t]: this.namespaces };
+      }
       catch (e) { this.notify('Error loading namespaces: ' + e.message, 'error'); }
       finally { this.loading.namespaces = false; }
     },
 
     async selectNamespace(ns) {
       this.closePanels();
+      this.setTreeOpen(`${this.sel.tenant}/${ns}`, true);
       this.sel = { ...this.sel, namespace: ns, topic: null };
       this.loadOverview();
       this.topics = []; this.stats = null; this.subscriptions = [];
       this.loading.topics = true;
-      try { this.topics = await this.api(`/api/v1/topics/${this.sel.tenant}/${ns}`); }
+      try {
+        this.topics = await this.api(`/api/v1/topics/${this.sel.tenant}/${ns}`);
+        this.tree.topics = { ...this.tree.topics, [`${this.sel.tenant}/${ns}`]: this.topics };
+      }
       catch (e) { this.notify('Error loading topics: ' + e.message, 'error'); }
       finally { this.loading.topics = false; }
+    },
+
+    // ── Sidebar tree: several nodes open at once ─────────────────────────────
+    /**
+     * @param {string} key tenant name or tenant/namespace
+     * @returns {boolean} whether the node is open
+     */
+    isTreeOpen(key) {
+      return Boolean(this.tree.open[key]);
+    },
+
+    /**
+     * Opens or closes a node and remembers it in this browser.
+     * @param {string} key tenant name or tenant/namespace
+     * @param {boolean} open new state
+     */
+    setTreeOpen(key, open) {
+      if (this.isTreeOpen(key) === open) return;
+      const next = { ...this.tree.open };
+      if (open) next[key] = true; else delete next[key];
+      this.tree.open = next;
+      try { localStorage.setItem(TREE_OPEN_KEY, JSON.stringify(Object.keys(next))); } catch { /* not remembered */ }
+    },
+
+    /** Closes every node except the path to the selection. */
+    collapseTree() {
+      const keep = {};
+      if (this.sel.tenant) keep[this.sel.tenant] = true;
+      if (this.sel.tenant && this.sel.namespace) keep[`${this.sel.tenant}/${this.sel.namespace}`] = true;
+      this.tree.open = keep;
+      try { localStorage.setItem(TREE_OPEN_KEY, JSON.stringify(Object.keys(keep))); } catch { /* not remembered */ }
+    },
+
+    /** Loads the lists of the nodes left open last time (after a reload); failures leave them empty. */
+    loadOpenTreeNodes() {
+      Object.keys(this.tree.open).forEach(key => {
+        const [tenant, ns] = key.split('/');
+        if (!this.tenants.includes(tenant)) return;
+        if (ns) this.loadTreeTopics(tenant, ns); else this.loadTreeNamespaces(tenant);
+      });
+    },
+
+    /** @param {string} tenant tenant whose namespaces to load into the tree */
+    async loadTreeNamespaces(tenant) {
+      try {
+        const list = await this.api(`/api/v1/namespaces/${tenant}`);
+        this.tree.namespaces = { ...this.tree.namespaces, [tenant]: list };
+      } catch { /* shown empty */ }
+    },
+
+    /**
+     * @param {string} tenant tenant
+     * @param {string} ns namespace whose topics to load into the tree
+     */
+    async loadTreeTopics(tenant, ns) {
+      try {
+        const list = await this.api(`/api/v1/topics/${tenant}/${ns}`);
+        this.tree.topics = { ...this.tree.topics, [`${tenant}/${ns}`]: list };
+      } catch { /* shown empty */ }
+    },
+
+    /**
+     * @param {string} tenant tenant
+     * @returns {string[]} its namespaces: the live list when selected, else the last one loaded
+     */
+    treeNamespaces(tenant) {
+      return tenant === this.sel.tenant ? this.namespaces : (this.tree.namespaces[tenant] ?? []);
+    },
+
+    /**
+     * @param {string} tenant tenant
+     * @param {string} ns namespace
+     * @returns {string[]} its topics: the live list when selected, else the last one loaded
+     */
+    treeTopics(tenant, ns) {
+      return tenant === this.sel.tenant && ns === this.sel.namespace
+        ? this.topics : (this.tree.topics[`${tenant}/${ns}`] ?? []);
+    },
+
+    /**
+     * Click on a tenant: selects it (and opens it); clicking the selected tenant opens or closes it.
+     * @param {string} tenant tenant
+     */
+    clickTreeTenant(tenant) {
+      if (this.sel.tenant === tenant && !this.sel.namespace && !this.bridgesView && !this.auditView) {
+        this.setTreeOpen(tenant, !this.isTreeOpen(tenant));
+        return;
+      }
+      this.selectTenant(tenant);
+    },
+
+    /**
+     * Click on a namespace: selects it (and opens it); clicking the selected namespace opens or closes it.
+     * @param {string} tenant its tenant
+     * @param {string} ns namespace
+     */
+    async clickTreeNamespace(tenant, ns) {
+      const key = `${tenant}/${ns}`;
+      if (this.sel.tenant === tenant && this.sel.namespace === ns && !this.sel.topic
+          && !this.bridgesView && !this.auditView) {
+        this.setTreeOpen(key, !this.isTreeOpen(key));
+        return;
+      }
+      if (this.sel.tenant !== tenant) await this.selectTenant(tenant);
+      await this.selectNamespace(ns);
+    },
+
+    /**
+     * Click on a topic of any open namespace.
+     * @param {string} tenant its tenant
+     * @param {string} ns its namespace
+     * @param {string} topic topic
+     */
+    async clickTreeTopic(tenant, ns, topic) {
+      if (this.sel.tenant !== tenant) await this.selectTenant(tenant);
+      if (this.sel.namespace !== ns) await this.selectNamespace(ns);
+      await this.selectTopic(topic);
+    },
+
+    /**
+     * Deletes a topic of any open namespace.
+     * @param {string} tenant its tenant
+     * @param {string} ns its namespace
+     * @param {string} topic topic
+     */
+    async deleteTreeTopic(tenant, ns, topic) {
+      if (tenant === this.sel.tenant && ns === this.sel.namespace) return this.deleteTopic(topic);
+      if (!confirm(`Delete topic "${topic}"?\nAll messages and subscriptions will be removed.`)) return;
+      try {
+        await this.api(`/api/v1/topics/${tenant}/${ns}/${topic}`, { method: 'DELETE' });
+        this.notify(`Topic "${topic}" deleted`);
+        await this.loadTreeTopics(tenant, ns);
+      } catch (e) { this.notify('Error: ' + e.message, 'error'); }
     },
 
     async selectTopic(t) {
