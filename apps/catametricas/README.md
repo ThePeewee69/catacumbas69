@@ -40,9 +40,10 @@ every instance, each interval ──▶ catametricas/collect-tasks ──▶ eve
 | `catametricas_topic_totals` | All-time messages/bytes in and out per topic | Forever |
 | `catametricas_task_runs` | Task claims: who, when, and the result | 6 h (TTL index) |
 
-**Events** (ADR 0008, orch.md §4.4): only changes of state of each instance are published on
+**Events** (ADR 0008, orch.md §4.4): changes of state of each instance, and forced collections, are published on
 `catacumbas69/catametricas/events`: `collection.failed` the first time scheduling, claiming or collecting fails,
-and `collection.recovered` on the next successful task. The namespace and the topics are created at start-up,
+and `collection.recovered` on the next successful task; every forced collection is published as
+`collection.forced` (subject = scope, details = namespaces, collected, coalesced, failed, duration). The namespace and the topics are created at start-up,
 and the `audit-catametricas` system bridge is registered in Cataponte (`CATAPONTE_URL`) so they reach Cataudit
 (ADR 0009).
 
@@ -53,6 +54,7 @@ and the `audit-catametricas` system bridge is registered in Cataponte (`CATAPONT
 | `GET` | `/api/v1/topics?tenant=&namespace=` | Every topic or partition of the scope: `current` state (absent once the topic is gone) and all-time `total` traffic |
 | `GET` | `/api/v1/series?tenant=&namespace=&groupBy=&from=&to=&step=` | Messages and bytes in and out, and backlog, per bucket, summed per `groupBy` = `tenant`, `namespace` (needs `tenant`) or `topic` (needs `namespace`; partitions summed). `step` `1m`–`59m` reads minutes, whole hours (`1h`, `6h`) read hours; `to` defaults to now; at most 2000 buckets |
 | `GET` | `/api/v1/collector` | Newest sample of any topic (`lastCollectionAt`) and the interval in use |
+| `POST` | `/api/v1/collect?tenant=&namespace=` | **Forced collection**: collects the cluster, a tenant or a namespace now and waits for it. Each namespace runs as task `forced:<tenant>/<namespace>@<window start>`, so it is collected at most once per window (`catametricas.collect.forced-window`, 5 s) whoever asks; later requests count it as `coalesced`. Same idempotent write as a scheduled task. Audited as `collection.forced` (actor from `X-Forwarded-For`); `502` if Pulsar cannot list the namespaces |
 
 Errors are RFC 9457 Problem Details (`400` for a query that does not fit, `503` when MongoDB is down). Full
 contract: `http://localhost:8083/swagger-ui.html`. The browser reaches the statistics only through Catapulsar's
@@ -84,7 +86,7 @@ options*). Both collect; each task is claimed by one of them (`catametricas_task
 twice.
 
 Run `CatametricasApplication` (port **8083**). In Catapulsar set `CATAMETRICAS_URL=http://localhost:8083`, or
-change the Catametricas URL in ⚙️ Connection Settings. Settings live in `application.properties` under
+change the Catametricas URL in ⚙️ Settings → Connections. Settings live in `application.properties` under
 `catametricas.*` (`catametricas.tasks.*` for the task topic).
 
 ## Build and test
@@ -116,5 +118,7 @@ Container image: `Dockerfile` (multi-stage, layered jar, non-root, port 8083), b
 - If every instance is stopped for a while, the traffic of that gap is added to the minute of the first task
   after they start again.
 - The first interval of a new namespace only sets the starting point, so its traffic is not counted.
+- `catacumbas69/catametricas/collect-tasks` always shows a backlog of at least 1: it is collected by one of its own
+  tasks, which is acknowledged only when the collection ends. Catapulsar's namespace overview says so on that row.
 - Changing `catametricas.collect.minute-retention` or `catametricas.tasks.run-retention` after the TTL index
   exists needs the index (`minutes_ttl`, `task_runs_ttl`) to be dropped first.

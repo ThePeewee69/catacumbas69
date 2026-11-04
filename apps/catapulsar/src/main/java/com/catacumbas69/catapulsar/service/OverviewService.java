@@ -64,6 +64,18 @@ public class OverviewService {
         return build(OverviewScope.NAMESPACE, tenant, namespace, period);
     }
 
+    /**
+     * Has Catametricas collect a scope now, so the next overview shows this instant (forced collection).
+     *
+     * @param tenant tenant, or {@code null} for the cluster
+     * @param namespace namespace inside the tenant, or {@code null}
+     * @param actor browser address, for Catametricas' audit
+     * @return what was collected
+     */
+    public CatametricasClient.ForcedCollection collect(String tenant, String namespace, String actor) {
+        return catametricas.collect(tenant, namespace, actor);
+    }
+
     private OverviewResponse build(OverviewScope scope, String tenant, String namespace, OverviewPeriod period) {
         Instant now = clock.instant();
         List<Instant> buckets = period.buckets(now);

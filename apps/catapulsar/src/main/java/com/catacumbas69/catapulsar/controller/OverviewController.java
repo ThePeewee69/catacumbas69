@@ -2,13 +2,17 @@ package com.catacumbas69.catapulsar.controller;
 
 import com.catacumbas69.catapulsar.dto.OverviewResponse;
 import com.catacumbas69.catapulsar.dto.PulsarName;
+import com.catacumbas69.catapulsar.dto.ValidationPatterns;
+import com.catacumbas69.catapulsar.service.CatametricasClient;
 import com.catacumbas69.catapulsar.service.OverviewPeriod;
 import com.catacumbas69.catapulsar.service.OverviewService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -76,5 +80,25 @@ public class OverviewController {
             @PathVariable @PulsarName String namespace,
             @RequestParam(defaultValue = "24h") @Pattern(regexp = OverviewPeriod.VALUES) String period) {
         return overview.namespace(tenant, namespace, OverviewPeriod.of(period));
+    }
+
+    /**
+     * Collects a scope now through Catametricas ("Collect now" and live mode in the overviews). A namespace is
+     * collected at most once every 5 s, whoever asks; Catametricas audits it as {@code collection.forced}.
+     *
+     * @param tenant tenant, or none for the whole cluster
+     * @param namespace namespace inside the tenant, or none
+     * @param request current request, for the audit actor
+     * @return what was collected
+     */
+    @Operation(summary = "Collect the cluster, a tenant or a namespace now (Catametricas)")
+    @PostMapping("/collect")
+    public CatametricasClient.ForcedCollection collect(
+            @RequestParam(required = false) @Pattern(regexp = ValidationPatterns.NAME,
+                    message = ValidationPatterns.NAME_MESSAGE) String tenant,
+            @RequestParam(required = false) @Pattern(regexp = ValidationPatterns.NAME,
+                    message = ValidationPatterns.NAME_MESSAGE) String namespace,
+            HttpServletRequest request) {
+        return overview.collect(tenant, namespace, ClientAddress.of(request));
     }
 }

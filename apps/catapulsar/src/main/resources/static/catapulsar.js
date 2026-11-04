@@ -15,6 +15,10 @@ const AUDIT_PAGE_SIZE = 50;
 /** Overview choices remembered per browser. */
 const OVERVIEW_PERIODS = ['1h', '24h', '7d', '30d'];
 const OVERVIEW_METRICS = { in: 'Published', out: 'Delivered', backlog: 'Backlog' };
+/** Live mode: a forced collection every this many ms (Catametricas collects a namespace at most every 5 s). */
+const LIVE_EVERY_MS = 5000;
+/** Live mode turns itself off after this many ms. */
+const LIVE_MAX_MS = 10 * 60 * 1000;
 
 /**
  * Reads a per-browser preference.
@@ -55,6 +59,12 @@ function app() {
     overview: { data: null, dataKey: null, loading: false, error: '', hover: null,
                 period: storedChoice('overviewPeriod', '24h', OVERVIEW_PERIODS),
                 metric: storedChoice('overviewMetric', 'in', Object.keys(OVERVIEW_METRICS)) },
+    // "Collect now": a forced collection of the overview's scope by Catametricas (audited there).
+    force: { busy: false },
+    // Live mode (namespace overviews only): forced collection every 5 s while this browser tab is visible,
+    // off by itself after 10 minutes or when the view changes.
+    live: { on: false, scope: '', key: '', endsAt: 0, lastRunAt: 0, paused: false, lastError: '', timer: null,
+            now: 0 },
     // Catametricas collection interval, edited in ⚙️ Settings (catapulsar_settings, audited).
     collect: { seconds: 60, defaultSeconds: 60, min: 15, max: 600, custom: false, draft: 60 },
     // Catametricas URL: where the overviews read their statistics (ADR 0013)
@@ -73,6 +83,7 @@ function app() {
 
     settings: {
       open: false,
+      tab: 'connections',   // connections | refresh
       pulsarUrl: localStorage.getItem('pulsarUrl') || 'http://192.168.86.35:31080',
       healthState: null,   // null | 'checking' | 'ok' | 'error'
       healthMsg: ''
@@ -184,6 +195,7 @@ function app() {
     /**
      * Saves the interval for every user (stored in MongoDB and audited), or resets it to the default.
      * @param {'PUT'|'DELETE'} method PUT saves `auto.draft`, DELETE goes back to the default
+     * @returns {Promise<boolean>} whether it was saved
      */
     async saveRefreshInterval(method = 'PUT') {
       const a = this.auto;
@@ -192,11 +204,13 @@ function app() {
         const options = { method };
         if (method === 'PUT') options.body = JSON.stringify({ seconds: Number(a.draft) });
         const r = await this.api('/api/v1/settings/refresh-interval', options);
-        Object.assign(a, { seconds: r.seconds, custom: r.custom, menuOpen: false });
+        Object.assign(a, { seconds: r.seconds, draft: r.seconds, custom: r.custom, menuOpen: false });
         this.scheduleRefresh();
         this.notify(`Auto-refresh every ${r.seconds} s for every user`);
+        return true;
       } catch (e) {
         this.notify('Refresh interval not saved: ' + e.message, 'error');
+        return false;
       } finally {
         a.saving = false;
       }
@@ -215,6 +229,17 @@ function app() {
     /** @returns {'cluster'|'tenant'|'namespace'} what the overview shows for the current selection */
     overviewScope() {
       return this.sel.namespace ? 'namespace' : this.sel.tenant ? 'tenant' : 'cluster';
+    },
+
+    /**
+     * Tells whether an overview row is Catametricas' own task topic. It is collected by one of its own tasks,
+     * which is not acknowledged until the collection ends, so its backlog always includes that task.
+     * @param {{name: string}} row overview row
+     * @returns {boolean} true for catacumbas69/catametricas/collect-tasks
+     */
+    isCollectTasksRow(row) {
+      return this.overviewScope() === 'namespace' && this.sel.tenant === 'catacumbas69'
+        && this.sel.namespace === 'catametricas' && row.name === 'collect-tasks';
     },
 
     /** @returns {string} identity of the current overview (scope + period), to drop late answers */
@@ -245,6 +270,90 @@ function app() {
       } finally {
         if (!silent && key === this.overviewKey()) this.overview.loading = false;
       }
+    },
+
+    // ── Collect now and live mode ──────────────────────────────────────────
+    /** @returns {string} query string of the overview's scope for a forced collection */
+    scopeQuery() {
+      const params = new URLSearchParams();
+      if (this.sel.tenant) params.set('tenant', this.sel.tenant);
+      if (this.sel.namespace) params.set('namespace', this.sel.namespace);
+      const query = params.toString();
+      return query ? '?' + query : '';
+    },
+
+    /**
+     * Has Catametricas collect the overview's scope now, then reloads the overview. A namespace is collected at
+     * most once every 5 s whoever asks; Catametricas records each request in the audit log.
+     * @param {boolean} [fromLive] true for live mode: no toast, errors shown in the live banner
+     */
+    async collectNow(fromLive = false) {
+      if (this.force.busy) return;
+      this.force.busy = true;
+      try {
+        const r = await this.api('/api/v1/overview/collect' + this.scopeQuery(), { method: 'POST' });
+        await this.loadOverview(true);
+        const failed = r.failed?.length ? ` · not collected: ${r.failed.join(', ')}` : '';
+        if (fromLive) {
+          this.live.lastError = failed ? failed.slice(3) : '';
+        } else {
+          const shared = r.coalesced ? ` (${r.coalesced} just collected by another request)` : '';
+          this.notify(`Collected ${r.namespaces.length} namespace(s) in ${r.durationMillis} ms${shared}${failed}`,
+            failed ? 'error' : 'success');
+        }
+      } catch (e) {
+        if (fromLive) this.live.lastError = e.message;
+        else this.notify('Collect now failed: ' + e.message, 'error');
+      } finally {
+        this.force.busy = false;
+      }
+    },
+
+    /** Turns live mode on for the current namespace overview. */
+    startLive() {
+      if (this.overviewScope() !== 'namespace' || this.live.on) return;
+      const now = Date.now();
+      Object.assign(this.live, { on: true, scope: `${this.sel.tenant}/${this.sel.namespace}`,
+        key: this.overviewKey(), endsAt: now + LIVE_MAX_MS, lastRunAt: 0, paused: false, lastError: '', now });
+      this.live.timer = setInterval(() => this.liveTick(), 1000);
+      this.liveTick();
+    },
+
+    /**
+     * Turns live mode off.
+     * @param {string} [reason] shown as a toast
+     */
+    stopLive(reason) {
+      if (!this.live.on) return;
+      clearInterval(this.live.timer);
+      Object.assign(this.live, { on: false, timer: null, paused: false });
+      if (reason) this.notify(reason);
+    },
+
+    /** Runs every second while live: applies the three limits and collects every 5 s. */
+    liveTick() {
+      const now = Date.now();
+      this.live.now = now;
+      if (this.bridgesView || this.auditView || this.sel.topic || this.overviewScope() !== 'namespace'
+          || this.overviewKey().split('|').slice(0, 2).join('|') !== this.live.key.split('|').slice(0, 2).join('|')) {
+        this.stopLive(`Live mode off: you left ${this.live.scope}`);
+        return;
+      }
+      if (now >= this.live.endsAt) {
+        this.stopLive('Live mode off after 10 minutes');
+        return;
+      }
+      this.live.paused = document.hidden;
+      if (!this.live.paused && now - this.live.lastRunAt >= LIVE_EVERY_MS && !this.force.busy) {
+        this.live.lastRunAt = now;
+        this.collectNow(true);
+      }
+    },
+
+    /** @returns {string} time left in live mode, m:ss */
+    liveRemaining() {
+      const left = Math.max(0, Math.ceil((this.live.endsAt - this.live.now) / 1000));
+      return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
     },
 
     /** Shows the whole-cluster overview (logo and first breadcrumb). */
@@ -439,8 +548,14 @@ function app() {
     },
 
     // ── Settings ───────────────────────────────────────────────────────────
-    async openSettings() {
+    /**
+     * Opens the Settings dialog on a tab and loads the current values.
+     * @param {'connections'|'refresh'} [tab] tab to show first
+     */
+    async openSettings(tab = 'connections') {
+      this.settings.tab = tab;
       this.settings.open = true;
+      this.auto.draft = this.auto.seconds;
       this.bridges.settings.healthState = null;
       this.audit.settings.healthState = null;
       this.catametricas.healthState = null;
@@ -476,6 +591,10 @@ function app() {
       }
       if (Number(this.collect.draft) !== this.collect.seconds) {
         if (!await this.saveCollectInterval('PUT')) return;
+        changed = true;
+      }
+      if (Number(this.auto.draft) !== this.auto.seconds) {
+        if (!await this.saveRefreshInterval('PUT')) return;
         changed = true;
       }
       if (!changed) this.notify('Settings saved');

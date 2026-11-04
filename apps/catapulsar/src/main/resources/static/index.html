@@ -5,154 +5,186 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Catapulsar</title>
 <link rel="icon" type="image/svg+xml" href="/catapulsar-icon.svg">
-<link rel="stylesheet" href="/catapulsar.css?v=18">
-<script src="/catapulsar.js?v=18" defer></script>
+<link rel="stylesheet" href="/catapulsar.css?v=21">
+<script src="/catapulsar.js?v=21" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
 </head>
 <body x-data="app()" x-init="init()">
 
 <!-- ══ Settings overlay ════════════════════════════════════════════════════ -->
 <template x-if="settings.open">
-  <div class="overlay" @click.self="settings.open=false">
-    <div class="settings-box">
+  <div class="overlay" @click.self="settings.open=false" @keydown.escape.window="settings.open=false">
+    <div class="settings-box" role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <div class="settings-title">
-        ⚙️ Connection Settings
-        <button class="close-btn" @click="settings.open=false">✕</button>
+        <span id="settings-title">⚙️ Settings</span>
+        <button class="close-btn" @click="settings.open=false" aria-label="Close settings">✕</button>
       </div>
 
-      <div class="field" style="margin-bottom:12px;">
-        <label>Pulsar Admin URL</label>
-        <input type="text" x-model="settings.pulsarUrl"
-               placeholder="http://192.168.86.35:31080"
-               @keydown.enter="saveSettings()">
+      <div class="tabs settings-tabs" role="tablist" aria-label="Settings sections">
+        <button type="button" role="tab" class="tab" id="settings-tab-connections"
+                :class="{ active: settings.tab === 'connections' }" :aria-selected="settings.tab === 'connections'"
+                aria-controls="settings-panel-connections" @click="settings.tab = 'connections'">🔌 Connections</button>
+        <button type="button" role="tab" class="tab" id="settings-tab-refresh"
+                :class="{ active: settings.tab === 'refresh' }" :aria-selected="settings.tab === 'refresh'"
+                aria-controls="settings-panel-refresh" @click="settings.tab = 'refresh'">⏱ Refresh &amp; collection</button>
       </div>
 
-      <div class="health-row">
-        <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px;" @click="checkHealth()">
-          <template x-if="settings.healthState==='checking'"><span class="spinner" style="width:12px;height:12px;"></span></template>
-          <template x-if="settings.healthState!=='checking'"><span>🩺</span></template>
-          Health Check
-        </button>
-        <template x-if="settings.healthState==='ok'">
-          <span class="health-msg ok">✓ <span x-text="settings.healthMsg"></span></span>
-        </template>
-        <template x-if="settings.healthState==='error'">
-          <span class="health-msg error">✕ <span x-text="settings.healthMsg"></span></span>
-        </template>
+      <div class="settings-body">
+        <section id="settings-panel-connections" role="tabpanel" aria-labelledby="settings-tab-connections"
+                 x-show="settings.tab === 'connections'">
+          <div class="field" style="margin-bottom:12px;">
+            <label for="pulsar-url">Pulsar Admin URL</label>
+            <input id="pulsar-url" type="text" x-model="settings.pulsarUrl"
+                   placeholder="http://192.168.86.35:31080"
+                   @keydown.enter="saveSettings()">
+          </div>
+
+          <div class="health-row">
+            <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px;" @click="checkHealth()">
+              <template x-if="settings.healthState==='checking'"><span class="spinner" style="width:12px;height:12px;"></span></template>
+              <template x-if="settings.healthState!=='checking'"><span>🩺</span></template>
+              Health Check
+            </button>
+            <template x-if="settings.healthState==='ok'">
+              <span class="health-msg ok">✓ <span x-text="settings.healthMsg"></span></span>
+            </template>
+            <template x-if="settings.healthState==='error'">
+              <span class="health-msg error">✕ <span x-text="settings.healthMsg"></span></span>
+            </template>
+          </div>
+
+          <p class="settings-hint">Shown in the top bar of this browser; the server connects to <span class="mono">PULSAR_SERVICE_URL</span>.</p>
+
+
+          <div class="divider"></div>
+
+
+          <div class="field" style="margin-bottom:6px;">
+            <label for="cataponte-url">Cataponte URL</label>
+            <input id="cataponte-url" type="url" x-model.trim="bridges.settings.draft"
+                   placeholder="http://cataponte:8082" autocomplete="off" @keydown.enter="saveSettings()">
+          </div>
+          <p class="settings-hint">
+            Default (<span class="mono">CATAPONTE_URL</span>): <span class="mono" x-text="bridges.settings.defaultUrl"></span>
+            <template x-if="bridges.settings.custom">
+              <button type="button" class="link-btn" :disabled="bridges.settings.saving"
+                      @click="resetCataponteUrl()">use default</button>
+            </template>
+            <br>Applies to every user immediately, is saved in MongoDB and recorded in the audit log.
+          </p>
+          <div class="health-row">
+            <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px;" @click="checkCataponte()">
+              <template x-if="bridges.settings.healthState==='checking'"><span class="spinner" style="width:12px;height:12px;"></span></template>
+              <template x-if="bridges.settings.healthState!=='checking'"><span>🩺</span></template>
+              Check Cataponte
+            </button>
+            <template x-if="bridges.settings.healthState==='ok'">
+              <span class="health-msg ok">✓ <span x-text="bridges.settings.healthMsg"></span></span>
+            </template>
+            <template x-if="bridges.settings.healthState==='error'">
+              <span class="health-msg error">✕ <span x-text="bridges.settings.healthMsg"></span></span>
+            </template>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="field" style="margin-bottom:6px;">
+            <label for="cataudit-url">Cataudit URL</label>
+            <input id="cataudit-url" type="url" x-model.trim="audit.settings.draft"
+                   placeholder="http://cataudit:8084" autocomplete="off" @keydown.enter="saveSettings()">
+          </div>
+          <p class="settings-hint">
+            Default (<span class="mono">CATAUDIT_URL</span>): <span class="mono" x-text="audit.settings.defaultUrl"></span>
+            <template x-if="audit.settings.custom">
+              <button type="button" class="link-btn" :disabled="audit.settings.saving"
+                      @click="resetCatauditUrl()">use default</button>
+            </template>
+            <br>Where the Audit panel reads the audit trail. Applies to every user immediately, is saved in MongoDB
+            and recorded in the audit log.
+          </p>
+          <div class="health-row">
+            <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px;" @click="checkCataudit()">
+              <template x-if="audit.settings.healthState==='checking'"><span class="spinner" style="width:12px;height:12px;"></span></template>
+              <template x-if="audit.settings.healthState!=='checking'"><span>🩺</span></template>
+              Check Cataudit
+            </button>
+            <template x-if="audit.settings.healthState==='ok'">
+              <span class="health-msg ok">✓ <span x-text="audit.settings.healthMsg"></span></span>
+            </template>
+            <template x-if="audit.settings.healthState==='error'">
+              <span class="health-msg error">✕ <span x-text="audit.settings.healthMsg"></span></span>
+            </template>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="field" style="margin-bottom:6px;">
+            <label for="catametricas-url">Catametricas URL</label>
+            <input id="catametricas-url" type="url" x-model.trim="catametricas.draft"
+                   placeholder="http://catametricas:8083" autocomplete="off" @keydown.enter="saveSettings()">
+          </div>
+          <p class="settings-hint">
+            Default (<span class="mono">CATAMETRICAS_URL</span>): <span class="mono" x-text="catametricas.defaultUrl"></span>
+            <template x-if="catametricas.custom">
+              <button type="button" class="link-btn" :disabled="catametricas.saving"
+                      @click="resetCatametricasUrl()">use default</button>
+            </template>
+            <br>Where the overviews read their statistics. Applies to every user immediately, is saved in MongoDB
+            and recorded in the audit log.
+          </p>
+          <div class="health-row">
+            <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px;" @click="checkCatametricas()">
+              <template x-if="catametricas.healthState==='checking'"><span class="spinner" style="width:12px;height:12px;"></span></template>
+              <template x-if="catametricas.healthState!=='checking'"><span>🩺</span></template>
+              Check Catametricas
+            </button>
+            <template x-if="catametricas.healthState==='ok'">
+              <span class="health-msg ok">✓ <span x-text="catametricas.healthMsg"></span></span>
+            </template>
+            <template x-if="catametricas.healthState==='error'">
+              <span class="health-msg error">✕ <span x-text="catametricas.healthMsg"></span></span>
+            </template>
+          </div>
+        </section>
+
+        <section id="settings-panel-refresh" role="tabpanel" aria-labelledby="settings-tab-refresh"
+                 x-show="settings.tab === 'refresh'">
+          <div class="field" style="margin-bottom:6px;">
+            <label for="settings-refresh-seconds">Auto-refresh interval (seconds)</label>
+            <input id="settings-refresh-seconds" type="number" step="1" :min="auto.min" :max="auto.max"
+                   x-model.number="auto.draft" @keydown.enter="saveSettings()">
+          </div>
+          <p class="settings-hint">
+            <span x-text="auto.min + '–' + auto.max + ' s · default ' + auto.defaultSeconds + ' s'"></span>
+            <template x-if="auto.custom">
+              <button type="button" class="link-btn" :disabled="auto.saving"
+                      @click="saveRefreshInterval('DELETE')">use default</button>
+            </template>
+            <br>How often the screen refreshes, for every user; saved in MongoDB and recorded in the audit log.
+            The on/off switch in the top bar only affects this browser.
+          </p>
+
+          <div class="divider"></div>
+
+          <div class="field" style="margin-bottom:6px;">
+            <label for="collect-seconds">Catametricas collection interval (seconds)</label>
+            <input id="collect-seconds" type="number" step="1" :min="collect.min" :max="collect.max"
+                   x-model.number="collect.draft" @keydown.enter="saveSettings()">
+          </div>
+          <p class="settings-hint">
+            <span x-text="collect.min + '–' + collect.max + ' s · default ' + collect.defaultSeconds + ' s'"></span>
+            <template x-if="collect.custom">
+              <button type="button" class="link-btn" @click="saveCollectInterval('DELETE')">use default</button>
+            </template>
+            <br>How often Catametricas reads every topic's statistics into MongoDB. Applies from its next interval;
+            saved in MongoDB and recorded in the audit log.
+          </p>
+        </section>
       </div>
 
-      <p class="settings-hint">Shown in the top bar of this browser; the server connects to <span class="mono">PULSAR_SERVICE_URL</span>.</p>
-
-      <div class="divider"></div>
-
-      <div class="field" style="margin-bottom:6px;">
-        <label for="cataponte-url">Cataponte URL</label>
-        <input id="cataponte-url" type="url" x-model.trim="bridges.settings.draft"
-               placeholder="http://cataponte:8082" autocomplete="off" @keydown.enter="saveSettings()">
-      </div>
-      <p class="settings-hint">
-        Default (<span class="mono">CATAPONTE_URL</span>): <span class="mono" x-text="bridges.settings.defaultUrl"></span>
-        <template x-if="bridges.settings.custom">
-          <button type="button" class="link-btn" :disabled="bridges.settings.saving"
-                  @click="resetCataponteUrl()">use default</button>
-        </template>
-        <br>Applies to every user immediately, is saved in MongoDB and recorded in the audit log.
-      </p>
-      <div class="health-row">
-        <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px;" @click="checkCataponte()">
-          <template x-if="bridges.settings.healthState==='checking'"><span class="spinner" style="width:12px;height:12px;"></span></template>
-          <template x-if="bridges.settings.healthState!=='checking'"><span>🩺</span></template>
-          Check Cataponte
-        </button>
-        <template x-if="bridges.settings.healthState==='ok'">
-          <span class="health-msg ok">✓ <span x-text="bridges.settings.healthMsg"></span></span>
-        </template>
-        <template x-if="bridges.settings.healthState==='error'">
-          <span class="health-msg error">✕ <span x-text="bridges.settings.healthMsg"></span></span>
-        </template>
-      </div>
-
-      <div class="divider"></div>
-
-      <div class="field" style="margin-bottom:6px;">
-        <label for="cataudit-url">Cataudit URL</label>
-        <input id="cataudit-url" type="url" x-model.trim="audit.settings.draft"
-               placeholder="http://cataudit:8084" autocomplete="off" @keydown.enter="saveSettings()">
-      </div>
-      <p class="settings-hint">
-        Default (<span class="mono">CATAUDIT_URL</span>): <span class="mono" x-text="audit.settings.defaultUrl"></span>
-        <template x-if="audit.settings.custom">
-          <button type="button" class="link-btn" :disabled="audit.settings.saving"
-                  @click="resetCatauditUrl()">use default</button>
-        </template>
-        <br>Where the Audit panel reads the audit trail. Applies to every user immediately, is saved in MongoDB
-        and recorded in the audit log.
-      </p>
-      <div class="health-row">
-        <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px;" @click="checkCataudit()">
-          <template x-if="audit.settings.healthState==='checking'"><span class="spinner" style="width:12px;height:12px;"></span></template>
-          <template x-if="audit.settings.healthState!=='checking'"><span>🩺</span></template>
-          Check Cataudit
-        </button>
-        <template x-if="audit.settings.healthState==='ok'">
-          <span class="health-msg ok">✓ <span x-text="audit.settings.healthMsg"></span></span>
-        </template>
-        <template x-if="audit.settings.healthState==='error'">
-          <span class="health-msg error">✕ <span x-text="audit.settings.healthMsg"></span></span>
-        </template>
-      </div>
-
-      <div class="divider"></div>
-
-      <div class="field" style="margin-bottom:6px;">
-        <label for="catametricas-url">Catametricas URL</label>
-        <input id="catametricas-url" type="url" x-model.trim="catametricas.draft"
-               placeholder="http://catametricas:8083" autocomplete="off" @keydown.enter="saveSettings()">
-      </div>
-      <p class="settings-hint">
-        Default (<span class="mono">CATAMETRICAS_URL</span>): <span class="mono" x-text="catametricas.defaultUrl"></span>
-        <template x-if="catametricas.custom">
-          <button type="button" class="link-btn" :disabled="catametricas.saving"
-                  @click="resetCatametricasUrl()">use default</button>
-        </template>
-        <br>Where the overviews read their statistics. Applies to every user immediately, is saved in MongoDB
-        and recorded in the audit log.
-      </p>
-      <div class="health-row">
-        <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px;" @click="checkCatametricas()">
-          <template x-if="catametricas.healthState==='checking'"><span class="spinner" style="width:12px;height:12px;"></span></template>
-          <template x-if="catametricas.healthState!=='checking'"><span>🩺</span></template>
-          Check Catametricas
-        </button>
-        <template x-if="catametricas.healthState==='ok'">
-          <span class="health-msg ok">✓ <span x-text="catametricas.healthMsg"></span></span>
-        </template>
-        <template x-if="catametricas.healthState==='error'">
-          <span class="health-msg error">✕ <span x-text="catametricas.healthMsg"></span></span>
-        </template>
-      </div>
-
-      <div class="divider"></div>
-
-      <div class="field" style="margin-bottom:6px;">
-        <label for="collect-seconds">Catametricas collection interval (seconds)</label>
-        <input id="collect-seconds" type="number" step="1" :min="collect.min" :max="collect.max"
-               x-model.number="collect.draft" @keydown.enter="saveSettings()">
-      </div>
-      <p class="settings-hint">
-        <span x-text="collect.min + '–' + collect.max + ' s · default ' + collect.defaultSeconds + ' s'"></span>
-        <template x-if="collect.custom">
-          <button type="button" class="link-btn" @click="saveCollectInterval('DELETE')">use default</button>
-        </template>
-        <br>How often Catametricas reads every topic's statistics into MongoDB. Applies from its next interval;
-        saved in MongoDB and recorded in the audit log.
-      </p>
-
-      <div class="divider"></div>
-
-      <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <div class="settings-footer">
         <button class="btn btn-secondary" @click="settings.open=false">Cancel</button>
-        <button class="btn btn-primary" :disabled="bridges.settings.saving || audit.settings.saving"
+        <button class="btn btn-primary" :disabled="bridges.settings.saving || audit.settings.saving || auto.saving"
                 @click="saveSettings()">Save</button>
       </div>
     </div>
@@ -822,6 +854,17 @@
             <p class="muted overview-fresh" x-text="overviewFreshness()"></p>
           </div>
           <div class="overview-controls">
+            <button type="button" class="btn btn-ghost btn-xs" @click="collectNow()" :disabled="force.busy"
+                    title="Ask Catametricas to collect this view now (each namespace at most once every 5 s); recorded in the audit log">
+              <template x-if="force.busy"><span class="spinner" style="width:11px;height:11px;"></span></template>
+              <template x-if="!force.busy"><span aria-hidden="true">⟳</span></template>
+              Collect now
+            </button>
+            <button type="button" class="btn btn-ghost btn-xs live-toggle" :class="{ on: live.on }" :aria-pressed="live.on"
+                    x-show="overviewScope() === 'namespace'" @click="live.on ? stopLive() : startLive()"
+                    title="Collect this namespace every 5 s while this browser tab is visible; turns itself off after 10 minutes">
+              <span class="live-dot" aria-hidden="true"></span> Live
+            </button>
             <div class="seg" role="group" aria-label="Period">
               <template x-for="p in ['1h', '24h', '7d', '30d']" :key="p">
                 <button type="button" :class="{ active: overview.period === p }" :aria-pressed="overview.period === p"
@@ -836,6 +879,23 @@
             </div>
           </div>
         </header>
+
+        <template x-if="live.on">
+          <div class="live-banner" role="status" aria-live="polite">
+            <span class="live-dot" aria-hidden="true"></span>
+            <strong>LIVE</strong>
+            <span>
+              <span class="mono" x-text="live.scope"></span> collected every 5 s
+              · only this namespace
+              · <span x-text="live.paused ? 'paused while this browser tab is hidden' : 'only while this tab is visible'"></span>
+              · turns off in <span class="mono" x-text="liveRemaining()"></span>
+            </span>
+            <template x-if="live.lastError">
+              <span class="live-error" x-text="'· ' + live.lastError"></span>
+            </template>
+            <button type="button" class="btn btn-ghost btn-xs" @click="stopLive()">Stop</button>
+          </div>
+        </template>
 
         <template x-if="overview.loading">
           <div style="text-align:center;padding:60px"><div class="spinner"></div></div>
@@ -952,7 +1012,9 @@
                           <td>
                             <template x-if="row.current">
                               <div><span :class="row.current.backlogMsgs ? 'num-strong' : 'muted'" x-text="fmtNum(row.current.backlogMsgs)"></span>
-                                <div class="row-sub muted" x-text="fmtBytes(row.current.backlogBytes)"></div></div>
+                                <div class="row-sub muted" x-text="fmtBytes(row.current.backlogBytes)"></div>
+                                <div class="row-sub muted" x-show="isCollectTasksRow(row)"
+                                     title="A scheduled collection of this namespace is itself a task on this topic, acknowledged only when the collection ends">may include the task being collected</div></div>
                             </template>
                             <template x-if="!row.current"><span class="muted">—</span></template>
                           </td>

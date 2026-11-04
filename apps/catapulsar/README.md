@@ -11,14 +11,14 @@ Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs
 | Area | What you can do |
 |---|---|
 | **Cluster tree** | Browse tenants → namespaces → topics; create and delete topics |
-| **Overviews** | Home = cluster (tenants); click a tenant = its namespaces; click a namespace = its topics. Backlog, rates, storage, counts, traffic in the last 1 h / 24 h / 7 d / 30 d, all-time traffic, chart and sparklines (published, delivered or backlog). Data from Catametricas' API (ADR 0007, 0013) |
+| **Overviews** | Home = cluster (tenants); click a tenant = its namespaces; click a namespace = its topics. Backlog, rates, storage, counts, traffic in the last 1 h / 24 h / 7 d / 30 d, all-time traffic, chart and sparklines (published, delivered or backlog). Data from Catametricas' API (ADR 0007, 0013); figures are those of the last collection, so `collect-tasks` notes that its backlog may include the task being collected. **⟳ Collect now** has Catametricas collect the view's scope at once (each namespace at most every 5 s, audited). **● Live** (namespace views only) does it every 5 s, only while the browser tab is visible, and turns itself off after 10 minutes or when you leave the namespace; a red banner shows it is on, what it covers and the time left |
 | **Overview** | Message rates, throughput, backlog, producers, subscriptions, storage |
 | **Subscriptions** | List, create and delete subscriptions. Pulsar's own subscriptions (`__compaction`, any name starting with `__`) get a *system* tag and can only be read and peeked |
 | **Produce** | Send a message with an optional key |
 | **Subscription details** | Backlog per subscription in Overview, with **Clear backlog** (skips every message) |
 | **Backlog** | Subscriptions with backlog statistics (messages, size as computed by Pulsar on request, consumers, type, rate out, unacked) refreshed automatically; one click peeks up to 100 messages without consuming them (audited); view, edit & re-produce, skip one or all |
 | **Bridges** | Create, edit, enable/disable and delete Cataponte bridges (subscription `Shared`, `Failover` or `Key_Shared`); running state over every Cataponte replica ("1/3 replicas active"), errors, loop blocks and all-time message counts per topic |
-| **Settings** | ⚙️ Connection Settings: Cataponte, Cataudit and Catametricas URLs and the Catametricas collection interval, changed at runtime (saved in MongoDB, audited, published on the settings topic) |
+| **Settings** | ⚙️ Settings, in tabs: **Connections** (Pulsar label, Cataponte, Cataudit and Catametricas URLs, each with a check button) and **Refresh & collection** (auto-refresh interval and Catametricas collection interval). Changed at runtime: saved in MongoDB, audited, published on the settings topic. Only the body scrolls; title, tabs and buttons stay visible |
 | **Breadcrumb** | Cluster › tenant › namespace › topic, each part clickable |
 | **Auto-refresh** | Top bar "Auto N s": on/off per browser; ▾ sets the interval for everyone (2–300 s, default 10 s, saved in MongoDB, audited). Refreshes the sidebar, Overview, Subscriptions and Bridges; never repeats a backlog peek |
 | **Audit** | 🛡 Audit panel: the audit trail of every app, from Cataudit (ADR 0009). Filters by app, entity, action, subject prefix, actor and period. Each row expands into before/after and details; clicking a subject filters by it; refreshed automatically |
@@ -41,6 +41,10 @@ Events (ADR 0008, catacommons) ──► Pulsar catacumbas69/catapulsar/events  
 Settings (ADR 0011)            ──► Pulsar catacumbas69/catapulsar/settings  (compacted, key = setting key)
 ```
 
+- **View of one topic = current state from Pulsar** (orch.md OBS-10): the Overview, Subscriptions and Backlog tabs
+  read the topic's statistics, subscriptions and messages from Pulsar's admin API on every refresh, never from
+  Catametricas, because that view is for acting on the topic. Overviews of the cluster, a tenant or a namespace
+  come from Catametricas (last collection, or **Collect now** / **Live**).
 - The browser never talks to Pulsar, Cataponte, Cataudit or Catametricas directly: no CORS, and they stay
   internal.
 - **Overviews**: for each view Catapulsar asks Catametricas for the topics of the scope (`/api/v1/topics`), the
@@ -78,12 +82,12 @@ All settings have in-cluster defaults in `application.properties`; override them
 
 Timeouts, producer cache size and the peek limit are under `catapulsar.*` in `application.properties`.
 
-`CATAPONTE_URL` is only the default: the Cataponte URL can be changed in ⚙️ Connection Settings. The new
+`CATAPONTE_URL` is only the default: the Cataponte URL can be changed in ⚙️ Settings → Connections. The new
 URL is stored in `catapulsar_settings`, published on the settings topic (every replica follows it within
 seconds, ADR 0011) and recorded in the audit log (`setting.changed`). "Use default" deletes it and goes back to
 `CATAPONTE_URL`. All settings work this way.
 
-`CATAUDIT_URL` works the same way: it is the default of the Cataudit URL, editable in ⚙️ Connection Settings or
+`CATAUDIT_URL` works the same way: it is the default of the Cataudit URL, editable in ⚙️ Settings → Connections or
 from the link in the Audit panel header, with a "Check Cataudit" button. So does `CATAMETRICAS_URL`, the
 default of the Catametricas URL, with a "Check Catametricas" button; when the overviews cannot reach
 Catametricas the panel offers a link to it.
@@ -144,6 +148,7 @@ Full contract: <http://localhost:8081/swagger-ui.html>. Errors are RFC 9457 Prob
 | `GET` | `/api/v1/overview?period=` | Cluster overview, one row per tenant (`period` = `1h`, `24h`, `7d`, `30d`; `503` if Catametricas is down) |
 | `GET` | `/api/v1/overview/{tenant}?period=` | Tenant overview, one row per namespace |
 | `GET` | `/api/v1/overview/{tenant}/{namespace}?period=` | Namespace overview, one row per topic (partitions summed) |
+| `POST` | `/api/v1/overview/collect?tenant=&namespace=` | Forced collection of the scope by Catametricas (`POST /api/v1/collect`, browser address as `X-Forwarded-For`); `503` if Catametricas is down |
 | `GET` | `/api/v1/audit?app=&entity=&action=&subject=&actor=&from=&to=&page=0&size=50` | Audit trail from Cataudit, newest first, with `total` (`503` if Cataudit is down) |
 | `GET` | `/api/v1/audit/facets` | Apps, entities and actions in use (filter lists) |
 | `GET` | `/api/v1/audit/{id}` | One audit entry |

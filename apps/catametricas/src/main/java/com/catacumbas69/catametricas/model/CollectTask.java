@@ -29,6 +29,20 @@ public record CollectTask(String id, String namespace, String bucket, int interv
     }
 
     /**
+     * Creates a forced collection of a namespace (POST {@code /api/v1/collect}). Its id is
+     * {@code forced:<tenant>/<namespace>@<window start>}, so every request in the same window claims the same
+     * task and only the first one collects.
+     *
+     * @param namespace full namespace, {@code tenant/namespace}
+     * @param window start of the forced-collection window
+     * @param intervalSeconds collection interval in use
+     * @return the task
+     */
+    public static CollectTask forced(String namespace, Instant window, int intervalSeconds) {
+        return new CollectTask("forced:" + namespace + "@" + window, namespace, window.toString(), intervalSeconds);
+    }
+
+    /**
      * Tells whether the task has what an instance needs to run it.
      *
      * @return {@code true} if id and namespace ({@code tenant/namespace}) are present

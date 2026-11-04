@@ -1,6 +1,7 @@
 package com.catacumbas69.catametricas.controller;
 
 import com.catacumbas69.catametricas.service.InvalidQueryException;
+import org.apache.pulsar.client.admin.PulsarAdminException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -28,6 +29,20 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     public ProblemDetail handleInvalidQuery(InvalidQueryException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         problem.setTitle("Invalid query");
+        return problem;
+    }
+
+    /**
+     * Pulsar cannot be read (e.g. the namespaces of a forced collection cannot be listed).
+     *
+     * @param ex the failure
+     * @return {@code 502}
+     */
+    @ExceptionHandler(PulsarAdminException.class)
+    public ProblemDetail handlePulsarUnavailable(PulsarAdminException ex) {
+        LOG.warn("Pulsar admin call failed: {}", ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, ex.getMessage());
+        problem.setTitle("Pulsar unavailable");
         return problem;
     }
 

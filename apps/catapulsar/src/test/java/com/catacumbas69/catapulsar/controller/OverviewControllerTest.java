@@ -6,14 +6,17 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.catacumbas69.catapulsar.dto.OverviewResponse;
+import com.catacumbas69.catapulsar.service.CatametricasClient;
 import com.catacumbas69.catapulsar.service.CatametricasUnavailableException;
 import com.catacumbas69.catapulsar.service.OverviewPeriod;
 import com.catacumbas69.catapulsar.service.OverviewService;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,6 +64,35 @@ class OverviewControllerTest {
         mvc.perform(get("/api/v1/overview"))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.title").value("Catametricas unavailable"));
+    }
+
+    @Test
+    void collect_forwardsTheScopeAndTheBrowserAddress() throws Exception {
+        when(overview.collect("home", "media", "10.0.0.1")).thenReturn(new CatametricasClient.ForcedCollection(
+                "home/media", List.of("home/media"), 1, 0, List.of(), Instant.parse("2026-11-04T09:00:07Z"), 180));
+
+        mvc.perform(post("/api/v1/overview/collect").param("tenant", "home").param("namespace", "media")
+                        .with(request -> {
+                            request.setRemoteAddr("10.0.0.1");
+                            return request;
+                        }))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.collected").value(1));
+    }
+
+    @Test
+    void collect_rejectsInvalidNames() throws Exception {
+        mvc.perform(post("/api/v1/overview/collect").param("tenant", "bad name"))
+                .andExpect(status().isBadRequest());
+        verify(overview, never()).collect(any(), any(), any());
+    }
+
+    @Test
+    void collect_returns503_whenCatametricasIsDown() throws Exception {
+        when(overview.collect(null, null, "127.0.0.1"))
+                .thenThrow(new CatametricasUnavailableException(new IOException("refused")));
+
+        mvc.perform(post("/api/v1/overview/collect")).andExpect(status().isServiceUnavailable());
     }
 
     private static OverviewResponse empty(String scope) {

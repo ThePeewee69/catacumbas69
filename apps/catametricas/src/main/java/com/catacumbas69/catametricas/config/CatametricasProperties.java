@@ -62,13 +62,16 @@ public record CatametricasProperties(
      * @param concurrency parallel topic-stats calls per collection
      * @param minuteRetention how long per-minute history is kept (TTL index)
      * @param skipSystemTopics ignore Pulsar system topics (local name starts with {@code __})
+     * @param forcedWindow a forced collection of a namespace runs at most once per window, shared by every caller
+     *                     and instance; later requests in the same window get the collection already made
      */
     public record Collect(
             @Min(MIN_INTERVAL_SECONDS) @Max(MAX_INTERVAL_SECONDS) int defaultIntervalSeconds,
             @NotNull Duration initialDelay,
             @Min(1) @Max(64) int concurrency,
             @NotNull Duration minuteRetention,
-            boolean skipSystemTopics) {
+            boolean skipSystemTopics,
+            @NotNull Duration forcedWindow) {
     }
 
     /**

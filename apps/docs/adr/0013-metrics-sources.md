@@ -11,6 +11,12 @@ one is planned together with OpenMetrics collection and Loki.
 ## Decision
 
 - **Catametricas is the only metrics API**. Callers never query MongoDB or Prometheus themselves.
+- **Boundary (2026-11-04):** everything Catapulsar shows in the **view of one topic** (Overview, Subscriptions and
+  Backlog tabs: rates, backlog, storage, subscriptions, consumers, peeked messages) is the **current state of that
+  topic**, read by Catapulsar **directly from Pulsar** on every refresh, never from Catametricas. That view is for
+  operating on the topic (produce, peek, skip, clear backlog), so it must show the state the action applies to.
+  Everything **aggregated or historical** (cluster, tenant and namespace overviews, series, all-time totals,
+  topics that are gone, alerts) comes from Catametricas.
 - Today all ranges come from MongoDB.
 - When Prometheus is installed on MicroShift and scrapes the brokers, Catametricas gains a Prometheus source
   (configured by `CATAMETRICAS_PROMETHEUS_URL`): ranges up to 24 h are answered with PromQL over
@@ -37,3 +43,7 @@ one is planned together with OpenMetrics collection and Loki.
   `/swagger-ui.html`.
 - Catapulsar calls this API from `OverviewService` at the editable Catametricas URL (`CATAMETRICAS_URL` by
   default) and answers `503` for the overviews when Catametricas is down.
+- **Forced collection (2026-11-04, orch.md decisions 50–53):** `POST /api/v1/collect?tenant&namespace` collects a scope
+  now through the same claim and idempotent write as the scheduled tasks, at most once per namespace every 5 s.
+  Catapulsar's overviews use it for **Collect now** and **Live** (namespace only, every 5 s, while the tab is
+  visible, off after 10 minutes).

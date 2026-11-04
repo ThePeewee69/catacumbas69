@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServiceUnavailable;
@@ -59,6 +60,22 @@ class CatametricasClientTest {
             assertThat(group.msgsIn()).containsExactly(4L);
             assertThat(group.backlog()).containsExactly((Long) null);
         });
+    }
+
+    @Test
+    void collect_postsTheScope_withTheBrowserAddress() {
+        catametricas.expect(requestTo(URI.create("http://localhost:8083/api/v1/collect?tenant=home&namespace=media")))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Forwarded-For", "10.0.0.1"))
+                .andRespond(withSuccess("{\"scope\":\"home/media\",\"namespaces\":[\"home/media\"],\"collected\":1,"
+                        + "\"coalesced\":0,\"failed\":[],\"finishedAt\":\"2026-11-04T09:00:07Z\",\"durationMillis\":180}",
+                        MediaType.APPLICATION_JSON));
+
+        CatametricasClient.ForcedCollection result = client.collect("home", "media", "10.0.0.1");
+
+        assertThat(result.scope()).isEqualTo("home/media");
+        assertThat(result.collected()).isEqualTo(1);
+        assertThat(result.failed()).isEmpty();
     }
 
     @Test

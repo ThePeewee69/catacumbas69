@@ -83,6 +83,26 @@ public class CatametricasClient {
         });
     }
 
+    /**
+     * Asks Catametricas to collect a scope now and waits for it (forced collection, at most once per namespace
+     * every 5 s; Catametricas audits it as {@code collection.forced}).
+     *
+     * @param tenant tenant, or {@code null} for the whole cluster
+     * @param namespace namespace inside the tenant, or {@code null}
+     * @param actor browser address, sent as {@code X-Forwarded-For} for the audit
+     * @return what was collected
+     * @throws CatametricasUnavailableException if Catametricas cannot be reached or fails
+     */
+    public ForcedCollection collect(String tenant, String namespace, String actor) {
+        URI uri = scope("/api/v1/collect", tenant, namespace).encode().build().toUri();
+        try {
+            return catametricas.post().uri(uri).header(BridgeProxyService.FORWARDED_FOR, actor)
+                    .accept(MediaType.APPLICATION_JSON).retrieve().body(ForcedCollection.class);
+        } catch (ResourceAccessException | HttpServerErrorException e) {
+            throw new CatametricasUnavailableException(e);
+        }
+    }
+
     private UriComponentsBuilder scope(String path, String tenant, String namespace) {
         UriComponentsBuilder uri = UriComponentsBuilder.fromUriString(endpoint.url()).path(path);
         if (tenant != null) {
@@ -181,5 +201,20 @@ public class CatametricasClient {
      * @param intervalSeconds interval in use
      */
     public record Collector(Instant lastCollectionAt, Integer intervalSeconds) {
+    }
+
+    /**
+     * Result of a forced collection.
+     *
+     * @param scope {@code cluster}, a tenant, or {@code tenant/namespace}
+     * @param namespaces the namespaces of the scope
+     * @param collected namespaces collected by this request
+     * @param coalesced namespaces already collected by another request in the same 5 s window
+     * @param failed namespaces that could not be collected
+     * @param finishedAt when Catametricas finished
+     * @param durationMillis how long it took
+     */
+    public record ForcedCollection(String scope, List<String> namespaces, int collected, int coalesced,
+                                   List<String> failed, Instant finishedAt, long durationMillis) {
     }
 }

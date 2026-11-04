@@ -118,7 +118,7 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 | `SERVER_PORT` | all (only for a second local instance) | Catapulsar `8081`, Cataponte `8082`, Catametricas `8083`, Cataudit `8084` | e.g. `8092`, `8093` |
 
 `CATAPONTE_URL`, `CATAUDIT_URL` and `CATAMETRICAS_URL` are defaults; each can be changed at runtime from
-Catapulsar's Connection Settings (`PUT /api/v1/settings/cataponte|cataudit|catametricas`), which stores them in
+Catapulsar's Settings → Connections (`PUT /api/v1/settings/cataponte|cataudit|catametricas`), which stores them in
 `catapulsar_settings`, audits the change and publishes it on the settings topic. Deleting the setting goes back
 to the env var.
 
@@ -611,6 +611,10 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 - **OBS-7 [MUST]** Cataponte stores per-topic message and byte counts per bridge: all-time totals and
   per-minute history, served at `GET /api/v1/bridges/traffic`, `/{id}/traffic` and
   `/{id}/traffic/minutes?from&to`.
+- **OBS-10 [MUST]** Everything Catapulsar shows in the view of one topic (Overview, Subscriptions and Backlog tabs)
+  is the **current state of that topic**, read directly from Pulsar's admin API on every refresh, never from
+  Catametricas: the view is for operating on the topic, so it shows the state the actions apply to. Aggregated and
+  historical figures (overviews, series, totals, alerts) come from Catametricas only (OBS-8, ADR 0013).
 - **OBS-8 [MUST]** Catametricas stores every topic's traffic and backlog (ADR 0007) and is the only metrics API
   (ADR 0013): `GET /api/v1/topics`, `/api/v1/series?groupBy=&from=&to=&step=` and `/api/v1/collector`.
   Catapulsar shows them as the cluster (tenants), tenant (namespaces) and namespace (topics) overviews at
@@ -790,7 +794,8 @@ Principles:
 - **Every service runs N replicas, all working**: Pulsar subscriptions distribute bridge messages, collection
   tasks and audit events; writes are idempotent (deterministic ids, conditional updates, claims) (ADR 0012).
 - **Catametricas is the only metrics API**; MongoDB for history, Prometheus for short ranges once it exists
-  on MicroShift (ADR 0013).
+  on MicroShift (ADR 0013). Exception: everything in Catapulsar's **view of one topic** is that topic's current
+  state, read directly from Pulsar on every refresh (OBS-10).
 
 ### Phases
 
@@ -909,6 +914,21 @@ Start-up fix (2026-11-01):
     quota stays **1 GB**, and `CatacommonsProperties` **refuses to start** when the quota is not below the retention
     (compared in whole megabytes; a retention of zero or less is not checked).
 
+Forced collection and live mode (2026-11-04):
+
+50. Catametricas offers a **forced collection**, `POST /api/v1/collect?tenant&namespace`, synchronous. Each namespace
+    of the scope runs through the normal claim and idempotent write as task `forced:<namespace>@<window start>`, so a
+    namespace is collected **at most once every 5 s** (`catametricas.collect.forced-window`), shared by every caller
+    and replica; later requests in the window count it as coalesced.
+51. Each forced collection is **audited by its owner**, Catametricas, as `collection.forced` (actor = browser address
+    from `X-Forwarded-For`). Catapulsar forwards the request (`POST /api/v1/overview/collect`) without an event of
+    its own.
+52. Catapulsar's overviews get **⟳ Collect now** (cluster, tenant and namespace) and **● Live** (namespace only):
+    a forced collection every 5 s, **only while the browser tab is visible**, **off after 10 minutes** and when
+    the user leaves the namespace.
+53. While live mode is on, a **red banner** above the overview shows the namespace, the three limits and the time
+    left, with a Stop button.
+
 Phase 7 decisions (2026-11-04, planned — ADR 0014 to be written before any code):
 
 42. A message that keeps failing is **poison**: after **N deliveries** (default **10**, about 2 minutes) Pulsar moves it
@@ -925,7 +945,8 @@ Phase 7 decisions (2026-11-04, planned — ADR 0014 to be written before any cod
 46. Actions are taken by **the owner of each resource** through its existing API (ADR 0010): Catapulsar for DLQ
     messages (peek, send back to the original topic, discard), Cataponte for bridges. Catavigia only watches.
 47. Catapulsar gets an **alerts and actions** panel. Its Settings dialog is split into **tabs** (connections, refresh
-    and collection, alerts), with the alert limits in the alerts tab.
+    and collection, alerts), with the alert limits in the alerts tab. *(Connections and Refresh & collection done on
+    2026-11-04, with the auto-refresh interval also editable there; the Alerts tab comes with phase 7.)*
 48. Like every app, Catavigia publishes an **event for every action** (`alert.opened`, `alert.closed`, changes of its
     configuration) on `catacumbas69/catavigia/events`, and registers its `audit-catavigia` bridge so Cataudit stores
     them.

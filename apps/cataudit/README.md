@@ -66,7 +66,7 @@ loses nothing and the audit view works from the first action (reasons in
 [orch.md §2.1](../orch.md#21-configuration-contract)).
 
 Run `CatauditApplication` (port **8084**). In Catapulsar set `CATAUDIT_URL=http://localhost:8084`, or change the
-Cataudit URL in ⚙️ Connection Settings. Settings are
+Cataudit URL in ⚙️ Settings → Connections. Settings are
 under `cataudit.*` in `application.properties`.
 
 ## Build and test

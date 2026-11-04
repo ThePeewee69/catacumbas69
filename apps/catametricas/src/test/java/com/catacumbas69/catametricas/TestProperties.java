@@ -16,7 +16,8 @@ public final class TestProperties {
                 new CatametricasProperties.Pulsar("http://localhost:8080", Duration.ofSeconds(1), Duration.ofSeconds(1),
                         Duration.ofSeconds(1), "pulsar://localhost:6650", "", Duration.ofSeconds(1),
                         Duration.ofSeconds(1)),
-                new CatametricasProperties.Collect(60, Duration.ofSeconds(10), 4, Duration.ofDays(30), true),
+                new CatametricasProperties.Collect(60, Duration.ofSeconds(10), 4, Duration.ofDays(30), true,
+                        Duration.ofSeconds(5)),
                 new CatametricasProperties.Tasks("catametricas", 1, Duration.ofSeconds(10), Duration.ofSeconds(10),
                         Duration.ofMinutes(5), Duration.ofHours(6)),
                 new CatametricasProperties.Mongo(Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(1)));
