@@ -75,6 +75,14 @@ class ConsumerControlTest {
     }
 
     @Test
+    void unavailable_namesTheDependencyThatIsDown() {
+        assertThat(control.unavailable(gate)).hasValue("mongodb unavailable: timeout");
+
+        mongoUp.set(true);
+        assertThat(control.unavailable(gate)).isEmpty();
+    }
+
+    @Test
     void namesTheConsumerAfterTheAppAndTheInstance() {
         assertThat(control.consumerName()).isEqualTo("cataudit@" + control.instance());
     }

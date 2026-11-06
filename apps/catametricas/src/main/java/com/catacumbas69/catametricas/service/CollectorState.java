@@ -1,5 +1,6 @@
 package com.catacumbas69.catametricas.service;
 
+import com.catacumbas69.catacommons.consumers.InstanceId;
 import com.catacumbas69.catacommons.events.EventData;
 import com.catacumbas69.catacommons.events.EventPublisher;
 import com.catacumbas69.catametricas.model.TaskRun;
@@ -10,6 +11,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -34,13 +36,25 @@ public class CollectorState {
     private volatile Boolean healthy;
 
     /**
-     * Creates the state.
+     * Creates the state with a new instance id (tests).
      *
      * @param events publishes failure and recovery events
      */
     public CollectorState(EventPublisher events) {
         this.events = events;
         this.instance = hostName() + "-" + UUID.randomUUID().toString().substring(0, 8);
+    }
+
+    /**
+     * Creates the state with this replica's id, the same one its consumers are named after.
+     *
+     * @param events publishes failure and recovery events
+     * @param instanceId this replica
+     */
+    @Autowired
+    public CollectorState(EventPublisher events, InstanceId instanceId) {
+        this.events = events;
+        this.instance = instanceId.id();
     }
 
     /**

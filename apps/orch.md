@@ -889,7 +889,9 @@ Phase 4 decisions (2026-11-01):
     `contario_locks` and `contario_status` are dropped. If both names exist, the old one is left with a warning.
 32. One collection task **per namespace and interval**, id `<tenant>/<namespace>@<interval start>`; intervals
     are aligned to the epoch so every instance publishes the same ids. Claims live 6 h (TTL).
-33. **Every task is run, however late**: the conditional snapshot update makes a late or repeated task harmless.
+33. ~~**Every task is run, however late**~~ *(replaced by 43 and 66 in phase 7a: a task that fails N times on its own
+    goes to the DLQ; one that fails because MongoDB or Pulsar is down pauses the consumer)*: the conditional snapshot
+    update makes a late or repeated task harmless.
     A failed task releases its claim and is delivered again after 10 s, doubling up to 5 min.
 34. Overviews answer **`503` with an error in the panel** when Catametricas is down (`catametricas` health
     component, not part of readiness).

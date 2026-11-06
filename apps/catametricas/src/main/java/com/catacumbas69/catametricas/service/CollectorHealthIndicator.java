@@ -31,7 +31,11 @@ public class CollectorHealthIndicator implements HealthIndicator {
     public Health health() {
         Health.Builder health = Health.up()
                 .withDetail("instance", state.instance())
-                .withDetail("consuming", consumer.isConnected());
+                .withDetail("consuming", consumer.isConnected())
+                .withDetail("state", consumer.gate().state());
+        if (consumer.gate().reason() != null) {
+            health.withDetail("pausedBecause", consumer.gate().reason());
+        }
         TaskRun last = state.lastRun();
         if (last != null) {
             health.withDetail("lastTask", last.id())

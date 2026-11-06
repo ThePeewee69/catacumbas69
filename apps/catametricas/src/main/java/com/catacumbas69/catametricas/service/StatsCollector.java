@@ -46,7 +46,7 @@ public class StatsCollector {
         DONE,
         /** Already claimed by an instance; skipped. */
         DUPLICATE,
-        /** Not a usable task; dropped. */
+        /** Not a usable task; the consumer sends it straight to the DLQ. */
         INVALID,
         /** Pulsar or MongoDB failed; delivered again later. */
         RETRY
@@ -105,7 +105,7 @@ public class StatsCollector {
         if (task == null || !task.complete()) {
             invalid.increment();
             if (task != null) {
-                LOG.error("Collection task is not valid, dropped: {}", task);
+                LOG.error("Collection task is not valid: {}", task);
             }
             return Outcome.INVALID;
         }

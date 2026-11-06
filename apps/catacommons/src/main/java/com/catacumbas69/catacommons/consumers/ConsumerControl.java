@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.RejectedExecutionException;
@@ -207,6 +208,25 @@ public class ConsumerControl implements ApplicationListener<ApplicationReadyEven
                 gate.resumeAutomatically();
             }
         }
+    }
+
+    /**
+     * Checks a consumer's dependencies now, to tell an outage from a failure of the message itself: a message that
+     * failed while a dependency is down must not count towards the DLQ.
+     *
+     * @param gate the consumer
+     * @return why it cannot work (e.g. {@code mongodb unavailable: …}), or empty when every dependency answers
+     */
+    public Optional<String> unavailable(ConsumerGate gate) {
+        for (ConnectionProbe probe : probes) {
+            if (gate.dependencies().contains(probe.name())) {
+                ProbeResult result = safeProbe(probe);
+                if (!result.up()) {
+                    return Optional.of(probe.name() + " unavailable: " + result.error());
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     private boolean dependenciesAnswer(ConsumerGate gate) {

@@ -28,8 +28,15 @@ every instance, each interval ──▶ catametricas/collect-tasks ──▶ eve
   conditional `findAndReplace` that returns the snapshot it replaced). Only the instance that replaced it adds
   the difference, so a repeated or late task never counts twice. A counter that went down is a reset. The first
   collection of a namespace only sets the starting point.
-- **Failures**: if Pulsar or MongoDB fails, the claim is released and the task is delivered again after 10 s,
-  doubling up to 5 min. Every task is run, however late.
+- **Failures** (ADR 0015): if a task fails while MongoDB and Pulsar's admin API answer, the claim is released and
+  the task is delivered again after 10 s, doubling up to 5 min; after `dlq.max-deliveries` deliveries (shared
+  setting, default 10) Pulsar moves it to `collect-tasks-catametricas-DLQ` (subscription `dlq`). If it failed
+  because MongoDB or Pulsar's admin API is down, the consumer **pauses** instead and resumes by itself when both
+  answer (checked every 5 s). A message that is not a valid task goes straight to the DLQ.
+- **Control** (orch.md decision 67): the consumer `collect-tasks` can be paused, resumed and its connections
+  checked by hand from Catapulsar's Consumers panel (`catacumbas69/catametricas/consumer-commands`); its state is
+  published on `catacumbas69/catametricas/consumers`. Each replica's consumer is named `catametricas@<instance>`,
+  the instance stored in the claims. Changes are audited as `consumer.paused|resumed|checked`.
 - **Several replicas are safe and all collect**; there is no leader.
 
 | Collection | Content | Kept |
@@ -106,7 +113,7 @@ Unit tests need no Docker, MongoDB or Pulsar.
 | Endpoint | Use |
 |---|---|
 | `/actuator/health/liveness`, `/actuator/health/readiness` | probes; readiness does not depend on Pulsar, so the API stays up |
-| `/actuator/health` | `collector` component: whether this instance consumes tasks, its last task, last error |
+| `/actuator/health` | `collector` component: whether this instance consumes tasks, its `state` (`RUNNING`, `PAUSED_AUTO` with `pausedBecause`, `PAUSED_MANUAL`), its last task, last error |
 | `/actuator/prometheus` | `catametricas_tasks_total{outcome=done\|duplicate\|invalid\|retry}`, `catametricas_collect_duration` (one namespace), `catacommons_messages_total` |
 
 Container image: `Dockerfile` (multi-stage, layered jar, non-root, port 8083), built from `apps/` (see above).
