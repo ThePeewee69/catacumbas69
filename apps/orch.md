@@ -107,7 +107,7 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 | `PULSAR_BROKER_URL` | all (binary protocol; events) | `pulsar://pulsar.pulsar.svc.cluster.local:6650` | `pulsar://192.168.86.35:31650` |
 | `PULSAR_LISTENER_NAME` | all | *(empty)* | `external` |
 | `SPRING_DATA_MONGODB_URI` | all | in-cluster ReplicaSet URI from Secret | NodePort `32017` + `authSource=admin&directConnection=true` |
-| `CATAPONTE_URL` | Catapulsar (default of the editable URL), Catametricas (audit bridge registration) | `http://cataponte.<ns>.svc.cluster.local:8082` | `http://localhost:8082` |
+| `CATAPONTE_URL` | Catapulsar (default of the editable URL), Catametricas and Cataudit (audit bridge registration) | `http://cataponte.<ns>.svc.cluster.local:8082` | `http://localhost:8082` |
 | `CATAUDIT_URL` | Catapulsar (default of the editable URL of the audit view) | `http://cataudit:8084` | `http://localhost:8084` |
 | `CATAMETRICAS_URL` | Catapulsar (default of the editable URL of the overviews) | `http://catametricas:8083` | `http://localhost:8083` |
 | `CATAPULSAR_REFRESH_INTERVAL_SECONDS` | Catapulsar | `10` | `10` |
@@ -721,6 +721,11 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-04/06, bridge areas, bridge subscriptions and UI** (`mvn clean install` at `apps/` green: catacommons 25,
+  Catapulsar 114, Cataponte 136, Catametricas 58, Cataudit 18 tests, 0 Checkstyle violations): bridge areas
+  (ADR 0014, decisions 54–59), `409` explaining a partitioned topic with the same name, subscriptions of deleted or
+  changed bridges deleted, shared subscriptions refused and consumers named (decisions 60–63), name fields corrected
+  as you type (64), sidebar nodes kept open (65).
 - **2026-11-04, forced collection** (`mvn clean install` at `apps/` green: catacommons 25, Catapulsar 106,
   Cataponte 91, Catametricas 58, Cataudit 18 tests, 0 Checkstyle violations): `POST /api/v1/collect` in
   Catametricas, **Collect now** and **Live** in Catapulsar's overviews (decisions 50–53), Settings in tabs, topic view
@@ -814,7 +819,7 @@ Each phase ends with `mvn verify` green in every app, the docs updated and the a
 | 4 | Catametricas API and tasks | Query API (`topics`, `series`, `collector`); Catapulsar overviews built from it (Catametricas URL editable); collection tasks on Pulsar with claims and conditional snapshot updates; lease removed; `contario_*` → `catametricas_*` (renamed) | **Done** 2026-11-01 |
 | 5 | Cataponte replicas | `Exclusive` rejected; N replicas, status merged over replicas (`cataponte_worker_status`); ADR 0002 superseded; collections `cataponte_*` | **Done** 2026-11-01 |
 | 6 | Prometheus source (later) | Once Prometheus/OpenMetrics/Loki run on MicroShift: short ranges from PromQL in Catametricas | Later |
-| 7 | Alerts and dead letters | Dead-letter topics for our Shared/Key_Shared consumers; new service **Catavigia** with alert history; alerts and actions panel in Catapulsar; Settings dialog in tabs (decisions 42–49; ADR 0015 to be written) | Planned |
+| 7 | Alerts and dead letters | Dead-letter topics for our Shared/Key_Shared consumers; new service **Catavigia** with alert history; alerts and actions panel in Catapulsar; Settings dialog in tabs (decisions 42–49 and 66–72; [ADR 0015](docs/adr/0015-dead-letters-and-catavigia.md); 7a: DLQs and consumer control, 7b: Catavigia and alerts) | Planned |
 
 ### Decisions taken on 2026-10-31
 
@@ -977,7 +982,7 @@ Bridge subscriptions and consumers (2026-11-04):
     path to the selection. Auto-refresh reloads only the selected node; the others reload when selected or after a
     page reload.
 
-Phase 7 decisions (2026-11-04, planned — ADR 0015 to be written before any code):
+Phase 7 decisions (2026-11-04, [ADR 0015](docs/adr/0015-dead-letters-and-catavigia.md) accepted 2026-11-06; detailed in 66–72):
 
 42. A message that keeps failing is **poison**: after **N deliveries** (default **10**, about 2 minutes) Pulsar moves it
     to a **dead-letter topic** and the consumer carries on. N is a shared setting, editable in Catapulsar's Settings.
@@ -1000,3 +1005,27 @@ Phase 7 decisions (2026-11-04, planned — ADR 0015 to be written before any cod
     them.
 49. Catavigia exposes `alerts_open{type,severity}` on `/actuator/prometheus`, for Grafana once Prometheus runs on
     MicroShift. External notifications (Telegram, email) are left for later.
+
+Phase 7, after the review of ADR 0015 (2026-11-06):
+
+66. **Only a message can be poison, not an outage.** Cataudit and Catametricas **pause** their consumer while MongoDB
+    or Pulsar's admin API is down and **resume by themselves** when it answers; a Cataponte bridge whose destination
+    fails for every message goes `FAILED` instead of negatively acknowledging. Only a failure of that message counts
+    towards N deliveries.
+67. Our consumers can be **paused, resumed and checked by hand**, per replica or all at once, from Catapulsar's
+    **Consumers** panel. A manual pause is never resumed automatically. *Check connections* pings MongoDB and Pulsar's
+    admin API now and reports each result. Status goes on the compacted topic `catacumbas69/<app>/consumers` (key =
+    instance), commands on `catacumbas69/<app>/consumer-commands` (read by every replica), **through Pulsar, not
+    MongoDB**, so they work while MongoDB is down. Each app audits `consumer.paused|resumed|checked`.
+68. DLQs are named `<topic>-<subscription>-DLQ`, in the topic's namespace, created with the subscription `dlq`, whose
+    backlog is the number of poison messages left to look at. Catapulsar's DLQ view peeks them and can **send back**
+    one to its original topic or **discard** one or all, audited.
+69. A `Failover` bridge stuck on a poison message offers **Skip this message**: Cataponte acknowledges that message,
+    publishes `bridge.message-skipped`, and the bridge carries on.
+70. Backlog alerts are **per subscription**: a subscription's own limit, set on its row in the topic view and kept by
+    Catavigia, or the **global default** in Settings → Alerts. Every threshold has a global default there.
+71. An open alert can be **marked as seen** (who, when; `alert.seen`): it stays open and leaves the badge count.
+72. A closed alert **moves to the archive** (`catavigia_alerts_archive`), kept for ever, with its own tab and filters.
+73. Cataudit registers its own **`audit-cataudit`** bridge, so its consumer events reach the audit trail (there is no
+    loop: they are published on state changes, never per message). A message that is not a CloudEvent goes
+    **straight to the DLQ** (property `DLQ_REASON`) instead of being dropped.

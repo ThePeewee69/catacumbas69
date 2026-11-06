@@ -38,7 +38,8 @@ know the collection's shape and be able to write to it.
   back-off (10 s doubling to 5 min). It calls Cataponte's new
   **`PUT /api/v1/bridges/system/{name}`**, which creates or updates the bridge by name and does nothing when
   the definition already matches. Catametricas uses `CATAPONTE_URL`. Catapulsar uses its editable Cataponte
-  URL. Cataponte registers in-process. Cataudit registers nothing.
+  URL. Cataponte registers in-process. Cataudit registered nothing until phase 7a; since then it registers
+  `audit-cataudit` for its consumer events (ADR 0015), published only on state changes, so there is no loop.
 - An audit bridge reads with subscription `cataponte-audit-<app>`, type `Failover`, ordered. It is stored
   with `system: true`. The UI shows a badge, and otherwise it is an ordinary bridge: it can be edited,
   disabled and deleted. Registering again keeps an enabled state a user changed. A deleted bridge comes back

@@ -4,6 +4,13 @@ import com.catacumbas69.catacommons.audit.AuditBridgeRegistrar;
 import com.catacumbas69.catacommons.audit.CataponteLocation;
 import com.catacumbas69.catacommons.audit.HttpSystemBridgeRegistry;
 import com.catacumbas69.catacommons.audit.SystemBridgeRegistry;
+import com.catacumbas69.catacommons.consumers.ConnectionProbe;
+import com.catacumbas69.catacommons.consumers.ConsumerCommand;
+import com.catacumbas69.catacommons.consumers.ConsumerControl;
+import com.catacumbas69.catacommons.consumers.ConsumerStatus;
+import com.catacumbas69.catacommons.consumers.DeadLetterWriter;
+import com.catacumbas69.catacommons.consumers.InstanceId;
+import com.catacumbas69.catacommons.consumers.PulsarAdminProbe;
 import com.catacumbas69.catacommons.events.CloudEvent;
 import com.catacumbas69.catacommons.events.EventPublisher;
 import com.catacumbas69.catacommons.pulsar.CatacumbasTopics;
@@ -38,7 +45,9 @@ import org.springframework.context.annotation.Bean;
  *   <li>{@link AuditBridgeRegistrar}, which registers the app's {@code audit-<app>} bridge in Cataponte
  *       (ADR 0009) through a {@link SystemBridgeRegistry}; an app can provide its own registry (Cataponte
  *       does, in-process) or its own {@link CataponteLocation} (Catapulsar does);</li>
- *   <li>{@link SharedSettings}, the shared settings read from the compacted settings topic (ADR 0011).</li>
+ *   <li>{@link SharedSettings}, the shared settings read from the compacted settings topic (ADR 0011);</li>
+ *   <li>with {@code catacommons.consumers.enabled=true}, {@link ConsumerControl} for the app's own consumers, its
+ *       status and commands topics, a {@link PulsarAdminProbe} and a {@link DeadLetterWriter} (ADR 0015).</li>
  * </ul>
  */
 @AutoConfiguration
@@ -191,5 +200,85 @@ public class CatacommonsAutoConfiguration {
     public SharedSettings sharedSettings(PulsarClient client, CatacommonsProperties properties,
                                          CatacommonsScheduler scheduler) {
         return new SharedSettings(client, scheduler.executor(), properties.settings().retryInterval());
+    }
+
+    /**
+     * This replica's identity.
+     *
+     * @param properties catacommons configuration
+     * @return the instance id
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public InstanceId catacommonsInstanceId(CatacommonsProperties properties) {
+        return new InstanceId(properties.app());
+    }
+
+    /**
+     * Declares the compacted consumer status topic.
+     *
+     * @return the topic spec
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "catacommons.consumers", name = "enabled", havingValue = "true")
+    public TopicSpec catacommonsConsumersTopic() {
+        return TopicSpec.compacted(CatacumbasTopics.CONSUMERS, Schema.JSON(ConsumerStatus.class));
+    }
+
+    /**
+     * Declares the consumer commands topic.
+     *
+     * @return the topic spec
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "catacommons.consumers", name = "enabled", havingValue = "true")
+    public TopicSpec catacommonsConsumerCommandsTopic() {
+        return TopicSpec.of(CatacumbasTopics.CONSUMER_COMMANDS, Schema.JSON(ConsumerCommand.class));
+    }
+
+    /**
+     * Checks Pulsar's admin API for the consumers.
+     *
+     * @param admin the app's admin client
+     * @return the probe
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "catacommons.consumers", name = "enabled", havingValue = "true")
+    public PulsarAdminProbe pulsarAdminProbe(PulsarAdmin admin) {
+        return new PulsarAdminProbe(admin);
+    }
+
+    /**
+     * Sends messages straight to their DLQ.
+     *
+     * @param client the app's Pulsar client
+     * @param admin creates the DLQs
+     * @return the writer, closed on shutdown
+     */
+    @Bean(destroyMethod = "close")
+    @ConditionalOnProperty(prefix = "catacommons.consumers", name = "enabled", havingValue = "true")
+    public DeadLetterWriter deadLetterWriter(PulsarClient client, PulsarAdmin admin) {
+        return new DeadLetterWriter(client, admin);
+    }
+
+    /**
+     * Controls the app's own consumers.
+     *
+     * @param client the app's Pulsar client
+     * @param properties catacommons configuration
+     * @param instance this replica
+     * @param probes the connection checks (MongoDB from the app, Pulsar from here)
+     * @param events publishes the changes
+     * @param scheduler runs the periodic work
+     * @param clock the app's clock, if any
+     * @return the control, closed on shutdown
+     */
+    @Bean(destroyMethod = "close")
+    @ConditionalOnProperty(prefix = "catacommons.consumers", name = "enabled", havingValue = "true")
+    public ConsumerControl consumerControl(PulsarClient client, CatacommonsProperties properties, InstanceId instance,
+                                           ObjectProvider<ConnectionProbe> probes, EventPublisher events,
+                                           CatacommonsScheduler scheduler, ObjectProvider<Clock> clock) {
+        return new ConsumerControl(client, properties.app(), instance, probes.orderedStream().toList(), events,
+                scheduler.executor(), properties.consumers(), clock.getIfAvailable(Clock::systemUTC));
     }
 }

@@ -25,9 +25,13 @@ public class AuditConsumerHealthIndicator implements HealthIndicator {
     @Override
     public Health health() {
         if (consumer.isConnected()) {
-            return Health.up().build();
+            Health.Builder up = Health.up().withDetail("state", consumer.gate().state());
+            if (consumer.gate().reason() != null) {
+                up.withDetail("reason", consumer.gate().reason());
+            }
+            return up.build();
         }
-        Health.Builder down = Health.down();
+        Health.Builder down = Health.down().withDetail("state", consumer.gate().state());
         if (consumer.lastError() != null) {
             down.withDetail("error", consumer.lastError());
         }

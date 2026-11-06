@@ -114,6 +114,7 @@ class PulsarProvisionerTest {
                         DataSize.ofMegabytes(1)),
                 new CatacommonsProperties.AuditBridge(true, "http://localhost:8082", Duration.ofSeconds(1),
                         Duration.ofSeconds(10), Duration.ofMinutes(5)),
-                new CatacommonsProperties.Settings(true, Duration.ofSeconds(10)));
+                new CatacommonsProperties.Settings(true, Duration.ofSeconds(10)),
+                new CatacommonsProperties.Consumers(false, Duration.ofSeconds(10), Duration.ofSeconds(5), 10));
     }
 }

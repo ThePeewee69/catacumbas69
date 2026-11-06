@@ -17,21 +17,29 @@ Catametricas┘                       └─ audit-catametricas┘        (Share
 ```
 
 - **Consumer**: subscription `cataudit`, type `Shared`, so every replica takes a share; each replica's consumer
-  is named `cataudit@<host>-<random>` in Pulsar's statistics. A message is
-  acknowledged once stored. It is also acknowledged when an event with the same id is already stored
-  (duplicates are harmless). When MongoDB fails the message is negatively acknowledged and delivered again
-  after 10 s; any other error while storing is logged at `ERROR` with the exception and the message is
-  delivered again the same way, for now without limit (RES-15; phase 7 adds a dead-letter topic after N
-  deliveries, orch.md decision 42). A message that is not a CloudEvent is logged at `ERROR`
-  and dropped. Subscribing runs in the
-  background and is retried, so Cataudit starts while Pulsar is down.
+  is named `cataudit@<instance>` in Pulsar's statistics. A message is acknowledged once stored, or when an event
+  with the same id is already stored (duplicates are harmless). Subscribing runs in the background and is retried,
+  so Cataudit starts while Pulsar is down.
+- **Poison messages** (ADR 0015): a message that fails to be stored for its own reasons is negatively acknowledged
+  and delivered again after 10 s; after `dlq.max-deliveries` deliveries (shared setting, default 10, about
+  2 minutes) Pulsar moves it to `catacumbas69/cataudit/audit-cataudit-DLQ`, whose subscription `dlq` keeps it. A
+  message that is not a CloudEvent goes there straight away (property `DLQ_REASON`). Changing the setting makes the
+  consumer subscribe again.
+- **MongoDB down** pauses the consumer (the message is delivered again later, counted once) instead of retrying
+  every message; it resumes by itself when MongoDB answers a ping (checked every 5 s).
+- **Control** (orch.md decision 67): the consumer can be paused, resumed and its connections checked by hand from
+  Catapulsar's Consumers panel, through `catacumbas69/cataudit/consumer-commands`; its state is published on
+  `catacumbas69/cataudit/consumers`. A manual pause is resumed only by hand. Each change is audited as
+  `consumer.paused|resumed|checked`.
 - **Storage**: `cataudit_events` holds the CloudEvent fields plus `app`, `entity` and `action` taken from the
   type `com.catacumbas69.<app>.<entity>.<action>.v1`, and `receivedAt`. `before`, `after` and `details` are
   stored as lists of `{key, value}` pairs, because their keys contain dots (`source.topic`) and MongoDB map
   keys cannot (MONGO-7); the API returns them as maps. Events are kept **forever**. Indexes
   cover `time` and `app`, `subject`, `actor` and `entity+action`, each with `time`.
 - **Pulsar**: at start-up catacommons creates the namespace `catacumbas69/cataudit` and the topic `audit`, with
-  the CloudEvent schema. Cataudit registers no audit bridge of its own.
+  the CloudEvent schema. Cataudit registers its own `audit-cataudit` bridge (`cataudit/events` → `cataudit/audit`)
+  in Cataponte for its consumer events; they are published only when the consumer changes state, so there is no
+  loop.
 - **Several replicas are safe**: the `Shared` subscription and the id-keyed inserts make that so.
 
 ## API
@@ -54,11 +62,12 @@ Errors are RFC 9457 Problem Details (`503` when MongoDB is down). Full contract:
 | `PULSAR_BROKER_URL` | `pulsar://192.168.86.35:31650` |
 | `PULSAR_LISTENER_NAME` | `external` |
 | `SPRING_DATA_MONGODB_URI` | `mongodb://<user>:<password>@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true` |
+| `CATAPONTE_URL` | `http://localhost:8082` (registers `audit-cataudit`) |
 
 IntelliJ *Environment variables* (replace `<user>` and `<password>`; `.idea/` stays out of Git, CFG-2):
 
 ```
-PULSAR_SERVICE_URL=http://192.168.86.35:31080;PULSAR_BROKER_URL=pulsar://192.168.86.35:31650;PULSAR_LISTENER_NAME=external;SPRING_DATA_MONGODB_URI=mongodb://<user>:<password>@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true
+PULSAR_SERVICE_URL=http://192.168.86.35:31080;PULSAR_BROKER_URL=pulsar://192.168.86.35:31650;PULSAR_LISTENER_NAME=external;SPRING_DATA_MONGODB_URI=mongodb://<user>:<password>@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true;CATAPONTE_URL=http://localhost:8082
 ```
 
 Start it **second**, after Cataponte: Cataponte → Cataudit → Catametricas → Catapulsar. Every audit bridge writes
@@ -87,7 +96,7 @@ Unit tests need no Docker, MongoDB or Pulsar.
 | Endpoint | Use |
 |---|---|
 | `/actuator/health/liveness`, `/actuator/health/readiness` | probes; readiness does not depend on Pulsar, so the API stays up |
-| `/actuator/health` | `auditConsumer` component: up while the audit topic is consumed, last error otherwise |
+| `/actuator/health` | `auditConsumer` component: up while the audit topic is consumed (with `state`: `RUNNING`, `PAUSED_AUTO` and why, `PAUSED_MANUAL`), last error otherwise |
 | `/actuator/prometheus` | `cataudit_events_total{outcome=stored\|duplicate\|invalid\|retry\|error}`, `catacommons_messages_total` |
 
 Container image: `Dockerfile` (multi-stage, layered jar, non-root, port 8084), built from `apps/`.

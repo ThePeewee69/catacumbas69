@@ -2,6 +2,8 @@ package com.catacumbas69.catacommons;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -22,6 +24,7 @@ import org.springframework.validation.annotation.Validated;
  * @param provisioning start-up creation of the tenant, namespace and topics
  * @param auditBridge start-up registration of the app's audit bridge in Cataponte (ADR 0009)
  * @param settings reader of the shared settings topic (ADR 0011)
+ * @param consumers control of the app's own consumers (ADR 0015)
  */
 @Validated
 @ConfigurationProperties(prefix = "catacommons")
@@ -30,7 +33,8 @@ public record CatacommonsProperties(
         @Valid @NotNull @DefaultValue Events events,
         @Valid @NotNull @DefaultValue Provisioning provisioning,
         @Valid @NotNull @DefaultValue AuditBridge auditBridge,
-        @Valid @NotNull @DefaultValue Settings settings) {
+        @Valid @NotNull @DefaultValue Settings settings,
+        @Valid @NotNull @DefaultValue Consumers consumers) {
 
     /**
      * Event publishing (ADR 0008).
@@ -113,5 +117,21 @@ public record CatacommonsProperties(
     public record Settings(
             @DefaultValue("true") boolean enabled,
             @NotNull @DefaultValue("10s") Duration retryInterval) {
+    }
+
+    /**
+     * Control of the app's own consumers (ADR 0015, orch.md decisions 66–68).
+     *
+     * @param enabled {@code true} in apps with consumers to control; declares the status and commands topics
+     * @param statusInterval how often each replica publishes its consumers' status
+     * @param resumeCheckInterval how often a consumer paused automatically checks whether it can resume
+     * @param maxDeliveries deliveries before a message goes to the DLQ, unless the shared setting
+     *                      {@code dlq.max-deliveries} says otherwise
+     */
+    public record Consumers(
+            @DefaultValue("false") boolean enabled,
+            @NotNull @DefaultValue("10s") Duration statusInterval,
+            @NotNull @DefaultValue("5s") Duration resumeCheckInterval,
+            @Min(2) @Max(100) @DefaultValue("10") int maxDeliveries) {
     }
 }

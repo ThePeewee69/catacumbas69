@@ -13,6 +13,10 @@ Engineering rules: [`../orch.md`](../orch.md) §4.4 Events. Decisions: [`../docs
 | `RetryingSenderFactory` | Senders for the app's other topics, with the same retries (Catapulsar uses it for the settings topic) |
 | `PulsarProvisioner` | Once the app is ready, creates the tenant `catacumbas69` (if missing), the namespace `catacumbas69/<app>` with its policies, and every `TopicSpec` bean (the events topic is always one), with its schema |
 | `AuditBridgeRegistrar` | Once the app is ready, registers its system bridge `audit-<app>` (`<app>/events` → `cataudit/audit`) in Cataponte through a `SystemBridgeRegistry`. The default registry calls `PUT /api/v1/bridges/system/{name}` at a `CataponteLocation`. Catapulsar provides its own location (the editable URL), Cataponte its own in-process registry (ADR 0009) |
+| `ConsumerControl` | With `catacommons.consumers.enabled=true` (ADR 0015): the app registers each consumer as a `ConsumerGate` (`pauseAutomatically`, `resumeAutomatically`, `pauseManually`, `resumeManually`, `attach` on every subscribe). Every 10 s and on each change it publishes a `ConsumerStatus` per consumer on the compacted `catacumbas69/<app>/consumers` (key `<instance>/<consumer>`, tombstone on shutdown), reads `ConsumerCommand`s (`pause`, `resume`, `check`; one instance or `*`) from `catacumbas69/<app>/consumer-commands`, resumes automatic pauses every 5 s once the gate's `ConnectionProbe`s answer, and publishes `consumer.paused|resumed|checked`. `consumerName()` = `<app>@<instance>` |
+| `ConnectionProbe` | Beans that check a dependency now. catacommons provides `PulsarAdminProbe` (`pulsar`); apps add theirs (MongoDB, `mongodb`) |
+| `DeadLetters`, `DeadLetterWriter` | `DeadLetters.policy(topic, subscription, n)`: Pulsar's DLQ after `n` deliveries, to `<topic>-<subscription>-DLQ` with subscription `dlq`; `maxDeliveries(settings, default)` reads the shared setting `dlq.max-deliveries` (2–100). `DeadLetterWriter.send(...)` puts a message straight in its DLQ, with Pulsar's `REAL_TOPIC` and `ORIGIN_MESSAGE_ID` plus `DLQ_REASON` |
+| `InstanceId` | This replica: host name plus a random suffix |
 | `SharedSettings` | The shared settings: a `TableView` on `catacumbas69/catapulsar/settings` opened at start-up (retried while Pulsar is down). `get(key)` and `listen(key, …)`; empty/`null` = use your default (ADR 0011) |
 
 The app must provide a `PulsarClient`, a `PulsarAdmin` and `catacommons.app=<app>`.
@@ -47,10 +51,13 @@ succeeds. "Already exists" counts as success, and policies are set again on ever
 | `catacommons.provisioning.events-retention-time` / `events-retention-size` | `7d` / `2GB` (namespace) |
 | `catacommons.provisioning.events-backlog-quota` | `1GB`, `producer_exception` (namespace); must be smaller than the retention size, or the app refuses to start (Pulsar refuses it with `412`) |
 | `catacommons.provisioning.compaction-threshold` | `1MB` (compacted topics, plus infinite retention) |
-| `catacommons.audit-bridge.enabled` | `true` (`false` in Cataudit) |
+| `catacommons.audit-bridge.enabled` | `true` |
 | `catacommons.audit-bridge.cataponte-url` | `http://cataponte:8082`; set it from `CATAPONTE_URL` |
 | `catacommons.audit-bridge.timeout` / `retry-interval` / `max-retry-interval` | `5s` / `10s` / `5m` |
-| `catacommons.settings.enabled` / `retry-interval` | `true` (`false` in Cataponte and Cataudit) / `10s` |
+| `catacommons.settings.enabled` / `retry-interval` | `true` (`false` in Cataponte) / `10s` |
+| `catacommons.consumers.enabled` | `false` (`true` in Cataudit and, from phase 7a, Catametricas) |
+| `catacommons.consumers.status-interval` / `resume-check-interval` | `10s` / `5s` |
+| `catacommons.consumers.max-deliveries` | `10`, unless the shared setting `dlq.max-deliveries` says otherwise |
 
 Metric: `catacommons_messages_total{topic, outcome=sent|retried|failed}`.
 

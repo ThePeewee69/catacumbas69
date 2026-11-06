@@ -26,6 +26,12 @@ public final class CatacumbasTopics {
     /** App that owns {@link #AUDIT}. */
     public static final String AUDIT_OWNER = "cataudit";
 
+    /** Local name of an app's compacted consumer status topic (orch.md decision 67). */
+    public static final String CONSUMERS = "consumers";
+
+    /** Local name of an app's consumer commands topic (orch.md decision 67). */
+    public static final String CONSUMER_COMMANDS = "consumer-commands";
+
     private CatacumbasTopics() {
     }
 
@@ -67,6 +73,26 @@ public final class CatacumbasTopics {
      */
     public static String settings() {
         return topic(SETTINGS_OWNER, SETTINGS);
+    }
+
+    /**
+     * Returns an app's consumer status topic.
+     *
+     * @param app app name
+     * @return {@code persistent://catacumbas69/<app>/consumers}
+     */
+    public static String consumers(String app) {
+        return topic(app, CONSUMERS);
+    }
+
+    /**
+     * Returns an app's consumer commands topic.
+     *
+     * @param app app name
+     * @return {@code persistent://catacumbas69/<app>/consumer-commands}
+     */
+    public static String consumerCommands(String app) {
+        return topic(app, CONSUMER_COMMANDS);
     }
 
     /**
