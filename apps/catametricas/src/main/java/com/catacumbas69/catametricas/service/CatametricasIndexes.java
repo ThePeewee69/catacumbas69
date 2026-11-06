@@ -1,5 +1,6 @@
 package com.catacumbas69.catametricas.service;
 
+import static com.catacumbas69.catametricas.model.Schema.BASE_NAME;
 import static com.catacumbas69.catametricas.model.Schema.CLAIMED_AT;
 import static com.catacumbas69.catametricas.model.Schema.COLLECTED_AT;
 import static com.catacumbas69.catametricas.model.Schema.HOUR;
@@ -74,11 +75,13 @@ public class CatametricasIndexes implements ApplicationListener<ApplicationReady
         IndexOperations minutes = mongoTemplate.indexOps(Schema.MINUTES);
         minutes.createIndex(key(TOPIC, MINUTE).unique().named("minutes_topic_minute"));
         minutes.createIndex(key(TENANT, NAMESPACE, MINUTE).named("minutes_scope_minute"));
+        minutes.createIndex(key(TENANT, NAMESPACE, BASE_NAME, MINUTE).named("minutes_scope_topic_minute"));
         minutes.createIndex(key(MINUTE).expire(minuteRetention).named("minutes_ttl"));
 
         IndexOperations hours = mongoTemplate.indexOps(Schema.HOURS);
         hours.createIndex(key(TOPIC, HOUR).unique().named("hours_topic_hour"));
         hours.createIndex(key(TENANT, NAMESPACE, HOUR).named("hours_scope_hour"));
+        hours.createIndex(key(TENANT, NAMESPACE, BASE_NAME, HOUR).named("hours_scope_topic_hour"));
         hours.createIndex(key(HOUR).named("hours_hour"));
 
         mongoTemplate.indexOps(Schema.TOTALS).createIndex(key(TENANT, NAMESPACE).named("totals_scope"));

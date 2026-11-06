@@ -614,7 +614,9 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 - **OBS-10 [MUST]** Everything Catapulsar shows in the view of one topic (Overview, Subscriptions and Backlog tabs)
   is the **current state of that topic**, read directly from Pulsar's admin API on every refresh, never from
   Catametricas: the view is for operating on the topic, so it shows the state the actions apply to. Aggregated and
-  historical figures (overviews, series, totals, alerts) come from Catametricas only (OBS-8, ADR 0013).
+  historical figures (overviews, series, totals, alerts) come from Catametricas only (OBS-8, ADR 0013). The one
+  exception is history: a subscription's row, when expanded, charts its past backlog and deliveries from
+  Catametricas (decision 78); the numbers on the row still come from Pulsar.
 - **OBS-8 [MUST]** Catametricas stores every topic's traffic and backlog (ADR 0007) and is the only metrics API
   (ADR 0013): `GET /api/v1/topics`, `/api/v1/series?groupBy=&from=&to=&step=` and `/api/v1/collector`.
   Catapulsar shows them as the cluster (tenants), tenant (namespaces) and namespace (topics) overviews at
@@ -721,8 +723,8 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
-- **2026-11-06, phase 7a of §15: dead letters and consumer control** (`mvn clean install` at `apps/`: build to
-  confirm; last green: catacommons 37, Cataponte 146, Catametricas 60, Cataudit 19 tests): DLQs in Cataudit,
+- **2026-11-06, phase 7a of §15: dead letters and consumer control** (`mvn clean install` at `apps/` green:
+  catacommons 37, Catapulsar 130, Cataponte 146, Catametricas 60, Cataudit 19 tests, 0 Checkstyle violations): DLQs in Cataudit,
   Catametricas and unordered `Shared`/`Key_Shared` bridges, `dlq.max-deliveries` shared setting (Settings → Dead
   letters); consumers pause on outages and resume by themselves, and can be paused, resumed and checked by hand from
   Catapulsar's Consumers panel through the `consumers` and `consumer-commands` topics; Catapulsar's dead-letters tab
@@ -783,7 +785,7 @@ Closed on 2026-10-30:
 ## 15. Target architecture (proposed — ADR 0008–0013)
 
 Status: **phases 1–5 implemented** (2026-10-31 – 2026-11-01); phase **7a implemented** (2026-11-06), 7b planned
-(decisions 42–49, 66–74); phase 6 later. Until a phase below is implemented, the
+(decisions 42–49, 66–78); phase 6 later. Until a phase below is implemented, the
 rules in sections 1–14 stay in force. When a phase lands, the rules it changes are updated in the same change
 and its ADRs become "Accepted".
 
@@ -1045,3 +1047,18 @@ Phase 7, after the review of ADR 0015 (2026-11-06):
     never fills the DLQ. Only **unordered** `Shared`/`Key_Shared` bridges have a DLQ. Changing `dlq.max-deliveries`
     restarts them. *Skip this message* checks with Pulsar's admin API that the message is still the first
     unacknowledged one, then skips one entry (partitioned sources not supported yet).
+
+Phase 7b, after the review of its design (2026-11-06, ADR 0015 points 8–13):
+
+75. Catavigia's checks run as **tasks on Pulsar** (`catacumbas69/catavigia/check-tasks`, `Shared` subscription
+    `catavigia`): every replica publishes one task per check and round, key `<check>@<round start>`, claimed in
+    `catavigia_task_runs`; the debounce counts are in `catavigia_observations`. The consumer has the control of
+    decision 67 (Consumers panel), pauses on outages (66) and has a DLQ (68).
+76. While its MongoDB is down, each Catavigia replica keeps `mongodb.down` **in memory** (API, badge, metric) and
+    publishes it as an event; the other checks stop; when MongoDB answers it is archived with its real duration.
+77. Catametricas keeps the **history per subscription inside the topic's documents**: a list in the snapshot and a
+    map `subs` in the minute and hour documents (backlog last and maximum, messages and bytes delivered, unacked),
+    with the same retention, and serves it on `/api/v1/subscriptions` and `/api/v1/subscriptions/series`.
+78. Catapulsar shows a subscription's history when its row is expanded in *Subscription Details* (exception to
+    OBS-10 for history only), and keeps **Catavigia's URL** in Settings → Connections; Catavigia reads Catapulsar's
+    URL from `CATAPULSAR_URL`.

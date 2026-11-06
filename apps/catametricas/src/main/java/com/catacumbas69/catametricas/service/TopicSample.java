@@ -1,7 +1,9 @@
 package com.catacumbas69.catametricas.service;
 
+import com.catacumbas69.catametricas.model.SubscriptionSnapshot;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import org.apache.pulsar.common.policies.data.SubscriptionStats;
 import org.apache.pulsar.common.policies.data.TopicStats;
 
@@ -24,6 +26,7 @@ import org.apache.pulsar.common.policies.data.TopicStats;
  * @param subscriptions number of subscriptions
  * @param producers number of producers
  * @param consumers number of consumers over all subscriptions
+ * @param subs each subscription's state and counters
  */
 public record TopicSample(
         String topic,
@@ -41,7 +44,8 @@ public record TopicSample(
         long storageSize,
         int subscriptions,
         int producers,
-        int consumers) {
+        int consumers,
+        List<SubscriptionSnapshot> subs) {
 
     /**
      * Converts Pulsar's statistics.
@@ -51,8 +55,9 @@ public record TopicSample(
      * @return the sample
      */
     public static TopicSample of(String topic, TopicStats stats) {
-        Collection<? extends SubscriptionStats> subs = stats.getSubscriptions() == null
-                ? List.of() : stats.getSubscriptions().values();
+        Map<String, ? extends SubscriptionStats> byName = stats.getSubscriptions() == null
+                ? Map.of() : stats.getSubscriptions();
+        Collection<? extends SubscriptionStats> subs = byName.values();
         long backlog = subs.stream().mapToLong(SubscriptionStats::getMsgBacklog).sum();
         int consumers = subs.stream()
                 .mapToInt(sub -> sub.getConsumers() == null ? 0 : sub.getConsumers().size())
@@ -64,6 +69,13 @@ public record TopicSample(
                 stats.getMsgRateIn(), stats.getMsgRateOut(),
                 stats.getMsgThroughputIn(), stats.getMsgThroughputOut(),
                 backlog, stats.getBacklogSize(), stats.getStorageSize(),
-                subs.size(), producers, consumers);
+                subs.size(), producers, consumers,
+                byName.entrySet().stream().map(entry -> subscriptionOf(entry.getKey(), entry.getValue())).toList());
+    }
+
+    private static SubscriptionSnapshot subscriptionOf(String name, SubscriptionStats stats) {
+        return new SubscriptionSnapshot(name, stats.getType(), stats.getMsgBacklog(), stats.getUnackedMessages(),
+                stats.getConsumers() == null ? 0 : stats.getConsumers().size(), stats.getMsgRateOut(),
+                stats.getMsgOutCounter(), stats.getBytesOutCounter());
     }
 }

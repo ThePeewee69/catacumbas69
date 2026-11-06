@@ -70,7 +70,7 @@ Cataponte acknowledges the message the bridge is stuck on (after showing it and 
 A new service, **Catavigia** (port **8085**), watches and **keeps the history of every alert**: opened, last seen,
 closed. It only watches; it never changes anything.
 
-**Checks**, every `catavigia.check-interval` (30 s):
+**Checks**, every `alerts.check-interval` (30 s), run as **tasks on Pulsar** (review point 8):
 
 | Alert | Severity | Source | Opens when |
 |---|---|---|---|
@@ -83,8 +83,29 @@ closed. It only watches; it never changes anything.
 | `pulsar.broker.down`, `pulsar.bookie.down` | critical | Pulsar admin API | A broker or a bookie is missing, or the broker health check fails |
 | `mongodb.down` | critical | Catavigia's own MongoDB connection | MongoDB does not answer a ping |
 
-- Catametricas reads per-topic numbers today; its snapshot gains the **backlog per subscription** so the `backlog`
-  and `poison` checks can name the subscription.
+- **Tasks** (like Catametricas' collection, ADR 0012): at the start of every round (aligned to the epoch) every
+  replica publishes one task **per check** (`poison`, `bridges`, `collection`, `backlog`, `consumers`, `services`,
+  `pulsar`) to `catacumbas69/catavigia/check-tasks`, key `<check>@<round start>`. Every replica consumes it with
+  the `Shared` subscription `catavigia` (consumer `catavigia@<instance>`), so the checks spread over the replicas;
+  a task is claimed by inserting its id into `catavigia_task_runs` (TTL 6 h), and a duplicate means another replica
+  has it. The debounce counts live in MongoDB, `catavigia_observations` (`<type>|<subject>`: rounds seen in a row,
+  rounds clear in a row, last round), since consecutive rounds may run on different replicas.
+- The `check-tasks` consumer works like those of phase 7a: it **pauses** while MongoDB or Pulsar's admin API is
+  down and resumes by itself, it can be paused, resumed and checked from the **Consumers** panel (status and
+  commands on `catacumbas69/catavigia/consumers` and `consumer-commands`), and a task that keeps failing goes to
+  `check-tasks-catavigia-DLQ`.
+- **MongoDB down** (review point 9): `mongodb.down` is not a task. Every replica pings its MongoDB every round and
+  keeps the alert **in memory** while it fails: it is returned by the API, counted in the badge and the metric, and
+  published as `alert.opened` (subject = the replica). The other checks stop meanwhile (their consumer is paused).
+  When MongoDB answers again the replica writes it straight to the archive, with its real opening time and
+  duration, and publishes `alert.closed`.
+- **Catametricas, per subscription** (review points 10–12): the topic snapshot gains the list of its subscriptions
+  (name, type, backlog, unacked, consumers, rate out, and the delivered counters), and the topic's minute and hour
+  documents gain a map `subs` with one entry per subscription: backlog (last and maximum of the period), messages
+  and bytes delivered (counter differences, as for topics) and unacked (last). The key is the subscription name
+  with `%`, `.` and `$` escaped (`%25`, `%2E`, `%24`); each entry also holds the real name. Same retention as the
+  topic's (30 days of minutes, hours for ever). New API: `GET /api/v1/subscriptions?tenant=&namespace=&topic=`
+  (current, with backlog) and `GET /api/v1/subscriptions/series?topic=&subscription=&period=`.
 - **Defaults in Settings:** every threshold has a global default editable in Catapulsar's Settings → Alerts:
   backlog limit, how many intervals make collection stale, check interval, debounce, and N deliveries.
 - **Limit per subscription:** a subscription can have its own backlog limit, set on its row in the topic view
@@ -96,8 +117,9 @@ closed. It only watches; it never changes anything.
 - **Seen:** an open alert can be marked **seen** (`POST /api/v1/alerts/{id}/seen`; who and when are kept and
   published as `alert.seen`). It stays open but no longer counts in the badge. If it closes and the problem comes
   back, a new alert opens, not seen.
-- **Several replicas are safe** (ADR 0012): an open alert has a deterministic key `<type>|<subject>` with a unique
-  index over open alerts only. One replica opens it, and only the replica whose write succeeded publishes the event.
+- **Several replicas are safe** (ADR 0012): each check runs once per round (the claim), and an open alert has a
+  deterministic key `<type>|<subject>` with a unique index over open alerts only. Only the replica whose write
+  succeeded publishes the event.
 - **Storage:** `catavigia_alerts` holds the **open** alerts (type, subject, severity, details, openedAt,
   lastCheckedAt, seenBy/seenAt). When an alert closes it **moves to the archive**, `catavigia_alerts_archive`
   (the same fields plus closedAt and how long it lasted), kept **for ever**, like the audit.
@@ -112,7 +134,7 @@ closed. It only watches; it never changes anything.
   audit.
 - **Settings** (settings topic, editable in Catapulsar): `dlq.max-deliveries`, `alerts.backlog-limit`,
   `alerts.collection-stale-intervals`, `alerts.check-interval`, `alerts.debounce`. The app URLs come from the same keys Catapulsar already uses for its
-  connections.
+  connections; Catapulsar's own URL from `CATAPULSAR_URL` (review point 13).
 - **Start order:** Cataponte → Cataudit → Catametricas → **Catavigia** → Catapulsar.
 
 ### 3. Actions are taken by the owner (orch.md 46)
@@ -130,6 +152,12 @@ audit (ADR 0010):
 
 ### 4. Catapulsar (orch.md 47)
 
+- **Settings → Connections** gains Catavigia's URL (`catavigia.url`, default `CATAVIGIA_URL`), with its check
+  button, like the other apps (review point 13). Catapulsar forwards `/api/v1/alerts/**` and `/api/v1/limits/**`.
+- **History of a subscription** (review point 12): expanding a subscription's row in *Subscription Details* shows a
+  chart of its backlog and messages delivered over 1 h / 24 h / 7 d / 30 d, from Catametricas. This is an explicit
+  exception to OBS-10 for history only; the row's current numbers still come from Pulsar.
+- The Consumers panel also lists Catavigia's `check-tasks` consumer.
 - An **Alerts** button in the top bar, with the number of open alerts coloured by the worst severity.
 - The **Alerts panel** has two tabs: *Open* (with *Mark as seen* and an action button per alert) and *Archived*
   (filters: type, subject, period).
@@ -161,7 +189,9 @@ audit (ADR 0010):
   (status and commands topics, Consumers panel, Check connections); Catapulsar's DLQ view and its actions; N in
   Settings.
 - **7b:** Catavigia (checks, open alerts and archive, seen, limits per subscription), Catametricas' backlog per
-  subscription, the Alerts panel and Settings → Alerts.
+  subscription, the Alerts panel and Settings → Alerts. In steps: (1) Catametricas per subscription and its API;
+  (2) Catavigia; (3) Catapulsar (Catavigia URL, Alerts panel, Settings → Alerts, limit and chart on the
+  subscription row, Catavigia in the Consumers panel).
 
 ## Review (2026-11-06)
 
@@ -174,3 +204,15 @@ audit (ADR 0010):
 
 6. Consumer status and commands go **through Pulsar topics**, so they work while MongoDB is down.
 7. `Failover` bridges get **Skip this message** (section 1b).
+
+### Review of the 7b design (2026-11-06)
+
+8. Checks run as **tasks on Pulsar**, one per check and round, claimed in MongoDB; the debounce counts are kept in
+   MongoDB; the `check-tasks` consumer has the 7a control (Consumers panel, pause on outages, DLQ).
+9. `mongodb.down` is kept **in memory** by each replica and published as an event; the other checks stop until
+   MongoDB answers; then it is archived with its real duration.
+10. Catametricas keeps the **history** per subscription, not only the current state.
+11. Stored **inside the topic's documents** (map `subs` in minutes and hours, list in the snapshot): backlog (last
+    and maximum), messages and bytes delivered, unacked.
+12. Shown when a subscription's row is expanded in *Subscription Details* (chart, from Catametricas).
+13. Catavigia's URL is a setting in Settings → Connections; Catavigia reads Catapulsar's URL from `CATAPULSAR_URL`.

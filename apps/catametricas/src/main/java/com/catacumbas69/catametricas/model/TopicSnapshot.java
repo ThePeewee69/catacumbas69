@@ -1,6 +1,7 @@
 package com.catacumbas69.catametricas.model;
 
 import java.time.Instant;
+import java.util.List;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -29,6 +30,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param subscriptions number of subscriptions
  * @param producers number of connected producers
  * @param consumers number of connected consumers, over all subscriptions
+ * @param subs each subscription's state and counters; {@code null} in snapshots written before decision 77
  */
 @Document(collection = Schema.SNAPSHOTS)
 public record TopicSnapshot(
@@ -52,5 +54,6 @@ public record TopicSnapshot(
         long storageSize,
         int subscriptions,
         int producers,
-        int consumers) {
+        int consumers,
+        List<SubscriptionSnapshot> subs) {
 }

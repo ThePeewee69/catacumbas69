@@ -14,10 +14,17 @@ import static com.catacumbas69.catametricas.model.Schema.MINUTE;
 import static com.catacumbas69.catametricas.model.Schema.MSGS_IN;
 import static com.catacumbas69.catametricas.model.Schema.MSGS_OUT;
 import static com.catacumbas69.catametricas.model.Schema.NAMESPACE;
+import static com.catacumbas69.catametricas.model.Schema.SUBS;
+import static com.catacumbas69.catametricas.model.Schema.SUB_BACKLOG;
+import static com.catacumbas69.catametricas.model.Schema.SUB_BACKLOG_MAX;
+import static com.catacumbas69.catametricas.model.Schema.SUB_NAME;
+import static com.catacumbas69.catametricas.model.Schema.SUB_TYPE;
+import static com.catacumbas69.catametricas.model.Schema.SUB_UNACKED;
 import static com.catacumbas69.catametricas.model.Schema.TENANT;
 import static com.catacumbas69.catametricas.model.Schema.TOPIC;
 
 import com.catacumbas69.catametricas.model.Schema;
+import com.catacumbas69.catametricas.model.SubscriptionSnapshot;
 import com.catacumbas69.catametricas.model.TopicSnapshot;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -44,7 +51,9 @@ import org.springframework.stereotype.Component;
  *       {@code findAndReplace} that returns the snapshot it replaced. Traffic is the difference between the two.
  *       A newer snapshot (another instance got there first) makes the replace fail, and nothing is counted.</li>
  *   <li>Only that traffic is added with {@code $inc} to the minute, hour and all-time documents, in unordered
- *       bulk upserts (PERF-2, MONGO-5); backlog is set to the sample.</li>
+ *       bulk upserts (PERF-2, MONGO-5); backlog is set to the sample. Each subscription gets an entry in the
+ *       document's {@value Schema#SUBS} map (orch.md decision 77): its deliveries are added, its backlog and
+ *       unacked messages set, and its largest backlog of the bucket kept.</li>
  *   <li>Active topics of the namespace that were not listed any more are marked inactive (their history is
  *       kept).</li>
  * </ol>
@@ -116,12 +125,25 @@ public class StatsWriter {
         BulkOperations bulk = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, collection);
         traffic.forEach(topic -> {
             TopicSample sample = topic.sample();
-            bulk.upsert(Query.query(Criteria.where(TOPIC).is(sample.topic()).and(timeField).is(bucket)),
-                    names(traffic(new Update(), topic), sample)
-                            .set(BACKLOG_MSGS, sample.backlogMsgs())
-                            .set(BACKLOG_BYTES, sample.backlogBytes()));
+            Update update = names(traffic(new Update(), topic), sample)
+                    .set(BACKLOG_MSGS, sample.backlogMsgs())
+                    .set(BACKLOG_BYTES, sample.backlogBytes());
+            topic.subscriptions().forEach(subscription -> subscription(update, subscription));
+            bulk.upsert(Query.query(Criteria.where(TOPIC).is(sample.topic()).and(timeField).is(bucket)), update);
         });
         bulk.execute();
+    }
+
+    private static void subscription(Update update, TopicTraffic.SubscriptionTraffic traffic) {
+        SubscriptionSnapshot now = traffic.now();
+        String entry = SUBS + "." + Schema.subscriptionKey(now.name()) + ".";
+        update.set(entry + SUB_NAME, now.name())
+                .set(entry + SUB_TYPE, now.type())
+                .set(entry + SUB_BACKLOG, now.backlog())
+                .max(entry + SUB_BACKLOG_MAX, now.backlog())
+                .set(entry + SUB_UNACKED, now.unacked())
+                .inc(entry + MSGS_OUT, traffic.msgsOut())
+                .inc(entry + BYTES_OUT, traffic.bytesOut());
     }
 
     private void writeTotals(List<TopicTraffic> traffic, Instant sampledAt) {
@@ -154,7 +176,7 @@ public class StatsWriter {
                 sample.msgInCounter(), sample.msgOutCounter(), sample.bytesInCounter(), sample.bytesOutCounter(),
                 sample.msgRateIn(), sample.msgRateOut(), sample.throughputIn(), sample.throughputOut(),
                 sample.backlogMsgs(), sample.backlogBytes(), sample.storageSize(),
-                sample.subscriptions(), sample.producers(), sample.consumers());
+                sample.subscriptions(), sample.producers(), sample.consumers(), sample.subs());
     }
 
     /**

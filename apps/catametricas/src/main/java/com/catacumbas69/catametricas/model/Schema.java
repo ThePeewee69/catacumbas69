@@ -2,7 +2,8 @@ package com.catacumbas69.catametricas.model;
 
 /**
  * Names of the MongoDB collections and fields Catametricas owns (ADR 0010). Nobody else reads them: other
- * services use Catametricas' API ({@code /api/v1/topics}, {@code /api/v1/series}, {@code /api/v1/collector}).
+ * services use Catametricas' API ({@code /api/v1/topics}, {@code /api/v1/series}, {@code /api/v1/subscriptions},
+ * {@code /api/v1/collector}).
  *
  * <ul>
  *   <li>{@value #SNAPSHOTS}: latest state of every topic ever seen, {@code _id} = full topic name.</li>
@@ -64,9 +65,38 @@ public final class Schema {
     public static final String FIRST_SEEN_AT = "firstSeenAt";
     /** Last time the topic was seen (totals). */
     public static final String LAST_SEEN_AT = "lastSeenAt";
+    /**
+     * Subscriptions of a topic (orch.md decision 77): a list of {@link SubscriptionSnapshot} in snapshots, and in
+     * minutes and hours a map keyed by {@link #subscriptionKey(String)} whose entries hold {@value #SUB_NAME},
+     * {@value #SUB_TYPE}, {@value #SUB_BACKLOG} (last of the bucket), {@value #SUB_BACKLOG_MAX},
+     * {@value #MSGS_OUT}, {@value #BYTES_OUT} and {@value #SUB_UNACKED} (last).
+     */
+    public static final String SUBS = "subs";
+    /** Subscription name, inside a {@value #SUBS} entry. */
+    public static final String SUB_NAME = "name";
+    /** Subscription type, inside a {@value #SUBS} entry. */
+    public static final String SUB_TYPE = "type";
+    /** Messages waiting at the last sample of the bucket, inside a {@value #SUBS} entry. */
+    public static final String SUB_BACKLOG = "backlog";
+    /** Most messages waiting at any sample of the bucket, inside a {@value #SUBS} entry. */
+    public static final String SUB_BACKLOG_MAX = "backlogMax";
+    /** Messages delivered but not acknowledged at the last sample, inside a {@value #SUBS} entry. */
+    public static final String SUB_UNACKED = "unacked";
     /** When a task was claimed (task runs; TTL). */
     public static final String CLAIMED_AT = "claimedAt";
 
     private Schema() {
+    }
+
+    /**
+     * Turns a subscription name into a key of the {@value #SUBS} map: MongoDB field names cannot hold {@code .}
+     * nor start with {@code $}, so {@code %}, {@code .} and {@code $} are escaped as {@code %25}, {@code %2E} and
+     * {@code %24}.
+     *
+     * @param subscription subscription name
+     * @return the key
+     */
+    public static String subscriptionKey(String subscription) {
+        return subscription.replace("%", "%25").replace(".", "%2E").replace("$", "%24");
     }
 }

@@ -30,7 +30,7 @@ class MetricsQueryServiceTest {
     void topics_joinsCurrentStateAndTotals_andKeepsTotalsOfGoneTopics() {
         when(mongoTemplate.find(any(Query.class), eq(TopicSnapshot.class), eq(Schema.SNAPSHOTS))).thenReturn(List.of(
                 new TopicSnapshot("persistent://home/media/orders", "home", "media", "orders", "orders", true, NOW,
-                        0, 0, 0, 0, 1, 0, 10, 0, 3, 30, 100, 1, 1, 0)));
+                        0, 0, 0, 0, 1, 0, 10, 0, 3, 30, 100, 1, 1, 0, null)));
         when(mongoTemplate.find(any(Query.class), eq(Document.class), eq(Schema.TOTALS))).thenReturn(List.of(
                 new Document("_id", "persistent://home/media/orders").append("msgsIn", 500L),
                 new Document("_id", "persistent://home/media/old").append(Schema.TENANT, "home")

@@ -28,6 +28,12 @@ every instance, each interval ──▶ catametricas/collect-tasks ──▶ eve
   conditional `findAndReplace` that returns the snapshot it replaced). Only the instance that replaced it adds
   the difference, so a repeated or late task never counts twice. A counter that went down is a reset. The first
   collection of a namespace only sets the starting point.
+- **Subscriptions** (orch.md decision 77): each topic's snapshot keeps the list of its subscriptions (type,
+  backlog, unacked, consumers, rate out and their delivered counters), and its minute and hour documents a map
+  `subs` with one entry per subscription: backlog at the last sample and the largest of the bucket, messages and
+  bytes delivered (counter differences, counted as for topics) and unacked. A subscription that appears on a known
+  topic counts fully; the first collection after this change only sets the starting point. The map key is the
+  name with `%`, `.` and `$` escaped (`%25`, `%2E`, `%24`).
 - **Failures** (ADR 0015): if a task fails while MongoDB and Pulsar's admin API answer, the claim is released and
   the task is delivered again after 10 s, doubling up to 5 min; after `dlq.max-deliveries` deliveries (shared
   setting, default 10) Pulsar moves it to `collect-tasks-catametricas-DLQ` (subscription `dlq`). If it failed
@@ -41,8 +47,8 @@ every instance, each interval ──▶ catametricas/collect-tasks ──▶ eve
 
 | Collection | Content | Kept |
 |---|---|---|
-| `catametricas_topic_snapshots` | Latest state per topic: backlog, rates, storage, subscriptions, producers, consumers, raw counters, `active` | Forever (`active=false` once the topic is deleted) |
-| `catametricas_topic_minutes` | Messages/bytes in and out, backlog, per topic and minute | 30 days (TTL index) |
+| `catametricas_topic_snapshots` | Latest state per topic: backlog, rates, storage, subscriptions (and each one's state and counters in `subs`), producers, consumers, raw counters, `active` | Forever (`active=false` once the topic is deleted) |
+| `catametricas_topic_minutes` | Messages/bytes in and out, backlog, per topic and minute; per subscription in `subs` | 30 days (TTL index) |
 | `catametricas_topic_hours` | The same per topic and hour | Forever |
 | `catametricas_topic_totals` | All-time messages/bytes in and out per topic | Forever |
 | `catametricas_task_runs` | Task claims: who, when, and the result | 6 h (TTL index) |
@@ -60,6 +66,8 @@ and the `audit-catametricas` system bridge is registered in Cataponte (`CATAPONT
 |---|---|---|
 | `GET` | `/api/v1/topics?tenant=&namespace=` | Every topic or partition of the scope: `current` state (absent once the topic is gone) and all-time `total` traffic |
 | `GET` | `/api/v1/series?tenant=&namespace=&groupBy=&from=&to=&step=` | Messages and bytes in and out, and backlog, per bucket, summed per `groupBy` = `tenant`, `namespace` (needs `tenant`) or `topic` (needs `namespace`; partitions summed). `step` `1m`–`59m` reads minutes, whole hours (`1h`, `6h`) read hours; `to` defaults to now; at most 2000 buckets |
+| `GET` | `/api/v1/subscriptions?tenant=&namespace=&topic=` | Every subscription of the active topics (or partitions) of the scope, as last collected: type, backlog, unacked, consumers, rate out. `topic` is the local name without partition suffix and needs `namespace` |
+| `GET` | `/api/v1/subscriptions/series?tenant=&namespace=&topic=&subscription=&from=&to=&step=` | One subscription's history, partitions summed: backlog (last sample of each bucket), its maximum, messages and bytes delivered, unacked. Same `step` and limits as `/api/v1/series` |
 | `GET` | `/api/v1/collector` | Newest sample of any topic (`lastCollectionAt`) and the interval in use |
 | `POST` | `/api/v1/collect?tenant=&namespace=` | **Forced collection**: collects the cluster, a tenant or a namespace now and waits for it. Each namespace runs as task `forced:<tenant>/<namespace>@<window start>`, so it is collected at most once per window (`catametricas.collect.forced-window`, 5 s) whoever asks; later requests count it as `coalesced`. Same idempotent write as a scheduled task. Audited as `collection.forced` (actor from `X-Forwarded-For`); `502` if Pulsar cannot list the namespaces |
 
