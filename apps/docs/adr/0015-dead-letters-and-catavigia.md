@@ -1,6 +1,6 @@
 # 15. Dead letters for poison messages, and Catavigia: alerts with history
 
-Date: 2026-11-06 · Status: Accepted (2026-11-06); phase 7a in progress · Decisions: orch.md 42–49
+Date: 2026-11-06 · Status: Accepted (2026-11-06); phase 7a implemented (2026-11-06), 7b planned · Decisions: orch.md 42–49, 66–74
 
 ## Context
 
@@ -135,7 +135,15 @@ audit (ADR 0010):
   (filters: type, subject, period).
 - The **DLQ view** of a poison alert lists the messages with their original topic, properties and delivery count,
   and offers *Send back*, *Discard* and *Discard all*, each confirmed first.
-- **Settings → Alerts** tab: N deliveries, backlog limit, check interval, debounce.
+- **Settings → Alerts** tab (7b): backlog limit, check interval, debounce. N deliveries already has its own
+  **Dead letters** tab (7a).
+- **Implemented in 7a:** the DLQ view is the *Dead letters* tab of the Consumers panel; it lists the DLQs of the
+  apps' consumers and of the bridges, peeks up to 50 messages, and sends back or discards **any** of them, not only
+  the first. Catapulsar does it with a short-lived consumer on the DLQ's `dlq` subscription that receives until it
+  finds the message id (up to 10 000 messages), then acknowledges it after the resend (sent back with its key and
+  event time, without the DLQ properties). *Discard all* clears the `dlq` backlog; *Send all back* keeps the messages
+  without an original topic. Endpoints: `GET /api/v1/consumers`, `POST /api/v1/consumers/commands`,
+  `POST /api/v1/dead-letters/{send-back,discard,send-back-all,discard-all}`, `/api/v1/settings/dead-letters`.
 
 ## Consequences
 

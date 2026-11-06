@@ -31,9 +31,12 @@ public class Setting {
     /** Catametricas' collection interval, in seconds; Catametricas reads it from the settings topic. */
     public static final String COLLECT_INTERVAL_SECONDS = "catametricas.collect-interval-seconds";
 
+    /** Deliveries before a message goes to its DLQ, read by Cataudit, Catametricas and Cataponte (ADR 0015). */
+    public static final String DLQ_MAX_DELIVERIES = "dlq.max-deliveries";
+
     /** Every shared setting. */
     private static final Set<String> IDS = Set.of(CATAPONTE_URL, CATAUDIT_URL, CATAMETRICAS_URL,
-            REFRESH_INTERVAL_SECONDS, COLLECT_INTERVAL_SECONDS);
+            REFRESH_INTERVAL_SECONDS, COLLECT_INTERVAL_SECONDS, DLQ_MAX_DELIVERIES);
 
     @Id
     private String id;

@@ -721,6 +721,13 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-06, phase 7a of §15: dead letters and consumer control** (`mvn clean install` at `apps/`: build to
+  confirm; last green: catacommons 37, Cataponte 146, Catametricas 60, Cataudit 19 tests): DLQs in Cataudit,
+  Catametricas and unordered `Shared`/`Key_Shared` bridges, `dlq.max-deliveries` shared setting (Settings → Dead
+  letters); consumers pause on outages and resume by themselves, and can be paused, resumed and checked by hand from
+  Catapulsar's Consumers panel through the `consumers` and `consumer-commands` topics; Catapulsar's dead-letters tab
+  (peek, send back, discard, one or all); Cataponte tells refused messages from an unavailable destination and offers
+  *Skip this message* on `Failover` bridges (decisions 66–74, ADR 0015).
 - **2026-11-04/06, bridge areas, bridge subscriptions and UI** (`mvn clean install` at `apps/` green: catacommons 25,
   Catapulsar 114, Cataponte 136, Catametricas 58, Cataudit 18 tests, 0 Checkstyle violations): bridge areas
   (ADR 0014, decisions 54–59), `409` explaining a partitioned topic with the same name, subscriptions of deleted or
@@ -775,7 +782,8 @@ Closed on 2026-10-30:
 
 ## 15. Target architecture (proposed — ADR 0008–0013)
 
-Status: **phases 1–5 implemented** (2026-10-31 – 2026-11-01); phase 7 planned (decisions 42–49); phase 6 later. Until a phase below is implemented, the
+Status: **phases 1–5 implemented** (2026-10-31 – 2026-11-01); phase **7a implemented** (2026-11-06), 7b planned
+(decisions 42–49, 66–74); phase 6 later. Until a phase below is implemented, the
 rules in sections 1–14 stay in force. When a phase lands, the rules it changes are updated in the same change
 and its ADRs become "Accepted".
 
@@ -819,7 +827,7 @@ Each phase ends with `mvn verify` green in every app, the docs updated and the a
 | 4 | Catametricas API and tasks | Query API (`topics`, `series`, `collector`); Catapulsar overviews built from it (Catametricas URL editable); collection tasks on Pulsar with claims and conditional snapshot updates; lease removed; `contario_*` → `catametricas_*` (renamed) | **Done** 2026-11-01 |
 | 5 | Cataponte replicas | `Exclusive` rejected; N replicas, status merged over replicas (`cataponte_worker_status`); ADR 0002 superseded; collections `cataponte_*` | **Done** 2026-11-01 |
 | 6 | Prometheus source (later) | Once Prometheus/OpenMetrics/Loki run on MicroShift: short ranges from PromQL in Catametricas | Later |
-| 7 | Alerts and dead letters | Dead-letter topics for our Shared/Key_Shared consumers; new service **Catavigia** with alert history; alerts and actions panel in Catapulsar; Settings dialog in tabs (decisions 42–49 and 66–72; [ADR 0015](docs/adr/0015-dead-letters-and-catavigia.md); 7a: DLQs and consumer control, 7b: Catavigia and alerts) | Planned |
+| 7 | Alerts and dead letters | Dead-letter topics for our Shared/Key_Shared consumers; new service **Catavigia** with alert history; alerts and actions panel in Catapulsar; Settings dialog in tabs (decisions 42–49 and 66–72; [ADR 0015](docs/adr/0015-dead-letters-and-catavigia.md); 7a: DLQs and consumer control, 7b: Catavigia and alerts) | 7a **Done** 2026-11-06; 7b planned |
 
 ### Decisions taken on 2026-10-31
 

@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.catacumbas69.catapulsar.service.CollectIntervalService;
+import com.catacumbas69.catapulsar.service.DeadLetterDeliveriesService;
 import com.catacumbas69.catapulsar.service.InvalidSettingException;
 import com.catacumbas69.catapulsar.service.CataponteEndpoint;
 import com.catacumbas69.catapulsar.service.CatametricasEndpoint;
@@ -48,6 +49,24 @@ class SettingsControllerTest {
 
     @MockitoBean
     private CollectIntervalService collect;
+
+    @MockitoBean
+    private DeadLetterDeliveriesService deliveries;
+
+    @Test
+    void deadLetters_changesTheDeliveriesForEveryApp() throws Exception {
+        when(deliveries.change(eq(5), any())).thenReturn(5);
+        when(deliveries.defaultValue()).thenReturn(10);
+        when(deliveries.min()).thenReturn(2);
+        when(deliveries.max()).thenReturn(100);
+
+        mvc.perform(put("/api/v1/settings/dead-letters").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"value\":5}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.value").value(5))
+                .andExpect(jsonPath("$.defaultValue").value(10))
+                .andExpect(jsonPath("$.custom").value(true));
+    }
 
     @BeforeEach
     void ranges() {

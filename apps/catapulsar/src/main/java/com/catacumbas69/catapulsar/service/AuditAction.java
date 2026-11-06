@@ -37,6 +37,16 @@ public enum AuditAction {
     ENABLE_BRIDGE("bridge", "enable-requested"),
     /** A bridge was disabled. */
     DISABLE_BRIDGE("bridge", "disable-requested"),
+    /** A pause of an app's consumer was requested (the app records the pause, ADR 0015). */
+    PAUSE_CONSUMER("consumer", "pause-requested"),
+    /** A resume of an app's consumer was requested. */
+    RESUME_CONSUMER("consumer", "resume-requested"),
+    /** A connection check of an app's consumers was requested. */
+    CHECK_CONSUMER("consumer", "check-requested"),
+    /** A dead letter was sent back to its original topic (details: messageId, to). */
+    SEND_BACK_DEAD_LETTER("dead-letter", "sent-back"),
+    /** A dead letter was discarded (details: messageId, or count for all). */
+    DISCARD_DEAD_LETTER("dead-letter", "discarded"),
     /** Skipping the message an ordered bridge is stuck on was requested (Cataponte records the skip). */
     SKIP_BRIDGE_MESSAGE("bridge", "skip-requested"),
     /**

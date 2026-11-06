@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Catapulsar</title>
 <link rel="icon" type="image/svg+xml" href="/catapulsar-icon.svg">
-<link rel="stylesheet" href="/catapulsar.css?v=26">
-<script src="/catapulsar.js?v=26" defer></script>
+<link rel="stylesheet" href="/catapulsar.css?v=27">
+<script src="/catapulsar.js?v=27" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
 </head>
 <body x-data="app()" x-init="init()">
@@ -27,6 +27,9 @@
         <button type="button" role="tab" class="tab" id="settings-tab-refresh"
                 :class="{ active: settings.tab === 'refresh' }" :aria-selected="settings.tab === 'refresh'"
                 aria-controls="settings-panel-refresh" @click="settings.tab = 'refresh'">⏱ Refresh &amp; collection</button>
+        <button type="button" role="tab" class="tab" id="settings-tab-deadletters"
+                :class="{ active: settings.tab === 'deadletters' }" :aria-selected="settings.tab === 'deadletters'"
+                aria-controls="settings-panel-deadletters" @click="settings.tab = 'deadletters'">☠ Dead letters</button>
       </div>
 
       <div class="settings-body">
@@ -178,6 +181,24 @@
             </template>
             <br>How often Catametricas reads every topic's statistics into MongoDB. Applies from its next interval;
             saved in MongoDB and recorded in the audit log.
+          </p>
+        </section>
+
+        <section id="settings-panel-deadletters" role="tabpanel" aria-labelledby="settings-tab-deadletters"
+                 x-show="settings.tab === 'deadletters'">
+          <div class="field" style="margin-bottom:6px;">
+            <label for="dlq-deliveries">Deliveries before a message goes to its dead-letter topic</label>
+            <input id="dlq-deliveries" type="number" step="1" :min="dlqSetting.min" :max="dlqSetting.max"
+                   x-model.number="dlqSetting.draft" @keydown.enter="saveSettings()">
+          </div>
+          <p class="settings-hint">
+            <span x-text="dlqSetting.min + '–' + dlqSetting.max + ' · default ' + dlqSetting.defaultValue"></span>
+            <template x-if="dlqSetting.custom">
+              <button type="button" class="link-btn" @click="saveDlqSetting('DELETE')">use default</button>
+            </template>
+            <br>A message that keeps failing on its own is moved to <span class="mono">&lt;topic&gt;-&lt;subscription&gt;-DLQ</span>
+            after this many deliveries (Cataudit, Catametricas and unordered Shared/Key_Shared bridges). Outages do not
+            count. Changing it makes them subscribe again; saved in MongoDB and recorded in the audit log.
           </p>
         </section>
       </div>
@@ -651,10 +672,172 @@
       <span aria-hidden="true">🛡</span>
       Audit
     </button>
+    <button class="btn btn-ghost bridges-btn" :class="{'active': consumersView}"
+            @click="consumersView ? (consumersView = false) : openConsumers()"
+            title="The apps' consumers (pause, resume, check) and the dead-letter topics">
+      <span aria-hidden="true">⚙</span>
+      Consumers
+    </button>
     <button class="btn btn-ghost" style="font-size:13px;padding:7px 10px;" @click="openSettings()" title="Settings">⚙️</button>
   </div>
 
   <div id="content">
+
+    <!-- ─ Consumers panel: the apps' consumers and the dead-letter topics (ADR 0015) ─ -->
+    <template x-if="consumersView">
+      <div class="consumers-panel">
+        <div class="bridges-header">
+          <div>
+            <div style="font-size:16px;font-weight:700;color:var(--accent2);">Consumers &amp; dead letters</div>
+            <div class="muted" style="font-size:12px;">
+              The apps' own consumers, per replica, read from Pulsar (it works while MongoDB is down). Every action is audited.
+            </div>
+          </div>
+          <button class="btn btn-ghost" style="font-size:12px;" title="Refresh"
+                  @click="loadConsumers(); loadDeadLetters()">↺</button>
+        </div>
+        <div class="tabs" role="tablist" aria-label="Consumers sections">
+          <button type="button" role="tab" class="tab" :class="{ active: cons.tab === 'consumers' }"
+                  :aria-selected="cons.tab === 'consumers'" @click="cons.tab = 'consumers'">Consumers</button>
+          <button type="button" role="tab" class="tab" :class="{ active: cons.tab === 'deadletters' }"
+                  :aria-selected="cons.tab === 'deadletters'" @click="cons.tab = 'deadletters'; loadDeadLetters()">
+            Dead letters
+            <span class="tab-count" x-show="cons.dlqs.some(d => d.backlog > 0)"
+                  x-text="cons.dlqs.reduce((n, d) => n + (d.backlog || 0), 0)"></span>
+          </button>
+        </div>
+
+        <!-- Consumers -->
+        <template x-if="cons.tab === 'consumers'">
+          <div>
+            <template x-if="cons.loading"><div style="text-align:center;padding:40px"><div class="spinner"></div></div></template>
+            <template x-if="!cons.loading && cons.error">
+              <div class="card empty"><p style="color:var(--danger,#ef4444);" x-text="'Consumers unavailable: ' + cons.error"></p></div>
+            </template>
+            <template x-if="!cons.loading && !cons.error && consumerGroups().length === 0">
+              <div class="card empty"><p>No consumer has reported yet. Cataudit and Catametricas publish their state every 10 s.</p></div>
+            </template>
+            <template x-for="g in consumerGroups()" :key="g.key">
+              <div class="card consumer-card">
+                <div class="consumer-head">
+                  <div>
+                    <div class="consumer-title"><span x-text="g.app"></span> · <span class="mono" x-text="g.consumer"></span></div>
+                    <div class="muted consumer-sub">
+                      <span class="mono" x-text="g.topic"></span> · sub <span class="mono" x-text="g.subscription"></span>
+                      <template x-if="g.deadLetterTopic">
+                        <span> · DLQ after <span x-text="g.maxDeliveries"></span> deliveries</span>
+                      </template>
+                    </div>
+                  </div>
+                  <div class="consumer-actions">
+                    <button class="btn btn-ghost btn-xs" :disabled="cons.busy" @click="consumerCommand(g.app, '*', g.consumer, 'check')"
+                            title="Every replica pings MongoDB and Pulsar now">Check all</button>
+                    <button class="btn btn-ghost btn-xs" :disabled="cons.busy" @click="consumerCommand(g.app, '*', g.consumer, 'resume')">Resume all</button>
+                    <button class="btn btn-danger btn-xs" :disabled="cons.busy" @click="consumerCommand(g.app, '*', g.consumer, 'pause')">Pause all</button>
+                  </div>
+                </div>
+                <div class="table-wrap">
+                  <table class="consumers-table">
+                    <thead>
+                      <tr><th>Replica</th><th>State</th><th>Since</th><th>MongoDB</th><th>Pulsar</th><th>Checked</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="r in g.replicas" :key="r.instance">
+                        <tr :class="{ 'consumer-stale': r.stale }">
+                          <td class="mono" x-text="r.instance"></td>
+                          <td>
+                            <span class="tag" :class="{ 'tag-blue': r.state === 'RUNNING', 'tag-failed': r.state === 'PAUSED_AUTO', 'tag-orange': r.state === 'PAUSED_MANUAL' }"
+                                  :title="(r.reason || '') + (r.changedBy ? ' (by ' + r.changedBy + ')' : '')"
+                                  x-text="r.stale ? 'gone' : consumerStateLabel(r.state)"></span>
+                            <template x-if="r.state === 'PAUSED_AUTO' && r.reason"><div class="muted consumer-reason" x-text="r.reason"></div></template>
+                            <template x-if="r.state === 'PAUSED_MANUAL' && r.changedBy"><div class="muted consumer-reason" x-text="'by ' + r.changedBy"></div></template>
+                          </td>
+                          <td x-text="fmtDate(r.since)"></td>
+                          <td class="mono" x-text="probeLabel(r.lastCheck, 'mongodb')"></td>
+                          <td class="mono" x-text="probeLabel(r.lastCheck, 'pulsar')"></td>
+                          <td x-text="r.lastCheck ? fmtDate(r.lastCheck.checkedAt) : 'never'"></td>
+                          <td class="cell-actions">
+                            <button class="btn btn-ghost btn-xs" :disabled="cons.busy || r.stale" @click="consumerCommand(r.app, r.instance, r.consumer, 'check')">Check</button>
+                            <template x-if="r.state === 'PAUSED_AUTO' || r.state === 'PAUSED_MANUAL'">
+                              <button class="btn btn-ghost btn-xs" :disabled="cons.busy || r.stale" @click="consumerCommand(r.app, r.instance, r.consumer, 'resume')">Resume</button>
+                            </template>
+                            <template x-if="r.state !== 'PAUSED_MANUAL'">
+                              <button class="btn btn-danger btn-xs" :disabled="cons.busy || r.stale" @click="consumerCommand(r.app, r.instance, r.consumer, 'pause')">Pause</button>
+                            </template>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- Dead letters -->
+        <template x-if="cons.tab === 'deadletters'">
+          <div>
+            <template x-if="cons.dlqLoading && cons.dlqs.length === 0"><div style="text-align:center;padding:40px"><div class="spinner"></div></div></template>
+            <template x-if="!cons.dlqLoading && cons.dlqs.length === 0">
+              <div class="card empty"><p>No dead-letter topic known yet.</p></div>
+            </template>
+            <div class="dlq-layout" x-show="cons.dlqs.length > 0">
+              <ul class="dlq-list">
+                <template x-for="d in cons.dlqs" :key="d.topic">
+                  <li>
+                    <button type="button" class="dlq-item" :class="{ selected: cons.open === d.topic }" @click="peekDeadLetters(d.topic)"
+                            title="Show its messages (a peek, recorded in the audit log)">
+                      <span class="mono dlq-topic" x-text="d.topic"></span>
+                      <span class="muted dlq-from" x-text="d.from"></span>
+                      <span class="backlog-count" :class="{ zero: !d.backlog }"
+                            x-text="d.missing ? 'not created yet' : fmtNum(d.backlog) + ' message(s)'"></span>
+                    </button>
+                  </li>
+                </template>
+              </ul>
+              <section class="card dlq-messages">
+                <template x-if="!cons.open"><p class="muted">Choose a dead-letter topic to see its messages.</p></template>
+                <template x-if="cons.open">
+                  <div>
+                    <div class="dlq-head">
+                      <div class="mono" style="font-size:12px;" x-text="cons.open"></div>
+                      <div class="consumer-actions">
+                        <button class="btn btn-ghost btn-xs" :disabled="cons.busy" @click="peekDeadLetters(cons.open)">↺ Peek</button>
+                        <button class="btn btn-ghost btn-xs" :disabled="cons.busy || cons.messages.length === 0" @click="deadLetterAction('send-back-all')">Send all back</button>
+                        <button class="btn btn-danger btn-xs" :disabled="cons.busy || cons.messages.length === 0" @click="deadLetterAction('discard-all')">Discard all</button>
+                      </div>
+                    </div>
+                    <template x-if="cons.peeking"><div style="text-align:center;padding:24px"><div class="spinner"></div></div></template>
+                    <template x-if="!cons.peeking && cons.messages.length === 0"><p class="muted">The DLQ is empty.</p></template>
+                    <template x-for="m in cons.messages" :key="m.messageId">
+                      <div class="dlq-message">
+                        <div class="dlq-message-head">
+                          <span class="mono" x-text="m.messageId"></span>
+                          <span class="muted" x-text="fmtDate(m.publishTime)"></span>
+                          <span class="consumer-actions">
+                            <button class="btn btn-ghost btn-xs" :disabled="cons.busy || !m.properties?.REAL_TOPIC"
+                                    :title="m.properties?.REAL_TOPIC ? 'Send it back to ' + m.properties.REAL_TOPIC : 'Its original topic is unknown'"
+                                    @click="deadLetterAction('send-back', m)">Send back</button>
+                            <button class="btn btn-danger btn-xs" :disabled="cons.busy" @click="deadLetterAction('discard', m)">Discard</button>
+                          </span>
+                        </div>
+                        <div class="dlq-meta">
+                          <template x-if="m.properties?.REAL_TOPIC"><span>from <span class="mono" x-text="m.properties.REAL_TOPIC"></span></span></template>
+                          <template x-if="m.properties?.DLQ_REASON"><span>· <span x-text="m.properties.DLQ_REASON"></span></span></template>
+                          <template x-if="m.key"><span>· key <span class="mono" x-text="m.key"></span></span></template>
+                        </div>
+                        <pre class="dlq-payload" x-text="truncate(m.payload, 600)"></pre>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+              </section>
+            </div>
+          </div>
+        </template>
+      </div>
+    </template>
 
     <!-- ─ Audit panel: the audit trail of every app, read from Cataudit (ADR 0009) ─ -->
     <template x-if="auditView">
@@ -1057,7 +1240,7 @@
     </template>
 
     <!-- ─ Overview: cluster (tenants), tenant (namespaces) or namespace (topics) — Catametricas statistics ─ -->
-    <template x-if="!bridgesView && !auditView && !sel.topic">
+    <template x-if="!panelOpen() && !sel.topic">
       <section class="overview" aria-labelledby="overview-title">
         <header class="overview-head">
           <div>
@@ -1269,7 +1452,7 @@
     </template>
 
     <!-- ─ Topic view ─ -->
-    <template x-if="!bridgesView && !auditView && sel.topic">
+    <template x-if="!panelOpen() && sel.topic">
       <div>
         <div class="tabs">
           <button class="tab" :class="{active:tab==='stats'}"  @click="tab='stats'">📊 Overview</button>

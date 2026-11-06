@@ -218,6 +218,17 @@ function app() {
 
     // ── Audit trail (Cataudit, ADR 0009) ───────────────────────────────────
     auditView: false,
+    // ── Consumers and dead letters (ADR 0015) ─────────────────────────────
+    consumersView: false,
+    cons: {
+      tab: 'consumers',            // 'consumers' | 'deadletters'
+      list: [], loading: false, error: '',
+      dlqs: [],                    // { topic, from, backlog, missing }
+      dlqLoading: false,
+      open: null,                  // DLQ topic whose messages are shown
+      messages: [], peeking: false, busy: false,
+    },
+    dlqSetting: { value: 10, defaultValue: 10, min: 2, max: 100, custom: false, draft: 10 },
     audit: {
       items: [], total: 0, page: 0, loading: false, error: '', expanded: null,
       settings: { url: '', defaultUrl: '', custom: false, draft: '', saving: false, healthState: null, healthMsg: '' },
@@ -274,6 +285,9 @@ function app() {
           work.push(this.refreshBridgeList(), this.loadBridgeStatus());
         } else if (this.auditView) {
           work.push(this.loadAudit(true));
+        } else if (this.consumersView) {
+          work.push(this.loadConsumers(true));
+          if (this.cons.tab === 'deadletters') work.push(this.loadDeadLetters(true));
         } else if (this.sel.topic && this.tab === 'stats' && this.stats) {
           work.push(this.refreshStats());
           if (this.auto.tick % INTERVAL_RELOAD_TICKS === 0) work.push(this.refreshBridgeList());
@@ -446,7 +460,7 @@ function app() {
     liveTick() {
       const now = Date.now();
       this.live.now = now;
-      if (this.bridgesView || this.auditView || this.sel.topic || this.overviewScope() !== 'namespace'
+      if (this.panelOpen() || this.sel.topic || this.overviewScope() !== 'namespace'
           || this.overviewKey().split('|').slice(0, 2).join('|') !== this.live.key.split('|').slice(0, 2).join('|')) {
         this.stopLive(`Live mode off: you left ${this.live.scope}`);
         return;
@@ -666,7 +680,7 @@ function app() {
     // ── Settings ───────────────────────────────────────────────────────────
     /**
      * Opens the Settings dialog on a tab and loads the current values.
-     * @param {'connections'|'refresh'} [tab] tab to show first
+     * @param {'connections'|'refresh'|'deadletters'} [tab] tab to show first
      */
     async openSettings(tab = 'connections') {
       this.settings.tab = tab;
@@ -676,7 +690,7 @@ function app() {
       this.audit.settings.healthState = null;
       this.catametricas.healthState = null;
       await Promise.all([this.loadCataponteSettings(), this.loadCatauditSettings(), this.loadCatametricasSettings(),
-                         this.loadCollectInterval()]);
+                         this.loadCollectInterval(), this.loadDlqSetting()]);
       this.bridges.settings.draft = this.bridges.settings.url;
       this.audit.settings.draft = this.audit.settings.url;
       this.catametricas.draft = this.catametricas.url;
@@ -711,6 +725,10 @@ function app() {
       }
       if (Number(this.auto.draft) !== this.auto.seconds) {
         if (!await this.saveRefreshInterval('PUT')) return;
+        changed = true;
+      }
+      if (Number(this.dlqSetting.draft) !== this.dlqSetting.value) {
+        if (!await this.saveDlqSetting('PUT')) return;
         changed = true;
       }
       if (!changed) this.notify('Settings saved');
@@ -1048,7 +1066,7 @@ function app() {
      * @param {string} tenant tenant
      */
     clickTreeTenant(tenant) {
-      if (this.sel.tenant === tenant && !this.sel.namespace && !this.bridgesView && !this.auditView) {
+      if (this.sel.tenant === tenant && !this.sel.namespace && !this.panelOpen()) {
         this.setTreeOpen(tenant, !this.isTreeOpen(tenant));
         return;
       }
@@ -1063,7 +1081,7 @@ function app() {
     async clickTreeNamespace(tenant, ns) {
       const key = `${tenant}/${ns}`;
       if (this.sel.tenant === tenant && this.sel.namespace === ns && !this.sel.topic
-          && !this.bridgesView && !this.auditView) {
+          && !this.panelOpen()) {
         this.setTreeOpen(key, !this.isTreeOpen(key));
         return;
       }
@@ -1256,11 +1274,212 @@ function app() {
     closePanels() {
       if (this.bridgesView) this.closeBridges();
       if (this.auditView) this.closeAudit();
+      this.consumersView = false;
+    },
+
+    /** @returns {boolean} whether a panel (Bridges, Audit, Consumers) covers the main view */
+    panelOpen() {
+      return this.bridgesView || this.auditView || this.consumersView;
+    },
+
+    // ── Consumers and dead letters (ADR 0015) ──────────────────────────────
+    openConsumers(tab) {
+      if (this.bridgesView) this.closeBridges();
+      if (this.auditView) this.closeAudit();
+      this.consumersView = true;
+      if (tab) this.cons.tab = tab;
+      this.loadConsumers();
+      this.loadDeadLetters();
+    },
+
+    /**
+     * Loads the apps' consumers per replica (from their status topics, through Catapulsar).
+     * @param {boolean} [quiet] no spinner, errors kept silent (auto-refresh)
+     */
+    async loadConsumers(quiet = false) {
+      if (!quiet) this.cons.loading = true;
+      try {
+        const list = await this.api('/api/v1/consumers');
+        if (JSON.stringify(list) !== JSON.stringify(this.cons.list)) this.cons.list = list;
+        this.cons.error = '';
+      } catch (e) {
+        if (!quiet) this.cons.error = e.message;
+      } finally {
+        this.cons.loading = false;
+      }
+    },
+
+    /** @returns {object[]} consumers grouped by app and consumer, each with its replicas */
+    consumerGroups() {
+      const groups = new Map();
+      this.cons.list.forEach(c => {
+        const key = `${c.app}/${c.consumer}`;
+        if (!groups.has(key)) groups.set(key, { key, app: c.app, consumer: c.consumer, topic: c.topic,
+          subscription: c.subscription, deadLetterTopic: c.deadLetterTopic, maxDeliveries: c.maxDeliveries, replicas: [] });
+        groups.get(key).replicas.push(c);
+      });
+      return [...groups.values()];
+    },
+
+    /**
+     * @param {string} state consumer state
+     * @returns {string} short label
+     */
+    consumerStateLabel(state) {
+      return { RUNNING: 'running', PAUSED_AUTO: 'paused (auto)', PAUSED_MANUAL: 'paused by hand', STARTING: 'starting' }[state]
+        ?? (state || '?').toLowerCase();
+    },
+
+    /**
+     * Asks an app to pause, resume or check consumers; it applies it within seconds and the list shows it.
+     * @param {string} app app name
+     * @param {string} instance replica, or '*'
+     * @param {string} consumer consumer, or '*'
+     * @param {'pause'|'resume'|'check'} action what to do
+     */
+    async consumerCommand(app, instance, consumer, action) {
+      const where = instance === '*' ? 'every replica' : instance;
+      if (action === 'pause' && !confirm(`Pause ${app}/${consumer} on ${where}?\nIt stays paused until you resume it.`)) return;
+      this.cons.busy = true;
+      try {
+        await this.api('/api/v1/consumers/commands', { method: 'POST', body: JSON.stringify({ app, instance, consumer, action }) });
+        this.notify(`${action} sent to ${app} (${where}); it applies within seconds`);
+        setTimeout(() => this.loadConsumers(true), 1500);
+        setTimeout(() => this.loadConsumers(true), 4000);
+      } catch (e) {
+        this.notify('Not sent: ' + e.message, 'error');
+      } finally {
+        this.cons.busy = false;
+      }
+    },
+
+    /**
+     * @param {object} check a replica's last connection check
+     * @param {string} name 'mongodb' or 'pulsar'
+     * @returns {string} e.g. "✓ 3 ms" or "✕ timeout"
+     */
+    probeLabel(check, name) {
+      const r = check?.results?.[name];
+      if (!r) return '—';
+      return r.up ? `✓ ${r.millis} ms` : `✕ ${r.error || 'down'}`;
+    },
+
+    /**
+     * Lists the known DLQs (of the apps' consumers and of the bridges) with how many messages wait in each.
+     * @param {boolean} [quiet] no spinner
+     */
+    async loadDeadLetters(quiet = false) {
+      if (!quiet) this.cons.dlqLoading = true;
+      try {
+        const found = new Map();
+        this.cons.list.forEach(c => { if (c.deadLetterTopic) found.set(c.deadLetterTopic, `${c.app} · ${c.consumer}`); });
+        try {
+          const status = await this.bridgesApi(`${BRIDGES_API}/status`);
+          (status.workers || []).forEach(w => { if (w.deadLetterTopic) found.set(w.deadLetterTopic, `bridge · ${w.name}`); });
+        } catch { /* Cataponte down: only the apps' DLQs */ }
+        const dlqs = await Promise.all([...found.entries()].map(async ([topic, from]) => {
+          const m = topic.match(/^persistent:\/\/([^/]+)\/([^/]+)\/(.+)$/);
+          if (!m) return { topic, from, backlog: null, missing: true };
+          try {
+            const stats = await this.api(`/api/v1/topics/${m[1]}/${m[2]}/${encodeURIComponent(m[3])}/stats`);
+            const sub = stats?.subscriptions?.dlq;
+            return { topic, from, backlog: sub ? (sub.msgBacklog ?? 0) : 0, missing: false };
+          } catch {
+            return { topic, from, backlog: 0, missing: true };   // created with the first dead letter
+          }
+        }));
+        dlqs.sort((a, b) => (b.backlog ?? 0) - (a.backlog ?? 0) || a.topic.localeCompare(b.topic));
+        if (JSON.stringify(dlqs) !== JSON.stringify(this.cons.dlqs)) this.cons.dlqs = dlqs;
+      } finally {
+        this.cons.dlqLoading = false;
+      }
+    },
+
+    /**
+     * Shows the first messages of a DLQ (a peek, recorded in the audit log).
+     * @param {string} topic the DLQ
+     */
+    async peekDeadLetters(topic) {
+      const m = topic.match(/^persistent:\/\/([^/]+)\/([^/]+)\/(.+)$/);
+      if (!m) return;
+      this.cons.open = topic;
+      this.cons.peeking = true;
+      try {
+        this.cons.messages = await this.api(`/api/v1/topics/${m[1]}/${m[2]}/${encodeURIComponent(m[3])}/peek/dlq?count=50`);
+      } catch (e) {
+        this.cons.messages = [];
+        this.notify('Peek: ' + e.message, 'error');
+      } finally {
+        this.cons.peeking = false;
+      }
+    },
+
+    /**
+     * Sends back or discards one dead letter, or all of them, after confirmation; each is audited.
+     * @param {'send-back'|'discard'|'send-back-all'|'discard-all'} action what to do
+     * @param {?object} message the message, for the single actions
+     */
+    async deadLetterAction(action, message = null) {
+      const topic = this.cons.open;
+      const dlq = this.cons.dlqs.find(d => d.topic === topic);
+      const target = message?.properties?.REAL_TOPIC;
+      const texts = {
+        'send-back': `Send message ${message?.messageId} back to ${target}?\nIt is removed from the DLQ once sent.`,
+        'discard': `Discard message ${message?.messageId}? It is removed from the DLQ and lost.`,
+        'send-back-all': `Send every message of ${topic} (${dlq?.backlog ?? '?'}) back to the topic it came from?`,
+        'discard-all': `Discard every message of ${topic} (${dlq?.backlog ?? '?'})? They are lost.`,
+      };
+      if (!confirm(texts[action])) return;
+      this.cons.busy = true;
+      try {
+        const body = { topic };
+        if (message) body.messageId = message.messageId;
+        const r = await this.api(`/api/v1/dead-letters/${action}`, { method: 'POST', body: JSON.stringify(body) });
+        this.notify({ 'send-back': `Sent back to ${r?.to}`, 'discard': 'Discarded',
+          'send-back-all': `${r?.sent ?? 0} sent back${r?.left ? `, ${r.left} left (no origin)` : ''}`,
+          'discard-all': 'DLQ emptied' }[action]);
+        await this.loadDeadLetters(true);
+        // A new peek is audited, so only when something is left to look at.
+        if (action === 'discard-all' || (action === 'send-back-all' && !r?.left)) this.cons.messages = [];
+        else await this.peekDeadLetters(topic);
+      } catch (e) {
+        this.notify('Dead letters: ' + e.message, 'error');
+      } finally {
+        this.cons.busy = false;
+      }
+    },
+
+    /** Loads the deliveries before a DLQ (shared setting). */
+    async loadDlqSetting() {
+      try {
+        const r = await this.api('/api/v1/settings/dead-letters');
+        Object.assign(this.dlqSetting, r, { draft: r.value });
+      } catch (e) { this.notify('Settings: ' + e.message, 'error'); }
+    },
+
+    /**
+     * Changes or resets the deliveries before a DLQ; the apps subscribe again with it.
+     * @param {'PUT'|'DELETE'} method PUT saves the draft, DELETE goes back to the default
+     * @returns {Promise<boolean>} whether it was saved
+     */
+    async saveDlqSetting(method) {
+      try {
+        const options = { method };
+        if (method === 'PUT') options.body = JSON.stringify({ value: Number(this.dlqSetting.draft) });
+        const r = await this.api('/api/v1/settings/dead-letters', options);
+        Object.assign(this.dlqSetting, r, { draft: r.value });
+        this.notify(`A message goes to its DLQ after ${r.value} deliveries`);
+        return true;
+      } catch (e) {
+        this.notify('Deliveries not saved: ' + e.message, 'error');
+        return false;
+      }
     },
 
     // ── Audit trail ────────────────────────────────────────────────────────
     openAudit() {
       if (this.bridgesView) this.closeBridges();
+      this.consumersView = false;
       this.auditView = true;
       this.loadCatauditSettings();
       this.audit.page = 0;
@@ -1431,6 +1650,7 @@ function app() {
     // ── Bridges ────────────────────────────────────────────────────────────
     openBridges() {
       if (this.auditView) this.closeAudit();
+      this.consumersView = false;
       this.bridgesView = true;
       this.loadCataponteSettings();
       this.loadBridges();

@@ -429,3 +429,27 @@ td .payload { font-family: var(--mono); font-size: 12px; max-width: 320px; word-
 /* ── Sidebar tree ── */
 .tree-tools { display: flex; justify-content: flex-end; padding: 4px 12px 2px; font-size: 12px; }
 .bridge-stuck { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* ── Consumers & dead letters (ADR 0015) ── */
+.consumer-card { margin-bottom: 14px; }
+.consumer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.consumer-title { font-weight: 700; color: var(--accent2); }
+.consumer-sub { font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
+.consumer-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.consumer-reason { font-size: 11px; margin-top: 3px; max-width: 280px; overflow-wrap: anywhere; }
+.consumer-stale { opacity: .5; }
+.dlq-layout { display: grid; grid-template-columns: minmax(220px, 340px) 1fr; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .dlq-layout { grid-template-columns: 1fr; } }
+.dlq-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dlq-item { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 3px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); cursor: pointer; font: inherit; }
+.dlq-item.selected { border-color: var(--accent); }
+.dlq-topic { font-size: 12px; overflow-wrap: anywhere; }
+.dlq-from { font-size: 11px; }
+.dlq-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; overflow-wrap: anywhere; }
+.dlq-message { border-top: 1px solid var(--border); padding: 10px 0; }
+.dlq-message-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+.dlq-message-head .consumer-actions { margin-left: auto; }
+.dlq-meta { font-size: 11px; color: var(--muted); margin: 4px 0; display: flex; gap: 6px; flex-wrap: wrap; overflow-wrap: anywhere; }
+.dlq-payload { margin: 4px 0 0; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
+.consumers-panel .muted { color: var(--muted); }
+.dlq-item .backlog-count { font-size: 13px; }

@@ -1,5 +1,7 @@
 package com.catacumbas69.catapulsar.controller;
 
+import com.catacumbas69.catapulsar.dto.CountSettingRequest;
+import com.catacumbas69.catapulsar.dto.CountSettingResponse;
 import com.catacumbas69.catapulsar.dto.IntervalSettingRequest;
 import com.catacumbas69.catapulsar.dto.IntervalSettingResponse;
 import com.catacumbas69.catapulsar.dto.UrlSettingRequest;
@@ -8,6 +10,7 @@ import com.catacumbas69.catapulsar.service.CatametricasEndpoint;
 import com.catacumbas69.catapulsar.service.CataponteEndpoint;
 import com.catacumbas69.catapulsar.service.CatauditEndpoint;
 import com.catacumbas69.catapulsar.service.CollectIntervalService;
+import com.catacumbas69.catapulsar.service.DeadLetterDeliveriesService;
 import com.catacumbas69.catapulsar.service.RefreshIntervalService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -33,6 +36,7 @@ public class SettingsController {
     private final CatametricasEndpoint catametricas;
     private final RefreshIntervalService refresh;
     private final CollectIntervalService collect;
+    private final DeadLetterDeliveriesService deliveries;
 
     /**
      * Creates the controller.
@@ -42,15 +46,54 @@ public class SettingsController {
      * @param catametricas Catametricas base URL holder
      * @param refresh UI auto-refresh interval
      * @param collect Catametricas collection interval
+     * @param deliveries deliveries before a dead-letter topic
      */
     public SettingsController(CataponteEndpoint cataponte, CatauditEndpoint cataudit,
                               CatametricasEndpoint catametricas, RefreshIntervalService refresh,
-                              CollectIntervalService collect) {
+                              CollectIntervalService collect, DeadLetterDeliveriesService deliveries) {
         this.cataponte = cataponte;
         this.cataudit = cataudit;
         this.catametricas = catametricas;
         this.refresh = refresh;
         this.collect = collect;
+        this.deliveries = deliveries;
+    }
+
+    /**
+     * Returns the deliveries before a message goes to its dead-letter topic.
+     *
+     * @return number in use, default and accepted range (2–100)
+     */
+    @Operation(summary = "Deliveries before a dead-letter topic")
+    @GetMapping("/dead-letters")
+    public CountSettingResponse deadLetters() {
+        return CountSettingResponse.of(deliveries, deliveries.value());
+    }
+
+    /**
+     * Changes the deliveries before a dead-letter topic; Cataudit, Catametricas and Cataponte subscribe again.
+     *
+     * @param request new number
+     * @param http current request, for the audit log
+     * @return number in use, default and accepted range
+     */
+    @Operation(summary = "Change the deliveries before a dead-letter topic")
+    @PutMapping("/dead-letters")
+    public CountSettingResponse changeDeadLetters(@Valid @RequestBody CountSettingRequest request,
+                                                  HttpServletRequest http) {
+        return CountSettingResponse.of(deliveries, deliveries.change(request.value(), ClientAddress.of(http)));
+    }
+
+    /**
+     * Goes back to the configured number of deliveries ({@code catacommons.consumers.max-deliveries}).
+     *
+     * @param http current request, for the audit log
+     * @return number in use, default and accepted range
+     */
+    @Operation(summary = "Reset the deliveries before a dead-letter topic")
+    @DeleteMapping("/dead-letters")
+    public CountSettingResponse resetDeadLetters(HttpServletRequest http) {
+        return CountSettingResponse.of(deliveries, deliveries.reset(ClientAddress.of(http)));
     }
 
     /**
