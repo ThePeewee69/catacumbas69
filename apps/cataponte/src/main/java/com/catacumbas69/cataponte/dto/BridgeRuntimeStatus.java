@@ -23,6 +23,10 @@ import java.util.List;
  * @param replicas replicas that run (or try to run) the bridge
  * @param activeReplicas replicas whose consumer receives messages: one for a {@code Failover} subscription (the
  *                       others stand by), all running ones for {@code Shared} and {@code Key_Shared}
+ * @param problem {@code DESTINATION_UNAVAILABLE} or {@code STUCK} reported by a replica that does not relay, or
+ *                {@code null}
+ * @param stuckMessageId message an ordered bridge is stuck on, or {@code null}; {@code POST .../skip} skips it
+ * @param deadLetterTopic the bridge's DLQ, or {@code null}
  */
 public record BridgeRuntimeStatus(
         String bridgeId,
@@ -39,5 +43,8 @@ public record BridgeRuntimeStatus(
         String lastError,
         Instant nextRetryAt,
         int replicas,
-        int activeReplicas) {
+        int activeReplicas,
+        String problem,
+        String stuckMessageId,
+        String deadLetterTopic) {
 }

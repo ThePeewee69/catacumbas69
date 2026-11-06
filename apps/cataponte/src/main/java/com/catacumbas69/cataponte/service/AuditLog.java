@@ -77,6 +77,27 @@ public class AuditLog {
     }
 
     /**
+     * Records that the message a bridge was stuck on was skipped. Subject = bridge id.
+     *
+     * @param user client IP address
+     * @param bridge the bridge
+     * @param messageId the skipped message
+     */
+    public void messageSkipped(String user, BridgeDocument bridge, String messageId) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("name", bridge.getName());
+        details.put("messageId", messageId);
+        details.put("topic", bridge.getSource().getTopic());
+        details.put("subscription", bridge.getSource().getSubscription());
+        try {
+            events.publish(AuditAction.SKIP_MESSAGE.entity(), AuditAction.SKIP_MESSAGE.verb(), bridge.getId(),
+                    EventData.action(user, details));
+        } catch (RuntimeException e) {
+            log.warn("Event not published: message skipped {}: {}", bridge.getId(), e.getMessage());
+        }
+    }
+
+    /**
      * Records that the Pulsar subscription of a deleted or changed bridge was deleted. Subject = the topic.
      *
      * @param cleanup the deletion, with the bridge and who asked for it

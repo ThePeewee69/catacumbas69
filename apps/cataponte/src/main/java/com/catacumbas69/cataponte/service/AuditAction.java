@@ -15,6 +15,8 @@ public enum AuditAction {
     ENABLE_BRIDGE(Entities.BRIDGE, "enabled"),
     /** A bridge was disabled. */
     DISABLE_BRIDGE(Entities.BRIDGE, "disabled"),
+    /** The message an ordered bridge was stuck on was skipped (orch.md decision 69). */
+    SKIP_MESSAGE(Entities.BRIDGE, "message-skipped"),
     /** An area was created (ADR 0014). */
     CREATE_AREA(Entities.AREA, "created"),
     /** An area was changed. */

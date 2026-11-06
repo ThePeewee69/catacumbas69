@@ -34,7 +34,8 @@ class BridgeServiceTest {
     private final AreaRepository areas = mock(AreaRepository.class);
     private final AuditLog audit = mock(AuditLog.class);
     private final SubscriptionCleanup subscriptions = mock(SubscriptionCleanup.class);
-    private final BridgeService service = new BridgeService(repository, areas, audit, subscriptions);
+    private final MessageSkipper skipper = mock(MessageSkipper.class);
+    private final BridgeService service = new BridgeService(repository, areas, audit, subscriptions, skipper);
 
     @BeforeEach
     void saveReturnsArgument() {
@@ -324,6 +325,26 @@ class BridgeServiceTest {
         verify(repository).deleteById("1");
         verify(audit).bridgeChanged(USER, AuditAction.DELETE_BRIDGE, stored, null);
         verify(subscriptions).schedule(stored, USER);
+    }
+
+    @Test
+    void skipStuckMessage_skipsAndAudits_onAnOrderedFailoverBridge() throws Exception {
+        BridgeDocument bridge = TestBridges.ordered("1", DEST_A);
+        when(repository.findById("1")).thenReturn(Optional.of(bridge));
+
+        service.skipStuckMessage("1", "12:34:-1", USER);
+
+        verify(skipper).skip(bridge, "12:34:-1");
+        verify(audit).messageSkipped(USER, bridge, "12:34:-1");
+    }
+
+    @Test
+    void skipStuckMessage_isRefused_forBridgesWithADeadLetterTopic() throws Exception {
+        when(repository.findById("1")).thenReturn(Optional.of(TestBridges.unordered("1", DEST_A)));
+
+        assertThatThrownBy(() -> service.skipStuckMessage("1", "12:34:-1", USER))
+                .isInstanceOf(BridgeValidationException.class).hasMessageContaining("DLQ");
+        verify(skipper, never()).skip(any(), any());
     }
 
     @Test

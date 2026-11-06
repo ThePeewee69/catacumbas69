@@ -7,6 +7,7 @@ import com.catacumbas69.cataponte.service.BridgeValidationException;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.pulsar.client.admin.PulsarAdminException;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -54,6 +55,17 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(BridgeNotFoundException.class)
     public ProblemDetail handleNotFound(BridgeNotFoundException ex) {
         return problem(HttpStatus.NOT_FOUND, "Bridge not found", ex.getMessage());
+    }
+
+    /**
+     * Pulsar refused an admin request (e.g. skipping a message).
+     *
+     * @param ex the exception
+     * @return {@code 502}
+     */
+    @ExceptionHandler(PulsarAdminException.class)
+    public ProblemDetail handlePulsarAdmin(PulsarAdminException ex) {
+        return problem(HttpStatus.BAD_GATEWAY, "Pulsar refused", ex.getMessage());
     }
 
     /**

@@ -210,6 +210,7 @@ class BridgeManagerTest {
         when(worker.start()).thenReturn(startResult);
         when(worker.getConfigVersion()).thenReturn(bridge.getVersion());
         when(worker.getState()).thenReturn(BridgeState.RUNNING);
+        when(worker.isRelaying()).thenReturn(true);
         when(worker.getStatus()).thenReturn(new BridgeWorkerStatus(bridge.getId(), bridge.getName(),
                 BridgeState.RUNNING, true, 0, 0, 0, null, TestBridges.SOURCE, List.of(DEST_A), false, null, null,
                 true));

@@ -187,6 +187,19 @@ public class BridgeProxyService {
     }
 
     /**
+     * Skips the message an ordered {@code Failover} bridge is stuck on.
+     *
+     * @param id bridge id
+     * @param body {@code {"messageId": "…"}}
+     * @param user client IP address, recorded by Cataponte
+     * @return Cataponte's response
+     */
+    public ResponseEntity<byte[]> skip(String id, String body, String user) {
+        return requested(AuditAction.SKIP_BRIDGE_MESSAGE, id, body, user,
+                () -> forward(HttpMethod.POST, BRIDGES + "/" + id + "/skip", body, user));
+    }
+
+    /**
      * Lists the areas, with their number of bridges.
      *
      * @return Cataponte's response

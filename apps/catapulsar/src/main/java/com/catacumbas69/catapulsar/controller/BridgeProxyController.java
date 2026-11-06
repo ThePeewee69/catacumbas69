@@ -166,6 +166,21 @@ public class BridgeProxyController {
     }
 
     /**
+     * Skips the message an ordered {@code Failover} bridge is stuck on (ADR 0015).
+     *
+     * @param id bridge id
+     * @param body {@code {"messageId": "…"}}
+     * @param request current request; its client address is sent to Cataponte for the audit log
+     * @return Cataponte's response
+     */
+    @Operation(summary = "Skip the message an ordered Failover bridge is stuck on")
+    @PostMapping(path = "/{id}/skip", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<byte[]> skip(@PathVariable @PulsarName String id, @RequestBody String body,
+                                       HttpServletRequest request) {
+        return bridges.skip(id, body, ClientAddress.of(request));
+    }
+
+    /**
      * Disables a bridge.
      *
      * @param id bridge id

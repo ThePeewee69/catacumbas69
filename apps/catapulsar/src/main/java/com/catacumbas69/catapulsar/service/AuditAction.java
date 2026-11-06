@@ -37,6 +37,8 @@ public enum AuditAction {
     ENABLE_BRIDGE("bridge", "enable-requested"),
     /** A bridge was disabled. */
     DISABLE_BRIDGE("bridge", "disable-requested"),
+    /** Skipping the message an ordered bridge is stuck on was requested (Cataponte records the skip). */
+    SKIP_BRIDGE_MESSAGE("bridge", "skip-requested"),
     /**
      * An area creation was requested through Catapulsar ({@code area.create-requested}); Cataponte records the
      * change itself ({@code area.created}, ADR 0014).

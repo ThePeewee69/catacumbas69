@@ -27,6 +27,9 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param lastError last error in that replica
  * @param nextRetryAt next start attempt in that replica after a failure
  * @param updatedAt when the report was written
+ * @param problem {@code DESTINATION_UNAVAILABLE} or {@code STUCK} in that replica, or {@code null}
+ * @param stuckMessageId message an ordered bridge is stuck on in that replica, or {@code null}
+ * @param deadLetterTopic the bridge's DLQ, or {@code null}
  */
 @Document(collection = WorkerStatusDocument.COLLECTION)
 public record WorkerStatusDocument(
@@ -46,7 +49,10 @@ public record WorkerStatusDocument(
         boolean ordered,
         String lastError,
         Instant nextRetryAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        String problem,
+        String stuckMessageId,
+        String deadLetterTopic) {
 
     /** Collection name. */
     public static final String COLLECTION = "cataponte_worker_status";

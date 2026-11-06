@@ -189,6 +189,19 @@ public class BridgeManager {
         });
     }
 
+    /**
+     * Restarts the bridges that have a DLQ, so a new {@code dlq.max-deliveries} applies: they are stopped now and
+     * started again by the next reconciliation. Their unacknowledged messages are delivered again.
+     *
+     * @return how many were restarted
+     */
+    public int restartDeadLetterBridges() {
+        List<String> ids = workers.entrySet().stream().filter(entry -> entry.getValue().hasDeadLetterTopic())
+                .map(Map.Entry::getKey).toList();
+        ids.forEach(this::stopAsync);
+        return ids.size();
+    }
+
     /** Stops every worker in parallel, waiting at most the shutdown timeout (RES-7). */
     @PreDestroy
     public void shutdown() {
@@ -236,7 +249,7 @@ public class BridgeManager {
      * @return number of workers in state {@link BridgeState#RUNNING}
      */
     public int getRunningCount() {
-        return (int) workers.values().stream().filter(worker -> worker.getState() == BridgeState.RUNNING).count();
+        return (int) workers.values().stream().filter(BridgeWorker::isRelaying).count();
     }
 
     /**

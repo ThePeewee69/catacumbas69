@@ -22,6 +22,9 @@ import java.util.List;
  * @param active {@code true} when this replica's consumer receives messages: always while running on a
  *               {@code Shared} or {@code Key_Shared} subscription; on a {@code Failover} subscription only for the
  *               replica the broker made active (the others stand by)
+ * @param problem {@code DESTINATION_UNAVAILABLE} or {@code STUCK} while running but not relaying, else {@code null}
+ * @param stuckMessageId id of the message an ordered bridge is stuck on, or {@code null}
+ * @param deadLetterTopic the bridge's DLQ, or {@code null} (ordered bridges and {@code Failover} have none)
  */
 public record BridgeWorkerStatus(
         String bridgeId,
@@ -37,5 +40,34 @@ public record BridgeWorkerStatus(
         boolean ordered,
         String lastError,
         Instant nextRetryAt,
-        boolean active) {
+        boolean active,
+        String problem,
+        String stuckMessageId,
+        String deadLetterTopic) {
+
+    /**
+     * A status with no problem and no DLQ (stopped, blocked or failed to start).
+     *
+     * @param bridgeId bridge id
+     * @param name bridge name
+     * @param state lifecycle state
+     * @param running whether it relays
+     * @param messagesForwarded messages relayed
+     * @param errors failed deliveries
+     * @param inFlight messages not yet confirmed
+     * @param startedAt when it started relaying
+     * @param sourceTopic source topic
+     * @param destinationTopics destination topics
+     * @param ordered whether it is ordered
+     * @param lastError last error
+     * @param nextRetryAt next start attempt
+     * @param active whether this replica's consumer receives messages
+     */
+    public BridgeWorkerStatus(String bridgeId, String name, BridgeState state, boolean running, long messagesForwarded,
+                              long errors, int inFlight, Instant startedAt, String sourceTopic,
+                              List<String> destinationTopics, boolean ordered, String lastError, Instant nextRetryAt,
+                              boolean active) {
+        this(bridgeId, name, state, running, messagesForwarded, errors, inFlight, startedAt, sourceTopic,
+                destinationTopics, ordered, lastError, nextRetryAt, active, null, null, null);
+    }
 }

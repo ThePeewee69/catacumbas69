@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -92,7 +93,7 @@ public class BridgeStatusService {
                 instance, status.name(), status.state() == null ? null : status.state().name(), status.running(),
                 status.active(), status.messagesForwarded(), status.errors(), status.inFlight(), status.startedAt(),
                 status.sourceTopic(), status.destinationTopics(), status.ordered(), status.lastError(),
-                status.nextRetryAt(), now);
+                status.nextRetryAt(), now, status.problem(), status.stuckMessageId(), status.deadLetterTopic());
     }
 
     /**
@@ -109,7 +110,8 @@ public class BridgeStatusService {
 
     private static BridgeRuntimeStatus mergeBridge(List<WorkerStatusDocument> replicas) {
         WorkerStatusDocument first = replicas.get(0);
-        boolean running = replicas.stream().anyMatch(WorkerStatusDocument::running);
+        // a Failover replica standing by does not relay: only an active one that relays counts
+        boolean running = replicas.stream().anyMatch(report -> report.running() && report.active());
         String lastError = replicas.stream().filter(report -> !report.running())
                 .map(WorkerStatusDocument::lastError).filter(Objects::nonNull).findFirst()
                 .orElse(replicas.stream().map(WorkerStatusDocument::lastError).filter(Objects::nonNull).findFirst()
@@ -131,10 +133,24 @@ public class BridgeStatusService {
                 replicas.stream().map(WorkerStatusDocument::nextRetryAt).filter(Objects::nonNull)
                         .min(Comparator.naturalOrder()).orElse(null),
                 replicas.size(),
-                (int) replicas.stream().filter(WorkerStatusDocument::active).count());
+                (int) replicas.stream().filter(WorkerStatusDocument::active).count(),
+                running ? null : firstNonNull(replicas, WorkerStatusDocument::problem),
+                running ? null : firstNonNull(replicas, WorkerStatusDocument::stuckMessageId),
+                firstNonNull(replicas, WorkerStatusDocument::deadLetterTopic));
+    }
+
+    private static String firstNonNull(List<WorkerStatusDocument> replicas,
+                                       Function<WorkerStatusDocument, String> field) {
+        return replicas.stream().map(field).filter(Objects::nonNull).findFirst().orElse(null);
     }
 
     private static String state(List<WorkerStatusDocument> replicas) {
+        if (replicas.stream().anyMatch(report -> report.running() && report.active())) {
+            return BridgeState.RUNNING.name();
+        }
+        if (replicas.stream().anyMatch(report -> report.problem() != null)) {
+            return BridgeState.FAILED.name();
+        }
         for (BridgeState candidate : PRIORITY) {
             if (replicas.stream().anyMatch(report -> candidate.name().equals(report.state()))) {
                 return candidate.name();

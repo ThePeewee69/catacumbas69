@@ -1750,6 +1750,26 @@ function app() {
       }
     },
 
+    /**
+     * Skips the message an ordered Failover bridge is stuck on, after confirmation (Cataponte audits it).
+     * @param {object} bridge the bridge
+     */
+    async skipStuckMessage(bridge) {
+      const status = this.bridges.status[bridge.id];
+      const id = status?.stuckMessageId;
+      if (!id) return;
+      if (!confirm(`Skip message ${id} of bridge "${bridge.name}"?\n\nThe destination refuses it: ${status.lastError || 'unknown error'}.`
+          + `\nIt will not be relayed to ${this.bridgeDestTopics(bridge).join(', ')}; it stays in ${bridge.source?.topic} until`
+          + ' its retention ends. A message sent in a batch is skipped with its whole batch.')) return;
+      try {
+        await this.bridgesApi(`${BRIDGES_API}/${bridge.id}/skip`, { method: 'POST', body: JSON.stringify({ messageId: id }) });
+        this.notify(`Message ${id} skipped`);
+        await this.loadBridgeStatus();
+      } catch (e) {
+        this.notify('Cataponte: ' + e.message, 'error');
+      }
+    },
+
     async deleteBridge(id) {
       const bridge = this.bridges.list.find(b => b.id === id);
       const warning = bridge ? await this.subscriptionWarning(bridge) : '';

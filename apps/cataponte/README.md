@@ -55,6 +55,20 @@ Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs
   its workers' status to `cataponte_worker_status` every 5 s, so `GET /api/v1/bridges/status` answers for all
   of them: most advanced state, summed counters, `replicas` and `activeReplicas`. Two writes on different
   replicas at the same instant could still close a loop; the reconciler then blocks those bridges.
+- **Poison messages and outages** (ADR 0015, orch.md decisions 66, 69, 74): a destination either *refuses* a
+  message (not valid, too large, schema not compatible) or is *unavailable* (timeout, connection lost, quota full,
+  topic terminated).
+  - **Unordered** bridges negatively acknowledge a refused message; on `Shared` and `Key_Shared` subscriptions Pulsar
+    moves it, after `dlq.max-deliveries` deliveries (shared setting, default 10), to
+    `<source>-<subscription>-DLQ` (subscription `dlq`). While the destination is unavailable the bridge reports
+    `FAILED` (`problem: DESTINATION_UNAVAILABLE`), pauses its consumer and sends the failed messages again itself
+    (1 s doubling up to 1 min) until they are accepted, then resumes; they are not redelivered by Pulsar, so an
+    outage never fills the DLQ. Changing `dlq.max-deliveries` restarts the bridges that have a DLQ.
+  - **Ordered** bridges (no DLQ: it would break the order) keep replaying from the first unacknowledged message. A
+    message the destination refuses makes the bridge **stuck** (`FAILED`, `problem: STUCK`, `stuckMessageId`); on a
+    `Failover` subscription `POST /api/v1/bridges/{id}/skip {"messageId"}` skips it through Pulsar's admin API
+    (only if it is still the first unacknowledged message; `409` otherwise; not for partitioned sources; a message
+    sent in a batch is skipped with its batch), audited as `bridge.message-skipped`.
 - **Subscriptions** (orch.md decisions 60–62): two bridges may not read the same topic with the same subscription
   (`409`). Deleting a bridge, or changing its source topic or subscription name, deletes the subscription it no
   longer uses, unless another bridge uses it: the deletion is queued in `cataponte_subscription_cleanups`, tried
@@ -116,6 +130,7 @@ Unit tests need no Docker, MongoDB or Pulsar.
 | `GET` / `POST` | `/api/v1/bridges` | List / create (`201` + `Location`) |
 | `GET` / `PUT` / `DELETE` | `/api/v1/bridges/{id}` | Get / replace (send `version`) / delete (`204`) |
 | `POST` | `/api/v1/bridges/{id}/enable`, `/disable` | Idempotent |
+| `POST` | `/api/v1/bridges/{id}/skip` | `{"messageId"}`: skip the message an ordered `Failover` bridge is stuck on (`204`; `409` if it moved on; `502` if Pulsar refuses) |
 | `PUT` | `/api/v1/bridges/system/{name}` | Create or update a system bridge by name (apps at start-up; header `X-Catacumbas69-App` = actor) |
 | `GET` | `/api/v1/bridges/status` | Runtime state per bridge over every replica: `RUNNING`, `STARTING`, `FAILED`, `BLOCKED`; counters summed; `replicas`, `activeReplicas` |
 | `GET` | `/api/v1/bridges/traffic` | All-time messages/bytes of every bridge, per role and topic |

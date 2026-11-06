@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Catapulsar</title>
 <link rel="icon" type="image/svg+xml" href="/catapulsar-icon.svg">
-<link rel="stylesheet" href="/catapulsar.css?v=25">
-<script src="/catapulsar.js?v=25" defer></script>
+<link rel="stylesheet" href="/catapulsar.css?v=26">
+<script src="/catapulsar.js?v=26" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
 </head>
 <body x-data="app()" x-init="init()">
@@ -1014,10 +1014,30 @@
                     <template x-if="!bridge.enabled">
                       <span class="tag" style="background:rgba(100,116,139,.15);color:var(--muted);">disabled</span>
                     </template>
-                    <template x-if="bridge.enabled && bridges.status[bridge.id]?.state === 'FAILED'">
+                    <template x-if="bridge.enabled && bridges.status[bridge.id]?.state === 'FAILED' && !bridges.status[bridge.id]?.problem">
                       <span class="tag tag-failed"
                             :title="'Retry at ' + fmtDate(bridges.status[bridge.id].nextRetryAt)"
                             x-text="'failed: ' + truncate(bridges.status[bridge.id].lastError, 60)"></span>
+                    </template>
+                    <template x-if="bridge.enabled && bridges.status[bridge.id]?.problem === 'DESTINATION_UNAVAILABLE'">
+                      <span class="tag tag-failed"
+                            :title="'The destination does not accept messages: the bridge paused and keeps sending the failed ones again until they are accepted. ' + (bridges.status[bridge.id].lastError || '')"
+                            x-text="'destination unavailable: ' + truncate(bridges.status[bridge.id].lastError, 50)"></span>
+                    </template>
+                    <template x-if="bridge.enabled && bridges.status[bridge.id]?.problem === 'STUCK'">
+                      <span class="bridge-stuck">
+                        <span class="tag tag-failed"
+                              :title="'The destination refuses this message, so the ordered bridge cannot go past it: ' + (bridges.status[bridge.id].lastError || '')"
+                              x-text="'stuck on ' + bridges.status[bridge.id].stuckMessageId + ': ' + truncate(bridges.status[bridge.id].lastError, 40)"></span>
+                        <template x-if="(bridge.source?.subscriptionType || '') === 'Failover' && bridges.status[bridge.id].stuckMessageId">
+                          <button type="button" class="btn btn-danger btn-xs" @click="skipStuckMessage(bridge)"
+                                  title="Acknowledge this message without relaying it, so the bridge carries on (audited)">Skip this message</button>
+                        </template>
+                      </span>
+                    </template>
+                    <template x-if="bridges.status[bridge.id]?.deadLetterTopic">
+                      <span class="tag" style="background:rgba(100,116,139,.15);color:var(--muted);"
+                            :title="'Messages the destination refuses go, after ' + 'N deliveries, to ' + bridges.status[bridge.id].deadLetterTopic">DLQ</span>
                     </template>
                     <template x-if="bridge.enabled && bridges.status[bridge.id]?.state === 'BLOCKED'">
                       <span class="tag tag-failed" :title="bridges.status[bridge.id].lastError">blocked: message loop</span>

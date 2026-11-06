@@ -4,6 +4,7 @@ import com.catacumbas69.cataponte.dto.BridgeMapper;
 import com.catacumbas69.cataponte.dto.BridgeRequest;
 import com.catacumbas69.cataponte.dto.BridgeResponse;
 import com.catacumbas69.cataponte.dto.BridgeStatusResponse;
+import com.catacumbas69.cataponte.dto.SkipRequest;
 import com.catacumbas69.cataponte.dto.TrafficMinuteResponse;
 import com.catacumbas69.cataponte.dto.TrafficTotalResponse;
 import com.catacumbas69.cataponte.model.AreaDocument;
@@ -23,6 +24,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import org.apache.pulsar.client.admin.PulsarAdminException;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -192,6 +194,24 @@ public class BridgeController {
     @PostMapping("/{id}/disable")
     public BridgeResponse disable(@PathVariable String id, HttpServletRequest http) {
         return respond(service.setEnabled(id, false, ClientAddress.of(http)));
+    }
+
+    /**
+     * Skips the message an ordered {@code Failover} bridge is stuck on (orch.md decision 69). Only if it is still the
+     * first unacknowledged message of the subscription ({@code 409} otherwise). Audited as
+     * {@code bridge.message-skipped}.
+     *
+     * @param id bridge id
+     * @param request the message id from the bridge's status
+     * @param http current request, for the audit log
+     * @throws PulsarAdminException if Pulsar refuses
+     */
+    @Operation(summary = "Skip the message an ordered Failover bridge is stuck on")
+    @PostMapping("/{id}/skip")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void skip(@PathVariable String id, @Valid @RequestBody SkipRequest request, HttpServletRequest http)
+            throws PulsarAdminException {
+        service.skipStuckMessage(id, request.messageId(), ClientAddress.of(http));
     }
 
     /**

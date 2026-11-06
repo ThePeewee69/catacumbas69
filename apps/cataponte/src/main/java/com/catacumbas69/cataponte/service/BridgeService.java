@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import org.apache.pulsar.client.admin.PulsarAdminException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Sort;
@@ -30,6 +31,7 @@ public class BridgeService {
     private final AreaRepository areas;
     private final AuditLog audit;
     private final SubscriptionCleanup subscriptions;
+    private final MessageSkipper skipper;
     /** Serialises changes that can alter the bridge graph, so two requests cannot close a loop together. */
     private final Object topologyLock = new Object();
 
@@ -40,13 +42,15 @@ public class BridgeService {
      * @param areas areas, whose patterns limit the topics of their bridges (ADR 0014)
      * @param audit audit log for configuration changes
      * @param subscriptions deletes the subscriptions bridges no longer use (orch.md decision 60)
+     * @param skipper skips the message an ordered bridge is stuck on (orch.md decision 69)
      */
     public BridgeService(BridgeRepository repository, AreaRepository areas, AuditLog audit,
-                         SubscriptionCleanup subscriptions) {
+                         SubscriptionCleanup subscriptions, MessageSkipper skipper) {
         this.repository = repository;
         this.areas = areas;
         this.audit = audit;
         this.subscriptions = subscriptions;
+        this.skipper = skipper;
     }
 
     /**
@@ -192,6 +196,28 @@ public class BridgeService {
         repository.deleteById(id);
         audit.bridgeChanged(user, AuditAction.DELETE_BRIDGE, existing, null);
         releaseSubscription(existing, user);
+    }
+
+    /**
+     * Skips the message an ordered {@code Failover} bridge is stuck on, and audits it.
+     *
+     * @param id bridge id
+     * @param messageId the message the bridge reports it is stuck on
+     * @param user client IP address, for the audit log
+     * @throws BridgeNotFoundException if the bridge does not exist
+     * @throws BridgeValidationException if the bridge is not an ordered {@code Failover} one, or its source is
+     *         partitioned
+     * @throws BridgeConflictException if that message is no longer the first one
+     * @throws PulsarAdminException if Pulsar refuses
+     */
+    public void skipStuckMessage(String id, String messageId, String user) throws PulsarAdminException {
+        BridgeDocument bridge = get(id);
+        if (!bridge.isOrderedEffective() || !"Failover".equals(bridge.getSource().subscriptionTypeOrDefault())) {
+            throw new BridgeValidationException("messageId", "Skip this message is for ordered Failover bridges;"
+                    + " other bridges send poison messages to their DLQ");
+        }
+        skipper.skip(bridge, messageId);
+        audit.messageSkipped(user, bridge, messageId);
     }
 
     /**

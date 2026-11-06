@@ -141,7 +141,7 @@ class BridgeWorkerTest {
         Message<byte[]> m1 = message("m1");
         when(consumer.receive(anyInt(), any(TimeUnit.class))).thenReturn(m1, (Message<byte[]>) null);
         sendsSucceed(messageA);
-        when(messageB.sendAsync()).thenReturn(CompletableFuture.failedFuture(new IllegalStateException("down")));
+        when(messageB.sendAsync()).thenReturn(CompletableFuture.failedFuture(refused()));
 
         worker = start(TestBridges.unordered("1", DEST_A, DEST_B));
         await().atMost(WAIT).untilAsserted(() -> verify(consumer).negativeAcknowledge(m1));
@@ -171,11 +171,11 @@ class BridgeWorkerTest {
     }
 
     @Test
-    void unordered_negativelyAcksMessage_whenAnyDestinationFails() throws Exception {
+    void unordered_negativelyAcksAMessageTheDestinationRefuses() throws Exception {
         Message<byte[]> m1 = message("m1");
         when(consumer.receive(anyInt(), any(TimeUnit.class))).thenReturn(m1, (Message<byte[]>) null);
         sendsSucceed(messageA);
-        when(messageB.sendAsync()).thenReturn(CompletableFuture.failedFuture(new IllegalStateException("down")));
+        when(messageB.sendAsync()).thenReturn(CompletableFuture.failedFuture(refused()));
 
         worker = start(TestBridges.unordered("1", DEST_A, DEST_B));
 
@@ -183,7 +183,69 @@ class BridgeWorkerTest {
         verify(consumer, never()).acknowledgeAsync(m1.getMessageId());
         verify(consumer, never()).redeliverUnacknowledgedMessages();
         assertThat(worker.getStatus().errors()).isEqualTo(1);
-        assertThat(worker.getStatus().lastError()).isEqualTo("down");
+        assertThat(worker.getStatus().lastError()).isEqualTo("too big");
+        assertThat(worker.getStatus().running()).isTrue();
+    }
+
+    @Test
+    void unordered_keepsAndResendsMessages_whileTheDestinationIsUnavailable() throws Exception {
+        Message<byte[]> m1 = message("m1");
+        when(consumer.receive(anyInt(), any(TimeUnit.class))).thenReturn(m1, (Message<byte[]>) null);
+        when(messageA.sendAsync())
+                .thenReturn(CompletableFuture.failedFuture(new PulsarClientException.TimeoutException("timeout")))
+                .thenReturn(CompletableFuture.failedFuture(new PulsarClientException.TimeoutException("timeout")))
+                .thenAnswer(invocation -> CompletableFuture.completedFuture(mock(MessageId.class)));
+
+        worker = start(TestBridges.unordered("1", DEST_A));
+
+        await().atMost(WAIT).untilAsserted(() -> verify(consumer).acknowledgeAsync(m1.getMessageId()));
+        verify(consumer).pause();
+        verify(consumer).resume();
+        verify(consumer, never()).negativeAcknowledge(any(Message.class));
+        assertThat(worker.getStatus().running()).isTrue();
+        assertThat(worker.getStatus().problem()).isNull();
+    }
+
+    @Test
+    void unordered_reportsFailed_whileTheDestinationIsUnavailable() throws Exception {
+        Message<byte[]> m1 = message("m1");
+        when(consumer.receive(anyInt(), any(TimeUnit.class))).thenReturn(m1, (Message<byte[]>) null);
+        when(messageA.sendAsync())
+                .thenReturn(CompletableFuture.failedFuture(new PulsarClientException.TimeoutException("timeout")));
+
+        worker = start(TestBridges.unordered("1", DEST_A));
+
+        await().atMost(WAIT).untilAsserted(() -> {
+            assertThat(worker.getStatus().state()).isEqualTo(BridgeState.FAILED);
+            assertThat(worker.getStatus().problem()).isEqualTo(BridgeWorker.DESTINATION_UNAVAILABLE);
+        });
+        assertThat(worker.getStatus().running()).isFalse();
+        verify(consumer, never()).negativeAcknowledge(any(Message.class));
+    }
+
+    @Test
+    void ordered_reportsTheMessageItIsStuckOn_whenTheDestinationRefusesIt() throws Exception {
+        Message<byte[]> m1 = message("m1");
+        when(m1.getMessageId().toString()).thenReturn("12:34:-1");
+        when(consumer.receive(anyInt(), any(TimeUnit.class))).thenReturn(m1, (Message<byte[]>) null);
+        when(messageA.sendAsync()).thenReturn(CompletableFuture.failedFuture(refused()));
+
+        worker = start(TestBridges.ordered("1", DEST_A));
+
+        await().atMost(WAIT).untilAsserted(() -> {
+            assertThat(worker.getStatus().problem()).isEqualTo(BridgeWorker.STUCK);
+            assertThat(worker.getStatus().stuckMessageId()).isEqualTo("12:34:-1");
+        });
+        assertThat(worker.getStatus().deadLetterTopic()).isNull();
+    }
+
+    @Test
+    void tellsARefusalFromAnOutage() {
+        assertThat(BridgeWorker.isRefusedByDestination(refused())).isTrue();
+        assertThat(BridgeWorker.isRefusedByDestination(
+                new java.util.concurrent.CompletionException(refused()))).isTrue();
+        assertThat(BridgeWorker.isRefusedByDestination(new PulsarClientException.TimeoutException("t"))).isFalse();
+        assertThat(BridgeWorker.isRefusedByDestination(new IllegalStateException("down"))).isFalse();
     }
 
     @Test
@@ -265,6 +327,10 @@ class BridgeWorkerTest {
                 new BridgeMetrics(new SimpleMeterRegistry(), bridge.getName()), traffic);
         started.start().get(1, TimeUnit.SECONDS);
         return started;
+    }
+
+    private static PulsarClientException refused() {
+        return new PulsarClientException.InvalidMessageException("too big");
     }
 
     private static void sendsSucceed(TypedMessageBuilder<byte[]> builder) {

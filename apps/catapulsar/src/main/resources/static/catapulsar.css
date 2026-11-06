@@ -428,3 +428,4 @@ td .payload { font-family: var(--mono); font-size: 12px; max-width: 320px; word-
 
 /* ── Sidebar tree ── */
 .tree-tools { display: flex; justify-content: flex-end; padding: 4px 12px 2px; font-size: 12px; }
+.bridge-stuck { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }

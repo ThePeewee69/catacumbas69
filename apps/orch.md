@@ -1031,3 +1031,9 @@ Phase 7, after the review of ADR 0015 (2026-11-06):
 73. Cataudit registers its own **`audit-cataudit`** bridge, so its consumer events reach the audit trail (there is no
     loop: they are published on state changes, never per message). A message that is not a CloudEvent goes
     **straight to the DLQ** (property `DLQ_REASON`) instead of being dropped.
+74. Cataponte tells a message the destination **refuses** (not valid, too large, schema not compatible: it counts
+    towards the DLQ) from a destination that is **unavailable** (timeout, connection lost, quota full, topic
+    terminated): the bridge goes `FAILED`, pauses and resends the held messages itself until accepted, so an outage
+    never fills the DLQ. Only **unordered** `Shared`/`Key_Shared` bridges have a DLQ. Changing `dlq.max-deliveries`
+    restarts them. *Skip this message* checks with Pulsar's admin API that the message is still the first
+    unacknowledged one, then skips one entry (partitioned sources not supported yet).

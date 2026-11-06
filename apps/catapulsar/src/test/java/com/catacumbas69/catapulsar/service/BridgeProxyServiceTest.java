@@ -179,4 +179,18 @@ class BridgeProxyServiceTest {
         verify(events).publish("area", "create-requested", "a1",
                 EventData.action("10.0.0.1", Map.of("status", 201, "request", "{\"name\":\"media\"}")));
     }
+
+    @Test
+    void skip_forwardsTheMessageId_andPublishesTheRequest() {
+        cataponte.expect(requestTo("http://cataponte/api/v1/bridges/b1/skip"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().json("{\"messageId\":\"12:34:-1\"}"))
+                .andRespond(withStatus(HttpStatus.NO_CONTENT));
+
+        service.skip("b1", "{\"messageId\":\"12:34:-1\"}", "10.0.0.1");
+
+        cataponte.verify();
+        verify(events).publish("bridge", "skip-requested", "b1",
+                EventData.action("10.0.0.1", Map.of("status", 204, "request", "{\"messageId\":\"12:34:-1\"}")));
+    }
 }

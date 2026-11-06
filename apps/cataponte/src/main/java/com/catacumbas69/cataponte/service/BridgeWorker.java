@@ -1,16 +1,19 @@
 package com.catacumbas69.cataponte.service;
 
+import com.catacumbas69.catacommons.consumers.DeadLetters;
 import com.catacumbas69.cataponte.config.CataponteProperties;
 import com.catacumbas69.cataponte.model.BridgeDocument;
 import com.catacumbas69.cataponte.model.TrafficRole;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -39,11 +42,18 @@ import org.slf4j.MDC;
  * <h2>Delivery (ARCH-6, PERF-4)</h2>
  * A source message is acknowledged only after every destination accepted it (at-least-once).
  * <ul>
- *   <li><b>Unordered</b>: a failed message is negatively acknowledged and redelivered later.</li>
+ *   <li><b>Unordered</b>: a message a destination <i>refuses</i> (not valid, too large, schema not compatible) is
+ *   negatively acknowledged; on {@code Shared} and {@code Key_Shared} subscriptions Pulsar moves it to the DLQ after
+ *   {@code dlq.max-deliveries} deliveries (ADR 0015). Any other failure means the destination is <i>unavailable</i>:
+ *   the worker reports {@code FAILED}, pauses its consumer, keeps the failed messages and sends them again itself
+ *   (1 s doubling up to the start back-off maximum) until they are accepted, then resumes. They are not
+ *   redelivered by Pulsar, so an outage does not count towards the DLQ.</li>
  *   <li><b>Ordered</b>: on any failure the worker stops acknowledging, waits for every in-flight send to
  *   settle, then asks the broker to redeliver all unacknowledged messages, so the stream is replayed in
  *   source order. Duplicates are possible; a message sent in the instant between a producer failure and
- *   the pause may still overtake the replay.</li>
+ *   the pause may still overtake the replay. While a message keeps failing the worker reports {@code FAILED}; if
+ *   the destination refuses it, the bridge is <i>stuck</i> on it, and a {@code Failover} bridge offers <i>Skip this
+ *   message</i> (orch.md decision 69).</li>
  * </ul>
  *
  * <h2>Threading</h2>
@@ -53,6 +63,12 @@ import org.slf4j.MDC;
  */
 @Slf4j
 public class BridgeWorker {
+
+    /** Problem reported while the destination does not accept any message. */
+    public static final String DESTINATION_UNAVAILABLE = "DESTINATION_UNAVAILABLE";
+
+    /** Problem reported while an ordered bridge keeps failing on one message the destination refuses. */
+    public static final String STUCK = "STUCK";
 
     private static final int RECEIVE_POLL_MILLIS = 200;
 
@@ -69,6 +85,14 @@ public class BridgeWorker {
     private final Semaphore inFlight;
     /** Name of this replica's consumer, e.g. {@code cataponte@<instance>/<bridge>}; {@code null} = Pulsar's. */
     private final String consumerName;
+    /** DLQ of an unordered bridge on a {@code Shared} or {@code Key_Shared} subscription, else {@code null}. */
+    private final String deadLetterTopic;
+    private final int maxDeliveries;
+    /** Messages kept while the destination is unavailable, sent again by the worker itself. */
+    private final Deque<Message<byte[]>> held = new ConcurrentLinkedDeque<>();
+    private volatile String problem;
+    private volatile String stuckMessageId;
+    private volatile int heldAttempts;
     private final List<Producer<byte[]>> producers = new ArrayList<>();
     private final AtomicReference<String> lastError = new AtomicReference<>();
     /** Partitions where the broker made this consumer the active one ({@code Failover}; -1 = not partitioned). */
@@ -107,6 +131,23 @@ public class BridgeWorker {
      */
     public BridgeWorker(BridgeDocument config, PulsarClient client, CataponteProperties.Bridge settings,
                         BridgeMetrics metrics, TrafficRecorder traffic, String consumerName) {
+        this(config, client, settings, metrics, traffic, consumerName, 0);
+    }
+
+    /**
+     * Creates a worker for a bridge definition, with a DLQ when it is unordered on a {@code Shared} or
+     * {@code Key_Shared} subscription.
+     *
+     * @param config bridge definition snapshot; later changes to the document do not affect the worker
+     * @param client shared Pulsar client
+     * @param settings runtime tuning
+     * @param metrics meters for this bridge
+     * @param traffic per-topic message counts stored in MongoDB
+     * @param consumerName consumer name, or {@code null} to let Pulsar choose one
+     * @param maxDeliveries deliveries before the DLQ; {@code 0} for no DLQ
+     */
+    public BridgeWorker(BridgeDocument config, PulsarClient client, CataponteProperties.Bridge settings,
+                        BridgeMetrics metrics, TrafficRecorder traffic, String consumerName, int maxDeliveries) {
         this.consumerName = consumerName;
         this.config = config;
         this.client = client;
@@ -115,6 +156,11 @@ public class BridgeWorker {
         this.destinationTopics = config.resolveDestinationTopics();
         this.ordered = config.isOrderedEffective();
         this.subscriptionType = subscriptionTypeOf(config);
+        boolean deadLetters = maxDeliveries > 0 && !ordered && subscriptionType != SubscriptionType.Failover
+                && subscriptionType != SubscriptionType.Exclusive;
+        this.maxDeliveries = deadLetters ? maxDeliveries : 0;
+        this.deadLetterTopic = deadLetters
+                ? DeadLetters.topicOf(config.getSource().getTopic(), config.getSource().getSubscription()) : null;
         this.maxInFlight = config.getMaxInFlight() != null ? config.getMaxInFlight() : settings.defaultMaxInFlight();
         this.inFlight = new Semaphore(maxInFlight);
         metrics.registerInFlight(this::inFlightCount);
@@ -215,6 +261,10 @@ public class BridgeWorker {
         MDC.put("bridgeName", config.getName());
         try {
             while (state == BridgeState.RUNNING) {
+                if (!held.isEmpty()) {
+                    retryHeld();
+                    continue;
+                }
                 if (replayRequested) {
                     replay();
                     continue;
@@ -257,7 +307,10 @@ public class BridgeWorker {
      */
     private void forward(Message<byte[]> message) {
         long size = payloadSize(message);
-        CompletableFuture<Void> allSent;
+        sendToAll(message, size).whenComplete((ignored, failure) -> onForwardComplete(message, size, failure));
+    }
+
+    private CompletableFuture<Void> sendToAll(Message<byte[]> message, long size) {
         try {
             List<CompletableFuture<MessageId>> sends = new ArrayList<>(producers.size());
             for (int i = 0; i < producers.size(); i++) {
@@ -273,11 +326,10 @@ public class BridgeWorker {
                 }
                 sends.add(send);
             }
-            allSent = CompletableFuture.allOf(sends.toArray(CompletableFuture[]::new));
+            return CompletableFuture.allOf(sends.toArray(CompletableFuture[]::new));
         } catch (RuntimeException e) {
-            allSent = CompletableFuture.failedFuture(e);
+            return CompletableFuture.failedFuture(e);
         }
-        allSent.whenComplete((ignored, failure) -> onForwardComplete(message, size, failure));
     }
 
     private void onForwardComplete(Message<byte[]> message, long size, Throwable failure) {
@@ -288,13 +340,11 @@ public class BridgeWorker {
                 // Leave it unacknowledged: it is replayed after the failed message, keeping order.
                 return;
             } else {
-                consumer.acknowledgeAsync(message.getMessageId())
-                        .exceptionally(ackFailure -> {
-                            log.debug("Bridge '{}' ack failed: {}", config.getName(), ackFailure.getMessage());
-                            return null;
-                        });
-                metrics.forwarded();
-                sourceTraffic.add(size);
+                acknowledge(message, size);
+                if (held.isEmpty() && !replayRequested) {
+                    problem = null;
+                    stuckMessageId = null;
+                }
             }
         } finally {
             inFlight.release();
@@ -306,11 +356,115 @@ public class BridgeWorker {
         lastError.set(rootMessage(failure));
         log.warn("Bridge '{}' failed to forward {}: {}", config.getName(), message.getMessageId(),
                 rootMessage(failure));
+        boolean refused = isRefusedByDestination(failure);
         if (ordered) {
+            problem = refused ? STUCK : DESTINATION_UNAVAILABLE;
+            stuckMessageId = refused ? message.getMessageId().toString() : null;
             replayRequested = true;
-        } else {
+        } else if (refused) {
+            // this message fails on its own: it counts towards the DLQ
             consumer.negativeAcknowledge(message);
+        } else {
+            holdForRetry(message);
         }
+    }
+
+    /** The destination is unavailable: keep the message, stop receiving, and send it again later ourselves. */
+    private void holdForRetry(Message<byte[]> message) {
+        synchronized (held) {
+            if (held.isEmpty()) {
+                problem = DESTINATION_UNAVAILABLE;
+                heldAttempts = 0;
+                consumer.pause();
+                log.warn("Bridge '{}' destination unavailable: pausing and sending the failed messages again",
+                        config.getName());
+            }
+            held.add(message);
+        }
+    }
+
+    /** Sends the oldest held message again, after a delay that doubles while it keeps failing. */
+    private void retryHeld() throws InterruptedException {
+        Thread.sleep(heldDelay().toMillis());
+        Message<byte[]> message = held.peek();
+        if (message == null || state != BridgeState.RUNNING) {
+            return;
+        }
+        inFlight.acquire();
+        Throwable failure;
+        long size = payloadSize(message);
+        try {
+            failure = await(sendToAll(message, size));
+        } finally {
+            inFlight.release();
+        }
+        if (failure == null) {
+            held.poll();
+            acknowledge(message, size);
+            heldAttempts = 0;
+        } else if (isRefusedByDestination(failure)) {
+            held.poll();
+            metrics.error();
+            lastError.set(rootMessage(failure));
+            consumer.negativeAcknowledge(message);
+        } else {
+            heldAttempts++;
+            metrics.error();
+            lastError.set(rootMessage(failure));
+            return;
+        }
+        synchronized (held) {
+            if (held.isEmpty()) {
+                problem = null;
+                consumer.resume();
+                log.info("Bridge '{}' destination accepts messages again: resumed", config.getName());
+            }
+        }
+    }
+
+    private Duration heldDelay() {
+        long base = Math.max(1, settings.negativeAckRedeliveryDelay().toMillis());
+        long max = Math.max(base, settings.startBackoffMax().toMillis());
+        long delay = base << Math.min(heldAttempts, 16);
+        return Duration.ofMillis(Math.min(delay, max));
+    }
+
+    private Throwable await(CompletableFuture<Void> sent) throws InterruptedException {
+        try {
+            sent.get(settings.sendTimeout().multipliedBy(2).toMillis(), TimeUnit.MILLISECONDS);
+            return null;
+        } catch (ExecutionException e) {
+            return e.getCause() == null ? e : e.getCause();
+        } catch (TimeoutException e) {
+            return e;
+        }
+    }
+
+    private void acknowledge(Message<byte[]> message, long size) {
+        consumer.acknowledgeAsync(message.getMessageId())
+                .exceptionally(ackFailure -> {
+                    log.debug("Bridge '{}' ack failed: {}", config.getName(), ackFailure.getMessage());
+                    return null;
+                });
+        metrics.forwarded();
+        sourceTraffic.add(size);
+    }
+
+    /**
+     * Tells whether a destination refused this message itself (not valid, too large, schema not compatible), as
+     * opposed to not accepting anything right now (timeout, connection lost, quota full, topic terminated).
+     *
+     * @param failure the send failure
+     * @return {@code true} when only this message is the problem
+     */
+    static boolean isRefusedByDestination(Throwable failure) {
+        Throwable cause = failure;
+        while ((cause instanceof CompletionException || cause instanceof ExecutionException)
+                && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause instanceof PulsarClientException.InvalidMessageException
+                || cause instanceof PulsarClientException.IncompatibleSchemaException;
     }
 
     /**
@@ -371,6 +525,10 @@ public class BridgeWorker {
                 .negativeAckRedeliveryDelay(settings.negativeAckRedeliveryDelay().toMillis(), TimeUnit.MILLISECONDS);
         if (consumerName != null) {
             builder.consumerName(consumerName);
+        }
+        if (deadLetterTopic != null) {
+            builder.deadLetterPolicy(DeadLetters.policy(config.getSource().getTopic(),
+                    config.getSource().getSubscription(), maxDeliveries));
         }
         if (subscriptionType == SubscriptionType.Failover) {
             builder.consumerEventListener(new ActiveListener(config.getName(), activePartitions));
@@ -437,11 +595,12 @@ public class BridgeWorker {
      * @return status snapshot
      */
     public BridgeWorkerStatus getStatus() {
+        boolean relaying = state == BridgeState.RUNNING && problem == null;
         return new BridgeWorkerStatus(
                 config.getId(),
                 config.getName(),
-                state,
-                state == BridgeState.RUNNING,
+                state == BridgeState.RUNNING && problem != null ? BridgeState.FAILED : state,
+                relaying,
                 metrics.forwardedCount(),
                 metrics.errorCount(),
                 inFlightCount(),
@@ -451,7 +610,28 @@ public class BridgeWorker {
                 ordered,
                 lastError.get(),
                 null,
-                isActive());
+                isActive(),
+                state == BridgeState.RUNNING ? problem : null,
+                state == BridgeState.RUNNING ? stuckMessageId : null,
+                deadLetterTopic);
+    }
+
+    /**
+     * Tells whether the worker relays now: running, with no destination problem.
+     *
+     * @return {@code true} if relaying
+     */
+    public boolean isRelaying() {
+        return state == BridgeState.RUNNING && problem == null;
+    }
+
+    /**
+     * Tells whether the worker has a DLQ, so it must restart when {@code dlq.max-deliveries} changes.
+     *
+     * @return {@code true} for an unordered bridge on {@code Shared} or {@code Key_Shared}
+     */
+    public boolean hasDeadLetterTopic() {
+        return deadLetterTopic != null;
     }
 
     private int inFlightCount() {

@@ -21,7 +21,8 @@ when someone opens the right screen.
   - Cataudit: `catacumbas69/cataudit/audit`, subscription `cataudit`;
   - Catametricas: `catacumbas69/catametricas/collect-tasks`, subscription `catametricas`. This replaces decision 33:
     a task that fails N times goes to the DLQ instead of being run however late;
-  - Cataponte: every bridge with a `Shared` or `Key_Shared` subscription. `Failover` bridges (ordered) keep today's
+  - Cataponte: every **unordered** bridge with a `Shared` or `Key_Shared` subscription (an ordered `Key_Shared` bridge
+    has none: a DLQ would break the order, and its replays would count as deliveries). `Failover` bridges (ordered) keep today's
     replay; Pulsar has no DLQ for them.
 - **Name and place:** `<topic>-<subscription>-DLQ`, in the topic's own namespace (for a bridge, the user's
   namespace). It is created with the subscription **`dlq`** (`initialSubscriptionName`), so its backlog is the number
