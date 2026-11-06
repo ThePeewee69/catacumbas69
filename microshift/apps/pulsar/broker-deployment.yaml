@@ -26,7 +26,7 @@ spec:
           env:
             # true apaga /pulsar/data no próximo arranque (só se o bookie não arrancar); voltar a false a seguir
             - name: PULSAR_WIPE_DATA
-              value: "false2  "
+              value: "false"
             - name: MY_POD_IP
               valueFrom:
                 fieldRef:
