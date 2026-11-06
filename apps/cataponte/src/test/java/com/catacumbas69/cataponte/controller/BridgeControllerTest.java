@@ -186,7 +186,7 @@ class BridgeControllerTest {
     void status_reportsEveryReplica() throws Exception {
         when(statuses.status()).thenReturn(new BridgeStatusResponse(1, List.of(new BridgeRuntimeStatus("abc",
                 "orders-fanout", "RUNNING", true, 7, 0, 0, null, TestBridges.SOURCE, List.of(DEST_A), true, null,
-                null, 3, 1))));
+                null, 3, 1, null, null, null))));
 
         mvc.perform(get("/api/v1/bridges/status"))
                 .andExpect(status().isOk())
