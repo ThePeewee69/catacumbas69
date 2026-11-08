@@ -45,6 +45,7 @@ catacommons) are symlinks to it — edit only the original.
 | **Cataponte** | Runs bridges: consumes a source topic and fans each message out to 1..n destination topics; CRUD API for bridge config; system bridges registered by the apps (`audit-<app>`); per-topic traffic counts; loop blocking; bridge areas limited by glob patterns (ADR 0014); events for bridge and area changes. Runs N replicas, each running every enabled bridge; Pulsar spreads the messages (ADR 0012) | `cataponte_bridges`, `cataponte_areas`, `cataponte_subscription_cleanups`, `cataponte_traffic_minutes`, `cataponte_traffic_totals`, `cataponte_worker_status` | Pulsar binary + Admin API, MongoDB |
 | **Cataudit** | Owns the audit trail (ADR 0009): consumes `catacumbas69/cataudit/audit` (fed by the `audit-<app>` bridges), stores every event once, serves a query API | `cataudit_events` | Pulsar binary + Admin API, MongoDB |
 | **catacommons** | Shared library (not a service): CloudEvents envelope, event publisher with retries, Pulsar names, start-up provisioning of the tenant/namespace/topics, registration of the app's audit bridge (ADR 0008, 0009) | — | Pulsar binary + Admin API through each app's clients; Cataponte REST |
+| **Catavigia** | Watches the platform and keeps the history of every alert (ADR 0015): checks as tasks on Pulsar, one per check and round, shared by its replicas; debounce; open, seen and archived alerts; backlog limits per subscription; events for every alert and limit change; `catavigia_alerts_open` metric. Only watches; the owner of each resource fixes it | `catavigia_alerts`, `catavigia_alerts_archive`, `catavigia_observations`, `catavigia_task_runs`, `catavigia_backlog_limits`; reads its thresholds from the settings topic | Pulsar Admin API + binary (tasks, consumers' status, events, settings), Cataponte, Catametricas and every app's health (REST), MongoDB |
 | **Catametricas** | Collects every topic's statistics from Pulsar on an interval and stores traffic (messages/bytes in and out) and backlog per topic: latest snapshot, per minute (30 days), per hour and all-time (ADR 0007). The work is shared by every replica through collection tasks on Pulsar (ADR 0012). The only metrics API: topics, series and collector state (ADR 0013) | `catametricas_topic_snapshots`, `catametricas_topic_minutes`, `catametricas_topic_hours`, `catametricas_topic_totals`, `catametricas_task_runs`; reads its interval from the settings topic | Pulsar Admin API + binary (tasks, events, settings), MongoDB |
 
 **Names.** The apps were renamed on 2026-10-31: Pulsário → **Catapulsar**, Passário → **Cataponte**,
@@ -107,15 +108,17 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 | `PULSAR_BROKER_URL` | all (binary protocol; events) | `pulsar://pulsar.pulsar.svc.cluster.local:6650` | `pulsar://192.168.86.35:31650` |
 | `PULSAR_LISTENER_NAME` | all | *(empty)* | `external` |
 | `SPRING_DATA_MONGODB_URI` | all | in-cluster ReplicaSet URI from Secret | NodePort `32017` + `authSource=admin&directConnection=true` |
-| `CATAPONTE_URL` | Catapulsar (default of the editable URL), Catametricas and Cataudit (audit bridge registration) | `http://cataponte.<ns>.svc.cluster.local:8082` | `http://localhost:8082` |
-| `CATAUDIT_URL` | Catapulsar (default of the editable URL of the audit view) | `http://cataudit:8084` | `http://localhost:8084` |
-| `CATAMETRICAS_URL` | Catapulsar (default of the editable URL of the overviews) | `http://catametricas:8083` | `http://localhost:8083` |
+| `CATAPONTE_URL` | Catapulsar (default of the editable URL), Catavigia (until the setting exists), Catametricas, Cataudit and Catavigia (audit bridge registration) | `http://cataponte.<ns>.svc.cluster.local:8082` | `http://localhost:8082` |
+| `CATAUDIT_URL` | Catapulsar (default of the editable URL of the audit view), Catavigia (until the setting exists) | `http://cataudit:8084` | `http://localhost:8084` |
+| `CATAMETRICAS_URL` | Catapulsar (default of the editable URL of the overviews), Catavigia (until the setting exists) | `http://catametricas:8083` | `http://localhost:8083` |
+| `CATAPULSAR_URL` | Catavigia (`service.down` of Catapulsar, decision 78) | `http://catapulsar:8081` | `http://localhost:8081` |
+| `CATAVIGIA_EXPECTED_BROKERS` (optional) | Catavigia (`pulsar.broker.down` below this) | `1` | `1` |
 | `CATAPULSAR_REFRESH_INTERVAL_SECONDS` | Catapulsar | `10` | `10` |
 | `CATAMETRICAS_COLLECT_INTERVAL_SECONDS` | Catapulsar, Catametricas (same value) | `60` | `60` |
 | `CATACOMMONS_*` (optional) | all | see `CatacommonsProperties`: retries `1s,2s,4s`, retention `7d`/`2GB`, backlog quota `1GB` (must be below the retention) | same |
 | `CATAPONTE_STATUS_WRITEINTERVAL`, `CATAPONTE_STATUS_STALEAFTER` (optional) | Cataponte (status of each replica, ADR 0012) | `PT5S`, `PT30S` | same |
 | `CATAPONTE_CORS_ALLOWED_ORIGINS` (optional) | Cataponte | *(empty: CORS closed)* | *(empty)* |
-| `SERVER_PORT` | all (only for a second local instance) | Catapulsar `8081`, Cataponte `8082`, Catametricas `8083`, Cataudit `8084` | e.g. `8092`, `8093` |
+| `SERVER_PORT` | all (only for a second local instance) | Catapulsar `8081`, Cataponte `8082`, Catametricas `8083`, Cataudit `8084`, Catavigia `8085` | e.g. `8092`, `8093` |
 
 `CATAPONTE_URL`, `CATAUDIT_URL` and `CATAMETRICAS_URL` are defaults; each can be changed at runtime from
 Catapulsar's Settings → Connections (`PUT /api/v1/settings/cataponte|cataudit|catametricas`), which stores them in
@@ -785,7 +788,7 @@ Closed on 2026-10-30:
 ## 15. Target architecture (proposed — ADR 0008–0013)
 
 Status: **phases 1–5 implemented** (2026-10-31 – 2026-11-01); phase **7a implemented** (2026-11-06), 7b planned
-(decisions 42–49, 66–78); phase 6 later. Until a phase below is implemented, the
+(decisions 42–49, 66–79); phase 6 later. Until a phase below is implemented, the
 rules in sections 1–14 stay in force. When a phase lands, the rules it changes are updated in the same change
 and its ADRs become "Accepted".
 
@@ -1062,3 +1065,11 @@ Phase 7b, after the review of its design (2026-11-06, ADR 0015 points 8–13):
 78. Catapulsar shows a subscription's history when its row is expanded in *Subscription Details* (exception to
     OBS-10 for history only), and keeps **Catavigia's URL** in Settings → Connections; Catavigia reads Catapulsar's
     URL from `CATAPULSAR_URL`.
+79. Catavigia's checks, after the review of their design (2026-11-07, ADR 0015 points 14–19): `service.down` reads
+    each app's **readiness** (the components of its full health that are not `UP` go in the details);
+    `pulsar.broker.down` opens when fewer brokers are active than **expected** (`CATAVIGIA_EXPECTED_BROKERS`), and
+    `pulsar.bookie.down` when brokers answer but the **broker health check** fails (Pulsar's admin API lists
+    bookies that are down too); `consumer.paused` is **one alert per consumer** (`<app>/<consumer>`) naming the
+    paused replicas; `backlog` leaves out the DLQs' `dlq` and Pulsar's `__*`; with Pulsar down no check runs
+    (accepted); a check that cannot read its source is **delivered again** like any failed task (up to the DLQ),
+    and a task of an old round still runs but changes no alert.

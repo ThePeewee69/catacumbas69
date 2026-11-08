@@ -77,10 +77,11 @@ closed. It only watches; it never changes anything.
 | `poison` | warning | Catametricas (topics ending in `-DLQ`) | A DLQ has backlog on `dlq` |
 | `bridge.failed`, `bridge.blocked` | warning | Cataponte `/api/v1/bridges/status` | A bridge is `FAILED` or `BLOCKED` |
 | `collection.stale` | warning | Catametricas `/api/v1/collector` | No sample for 3 collection intervals |
-| `backlog` | warning | Catametricas (per subscription) | A subscription's backlog is above its limit: its own, or the global default (**10 000** messages) |
-| `consumer.paused` | warning | `catacumbas69/<app>/consumers` | A consumer of ours is paused (automatically or by hand) |
-| `service.down` | critical | Each app's `/actuator/health` | Catapulsar, Cataponte, Catametricas or Cataudit does not answer `UP` |
-| `pulsar.broker.down`, `pulsar.bookie.down` | critical | Pulsar admin API | A broker or a bookie is missing, or the broker health check fails |
+| `backlog` | warning | Catametricas (per subscription) | A subscription's backlog, partitions summed, is above its limit: its own, or the global default (**10 000** messages). The DLQs' `dlq` and Pulsar's `__*` are left out |
+| `consumer.paused` | warning | `catacumbas69/<app>/consumers` | A consumer of ours is paused (automatically or by hand) on a replica that still reports; one alert per consumer, naming the paused replicas |
+| `service.down` | critical | Each app's `/actuator/health/readiness` | Catapulsar, Cataponte, Catametricas or Cataudit is not ready or does not answer; the components of its full health that are not `UP` go in the details |
+| `pulsar.broker.down` | critical | Pulsar admin API | Fewer active brokers than `CATAVIGIA_EXPECTED_BROKERS` (default 1) |
+| `pulsar.bookie.down` | critical | Pulsar admin API | Brokers answer but the broker health check (write and read a message) fails; the admin API lists bookies that are down too, so they are not counted |
 | `mongodb.down` | critical | Catavigia's own MongoDB connection | MongoDB does not answer a ping |
 
 - **Tasks** (like Catametricas' collection, ADR 0012): at the start of every round (aligned to the epoch) every
@@ -216,3 +217,16 @@ audit (ADR 0010):
     and maximum), messages and bytes delivered, unacked.
 12. Shown when a subscription's row is expanded in *Subscription Details* (chart, from Catametricas).
 13. Catavigia's URL is a setting in Settings → Connections; Catavigia reads Catapulsar's URL from `CATAPULSAR_URL`.
+
+### Review of the checks (2026-11-07)
+
+14. Brokers are counted against an **expected number** (`CATAVIGIA_EXPECTED_BROKERS`, default 1).
+15. Bookies are found **through the broker health check**: Pulsar's admin API lists every known bookie, running or
+    not, and the Pulsar on MicroShift is standalone (embedded bookie). Brokers answering but the health check
+    failing opens `pulsar.bookie.down`; bookies are not counted.
+16. `consumer.paused` is **one alert per consumer** (`<app>/<consumer>`), its details naming the paused replicas.
+17. `backlog` leaves out the DLQs' `dlq` subscription (that is `poison`) and Pulsar's own `__*`.
+18. `service.down` reads **readiness**; the components of the full health that are not `UP` go in the details.
+19. With Pulsar down no check runs (**accepted**). A check that cannot read its source is **delivered again**, like
+    any failed task, and goes to the DLQ after `dlq.max-deliveries`; a task of an old round still runs but
+    changes no alert, since the debounce counts only newer rounds.

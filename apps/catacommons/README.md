@@ -16,6 +16,7 @@ Engineering rules: [`../orch.md`](../orch.md) §4.4 Events. Decisions: [`../docs
 | `ConsumerControl` | With `catacommons.consumers.enabled=true` (ADR 0015): the app registers each consumer as a `ConsumerGate` (`pauseAutomatically`, `resumeAutomatically`, `pauseManually`, `resumeManually`, `attach` on every subscribe). Every 10 s and on each change it publishes a `ConsumerStatus` per consumer on the compacted `catacumbas69/<app>/consumers` (key `<instance>/<consumer>`, tombstone on shutdown), reads `ConsumerCommand`s (`pause`, `resume`, `check`; one instance or `*`) from `catacumbas69/<app>/consumer-commands`, resumes automatic pauses every 5 s once the gate's `ConnectionProbe`s answer, and publishes `consumer.paused|resumed|checked`. `consumerName()` = `<app>@<instance>` |
 | `ConnectionProbe` | Beans that check a dependency now. catacommons provides `PulsarAdminProbe` (`pulsar`); apps add theirs (MongoDB, `mongodb`) |
 | `DeadLetters`, `DeadLetterWriter` | `DeadLetters.policy(topic, subscription, n)`: Pulsar's DLQ after `n` deliveries, to `<topic>-<subscription>-DLQ` with subscription `dlq`; `maxDeliveries(settings, default)` reads the shared setting `dlq.max-deliveries` (2–100). `DeadLetterWriter.send(...)` puts a message straight in its DLQ, with Pulsar's `REAL_TOPIC` and `ORIGIN_MESSAGE_ID` plus `DLQ_REASON` |
+| `AlertSetting` | The shared alert thresholds (ADR 0015, Settings → Alerts): `CHECK_INTERVAL` (`alerts.check-interval`, 30 s, 10–600), `DEBOUNCE` (`alerts.debounce`, 2, 1–10), `BACKLOG_LIMIT` (`alerts.backlog-limit`, 10 000, 1–10⁹), `COLLECTION_STALE_INTERVALS` (`alerts.collection-stale-intervals`, 3, 2–20). `value(settings)` reads the settings topic and falls back to the default for a missing or invalid value. Read by Catavigia, edited in Catapulsar |
 | `InstanceId` | This replica: host name plus a random suffix |
 | `SharedSettings` | The shared settings: a `TableView` on `catacumbas69/catapulsar/settings` opened at start-up (retried while Pulsar is down). `get(key)` and `listen(key, …)`; empty/`null` = use your default (ADR 0011) |
 
@@ -55,7 +56,7 @@ succeeds. "Already exists" counts as success, and policies are set again on ever
 | `catacommons.audit-bridge.cataponte-url` | `http://cataponte:8082`; set it from `CATAPONTE_URL` |
 | `catacommons.audit-bridge.timeout` / `retry-interval` / `max-retry-interval` | `5s` / `10s` / `5m` |
 | `catacommons.settings.enabled` / `retry-interval` | `true` (`false` in Cataponte) / `10s` |
-| `catacommons.consumers.enabled` | `false` (`true` in Cataudit and, from phase 7a, Catametricas) |
+| `catacommons.consumers.enabled` | `false` (`true` in Cataudit, Catametricas and Catavigia) |
 | `catacommons.consumers.status-interval` / `resume-check-interval` | `10s` / `5s` |
 | `catacommons.consumers.max-deliveries` | `10`, unless the shared setting `dlq.max-deliveries` says otherwise |
 

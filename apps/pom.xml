@@ -16,7 +16,7 @@
     <version>1.0.0</version>
     <packaging>pom</packaging>
     <name>catacumbas69 apps</name>
-    <description>Reactor for catacommons, Catapulsar, Cataponte, Catametricas and Cataudit</description>
+    <description>Reactor for catacommons, Catapulsar, Cataponte, Catametricas, Cataudit and Catavigia</description>
 
     <modules>
         <module>catacommons</module>
@@ -24,5 +24,6 @@
         <module>cataponte</module>
         <module>catametricas</module>
         <module>cataudit</module>
+        <module>catavigia</module>
     </modules>
 </project>
