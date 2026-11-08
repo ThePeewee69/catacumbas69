@@ -21,11 +21,11 @@ public class AppsClient {
     /**
      * Creates the client.
      *
-     * @param appsClient HTTP client from {@code CoreConfig}
+     * @param appsRestClient HTTP client from {@code CoreConfig}
      * @param objectMapper reads error bodies
      */
-    public AppsClient(RestClient appsClient, ObjectMapper objectMapper) {
-        this.client = appsClient;
+    public AppsClient(RestClient appsRestClient, ObjectMapper objectMapper) {
+        this.client = appsRestClient;
         this.objectMapper = objectMapper;
     }
 

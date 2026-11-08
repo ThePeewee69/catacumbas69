@@ -93,7 +93,7 @@ public class CoreConfig {
      * @return the client
      */
     @Bean
-    public RestClient appsClient(CatavigiaProperties properties) {
+    public RestClient appsRestClient(CatavigiaProperties properties) {
         HttpClient http = HttpClient.newBuilder().connectTimeout(properties.checks().httpTimeout()).build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(http);
         factory.setReadTimeout(properties.checks().httpTimeout());
