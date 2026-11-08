@@ -726,6 +726,13 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-07/08, phase 7b of §15, steps 1–2: history per subscription and Catavigia** (`mvn clean install` at
+  `apps/` green: catacommons 39, Catapulsar 130, Cataponte 146, Catametricas 70, Cataudit 19, Catavigia 33 tests,
+  0 Checkstyle violations): Catametricas keeps each subscription's backlog and deliveries in the topic's snapshot,
+  minutes and hours, served on `/api/v1/subscriptions` (decision 77); new service **Catavigia** (:8085) with its
+  checks as tasks on Pulsar, debounce, open, seen and archived alerts, backlog limits per subscription, events and
+  the `catavigia_alerts_open` metric (decisions 75, 76, 79); catacommons `AlertSetting` for the `alerts.*`
+  thresholds. Step 3 (Catapulsar) to come.
 - **2026-11-06, phase 7a of §15: dead letters and consumer control** (`mvn clean install` at `apps/` green:
   catacommons 37, Catapulsar 130, Cataponte 146, Catametricas 60, Cataudit 19 tests, 0 Checkstyle violations): DLQs in Cataudit,
   Catametricas and unordered `Shared`/`Key_Shared` bridges, `dlq.max-deliveries` shared setting (Settings → Dead
