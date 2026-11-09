@@ -83,15 +83,6 @@ public class OverviewController {
     }
 
     /**
-     * Collects a scope now through Catametricas ("Collect now" and live mode in the overviews). A namespace is
-     * collected at most once every 5 s, whoever asks; Catametricas audits it as {@code collection.forced}.
-     *
-     * @param tenant tenant, or none for the whole cluster
-     * @param namespace namespace inside the tenant, or none
-     * @param request current request, for the audit actor
-     * @return what was collected
-     */
-    /**
      * History of one subscription, partitions summed, from Catametricas (orch.md decision 78).
      *
      * @param tenant tenant name
@@ -112,6 +103,15 @@ public class OverviewController {
         return overview.subscriptionHistory(tenant, namespace, topic, subscription, OverviewPeriod.of(period));
     }
 
+    /**
+     * Collects a scope now through Catametricas ("Collect now" and live mode in the overviews). A namespace is
+     * collected at most once every 5 s, whoever asks; Catametricas audits it as {@code collection.forced}.
+     *
+     * @param tenant tenant, or none for the whole cluster
+     * @param namespace namespace inside the tenant, or none
+     * @param request current request, for the audit actor
+     * @return what was collected
+     */
     @Operation(summary = "Collect the cluster, a tenant or a namespace now (Catametricas)")
     @PostMapping("/collect")
     public CatametricasClient.ForcedCollection collect(

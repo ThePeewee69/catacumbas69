@@ -65,14 +65,6 @@ public class OverviewService {
     }
 
     /**
-     * Has Catametricas collect a scope now, so the next overview shows this instant (forced collection).
-     *
-     * @param tenant tenant, or {@code null} for the cluster
-     * @param namespace namespace inside the tenant, or {@code null}
-     * @param actor browser address, for Catametricas' audit
-     * @return what was collected
-     */
-    /**
      * History of one subscription for the topic view's chart (orch.md decision 78; history only, OBS-10).
      *
      * @param tenant tenant name
@@ -89,6 +81,14 @@ public class OverviewService {
                 now, period.stepParameter());
     }
 
+    /**
+     * Has Catametricas collect a scope now, so the next overview shows this instant (forced collection).
+     *
+     * @param tenant tenant, or {@code null} for the cluster
+     * @param namespace namespace inside the tenant, or {@code null}
+     * @param actor browser address, for Catametricas' audit
+     * @return what was collected
+     */
     public CatametricasClient.ForcedCollection collect(String tenant, String namespace, String actor) {
         return catametricas.collect(tenant, namespace, actor);
     }

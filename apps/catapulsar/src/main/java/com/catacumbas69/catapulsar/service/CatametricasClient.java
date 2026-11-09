@@ -74,11 +74,6 @@ public class CatametricasClient {
     }
 
     /**
-     * Returns when the latest sample was taken and the interval in use.
-     *
-     * @return the collector state
-     */
-    /**
      * Reads one subscription's history ({@code GET /api/v1/subscriptions/series}, orch.md decision 77).
      *
      * @param tenant tenant
@@ -103,6 +98,11 @@ public class CatametricasClient {
         });
     }
 
+    /**
+     * Returns when the latest sample was taken and the interval in use.
+     *
+     * @return the collector state
+     */
     public Collector collector() {
         return get(URI.create(endpoint.url() + "/api/v1/collector"), new ParameterizedTypeReference<Collector>() {
         });
