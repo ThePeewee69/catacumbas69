@@ -1,0 +1,13 @@
+# Catapulsar: Pulsar admin UI and BFF (bridges, audit, overviews, consumers, alerts) (orch.md OPS-3, decisions 81–86).
+# apps/build/push.sh catapulsar builds the image, pushes it and writes newTag below; then commit and Sync in ArgoCD.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: catacumbas69-apps
+resources:
+  - catapulsar-configmap.yaml
+  - catapulsar-deployment.yaml
+  - catapulsar-service.yaml
+  - catapulsar-route.yaml
+images:
+  - name: registry.catacumbas69.com/catapulsar
+    newTag: "not-built-yet"

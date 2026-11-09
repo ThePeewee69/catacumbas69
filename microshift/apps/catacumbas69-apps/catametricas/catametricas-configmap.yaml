@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: catametricas-config
+data:
+  PULSAR_SERVICE_URL: http://pulsar.pulsar.svc.cluster.local:8080
+  PULSAR_BROKER_URL: pulsar://pulsar.pulsar.svc.cluster.local:6650
+  # The URI (Secret catacumbas69-apps-mongodb) authenticates against admin; the apps' data is in catacumbas69
+  SPRING_DATA_MONGODB_DATABASE: catacumbas69
+  # JSON logs for Loki (OBS-3)
+  LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+  # Where the audit-<app> system bridge is registered at start-up (ADR 0009)
+  CATAPONTE_URL: http://cataponte:8082

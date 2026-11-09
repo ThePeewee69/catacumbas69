@@ -1,0 +1,13 @@
+# Catavigia: Alerts with history (orch.md OPS-3, decisions 81–86).
+# apps/build/push.sh catavigia builds the image, pushes it and writes newTag below; then commit and Sync in ArgoCD.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: catacumbas69-apps
+resources:
+  - catavigia-configmap.yaml
+  - catavigia-deployment.yaml
+  - catavigia-service.yaml
+  - catavigia-route.yaml
+images:
+  - name: registry.catacumbas69.com/catavigia
+    newTag: "not-built-yet"

@@ -1,0 +1,12 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: catametricas
+spec:
+  host: catametricas.catacumbas69.com
+  to:
+    kind: Service
+    name: catametricas
+    weight: 100
+  port:
+    targetPort: http

@@ -1,0 +1,19 @@
+# ArgoCD Application of Cataudit (orch.md decision 86): manual Sync in the UI after each commit.
+# Apply once, on meloes: oc apply -f microshift/argocd/cataudit.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cataudit
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ThePeewee69/catacumbas69.git
+    targetRevision: main
+    path: microshift/apps/catacumbas69-apps/cataudit
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: catacumbas69-apps
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

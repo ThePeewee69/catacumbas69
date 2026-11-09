@@ -144,7 +144,10 @@ Keep the MongoDB URI with its password in the run configuration only (`.idea/` i
 ```
 cd apps && mvn -pl catavigia -am verify       # or mvn clean install for everything
 cd apps && docker build -f catavigia/Dockerfile -t catavigia .
+apps/build/push.sh catavigia                    # image for MicroShift (Podman), pushed, tag in its manifest
 ```
+
+Deploying to MicroShift (registry, ArgoCD, MongoDB Secret): [`microshift/apps/catacumbas69-apps/README.md`](../../microshift/apps/catacumbas69-apps/README.md).
 
 ## Operate
 

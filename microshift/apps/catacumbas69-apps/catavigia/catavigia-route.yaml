@@ -1,0 +1,12 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: catavigia
+spec:
+  host: catavigia.catacumbas69.com
+  to:
+    kind: Service
+    name: catavigia
+    weight: 100
+  port:
+    targetPort: http

@@ -1,0 +1,13 @@
+# Cataudit: Audit trail of every app (orch.md OPS-3, decisions 81–86).
+# apps/build/push.sh cataudit builds the image, pushes it and writes newTag below; then commit and Sync in ArgoCD.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: catacumbas69-apps
+resources:
+  - cataudit-configmap.yaml
+  - cataudit-deployment.yaml
+  - cataudit-service.yaml
+  - cataudit-route.yaml
+images:
+  - name: registry.catacumbas69.com/cataudit
+    newTag: "not-built-yet"

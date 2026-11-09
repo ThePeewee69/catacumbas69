@@ -87,7 +87,10 @@ The app is a module of the Maven reactor in `apps/` (with the shared library `ca
 mvn clean install                         # everything: catacommons + every app, tests + Checkstyle
 mvn -pl cataudit -am verify               # this app and catacommons only
 docker build -f cataudit/Dockerfile -t cataudit .   # image (BuildKit), context = apps/
+build/push.sh cataudit   # image for MicroShift (Podman, linux/amd64), pushed, tag written in its manifest
 ```
+
+Deploying to MicroShift (registry, ArgoCD, MongoDB Secret): [`microshift/apps/catacumbas69-apps/README.md`](../../microshift/apps/catacumbas69-apps/README.md).
 
 Unit tests need no Docker, MongoDB or Pulsar.
 

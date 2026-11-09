@@ -1,0 +1,19 @@
+# ArgoCD Application of Catavigia (orch.md decision 86): manual Sync in the UI after each commit.
+# Apply once, on meloes: oc apply -f microshift/argocd/catavigia.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: catavigia
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ThePeewee69/catacumbas69.git
+    targetRevision: main
+    path: microshift/apps/catacumbas69-apps/catavigia
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: catacumbas69-apps
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

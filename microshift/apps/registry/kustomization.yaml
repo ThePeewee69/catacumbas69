@@ -1,0 +1,12 @@
+# Image registry for the catacumbas69 apps (orch.md decision 82): plain HTTP through the Route
+# registry.catacumbas69.com, home network only, a name and never an IP. Podman on the Mac pushes with
+# --tls-verify=false; CRI-O on meloes pulls once registries.conf.d marks it insecure
+# (microshift/apps/catacumbas69-apps/README.md).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: registry
+resources:
+  - registry-pvc.yaml
+  - registry-deployment.yaml
+  - registry-service.yaml
+  - registry-route.yaml

@@ -4,8 +4,9 @@ set -e
 # Copia todos os confs para o emptyDir (podemos escrever aqui, não no layer da imagem)
 cp -r /pulsar/conf/. /conf/
 
-# Injeta advertisedListeners: interno (pod IP) + externo (NodePort do NUC)
-printf '\nadvertisedListeners=internal:pulsar://%s:6650,external:pulsar://192.168.86.35:31650\n' "${MY_POD_IP}" >> /conf/standalone.conf
+# Injeta advertisedListeners: interno (pod IP) + externo (NodePort do NUC, pelo nome DNS meloes e nunca pelo IP,
+# para uma mudança de rede só mexer no DNS; orch.md decisão 87)
+printf '\nadvertisedListeners=internal:pulsar://%s:6650,external:pulsar://meloes:31650\n' "${MY_POD_IP}" >> /conf/standalone.conf
 
 # advertisedAddress=localhost dá ao bookie um ID estável (localhost:<porta>) que não muda com o IP do pod.
 # No modo standalone com RocksDB o bookie lê a configuração do standalone.conf (não do bookkeeper.conf) e,

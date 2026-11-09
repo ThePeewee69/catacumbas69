@@ -1,0 +1,19 @@
+# ArgoCD Application of the image registry (orch.md decision 82): manual Sync in the UI.
+# Apply once, on meloes: oc apply -f microshift/argocd/registry.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: registry
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ThePeewee69/catacumbas69.git
+    targetRevision: main
+    path: microshift/apps/registry
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: registry
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

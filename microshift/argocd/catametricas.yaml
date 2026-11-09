@@ -1,0 +1,19 @@
+# ArgoCD Application of Catametricas (orch.md decision 86): manual Sync in the UI after each commit.
+# Apply once, on meloes: oc apply -f microshift/argocd/catametricas.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: catametricas
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ThePeewee69/catacumbas69.git
+    targetRevision: main
+    path: microshift/apps/catacumbas69-apps/catametricas
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: catacumbas69-apps
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

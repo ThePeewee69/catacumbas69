@@ -107,7 +107,8 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 | `PULSAR_SERVICE_URL` | all (admin API; namespace creation at start-up) | `http://pulsar.pulsar.svc.cluster.local:8080` | `http://192.168.86.35:31080` |
 | `PULSAR_BROKER_URL` | all (binary protocol; events) | `pulsar://pulsar.pulsar.svc.cluster.local:6650` | `pulsar://192.168.86.35:31650` |
 | `PULSAR_LISTENER_NAME` | all | *(empty)* | `external` |
-| `SPRING_DATA_MONGODB_URI` | all | in-cluster ReplicaSet URI from Secret | NodePort `32017` + `authSource=admin&directConnection=true` |
+| `SPRING_DATA_MONGODB_URI` | all | Secret `catacumbas69-apps-mongodb` (key `uri`): the operator's connection string of the user `catacumbas69-apps` (decision 84) | NodePort `32017` + `authSource=admin&directConnection=true` |
+| `SPRING_DATA_MONGODB_DATABASE` | all (in the cluster: the operator's URI names `admin`) | `catacumbas69` (ConfigMap) | *(not set: the URI names the database)* |
 | `CATAPONTE_URL` | Catapulsar (default of the editable URL), Catavigia (until the setting exists), Catametricas, Cataudit and Catavigia (audit bridge registration) | `http://cataponte.<ns>.svc.cluster.local:8082` | `http://localhost:8082` |
 | `CATAUDIT_URL` | Catapulsar (default of the editable URL of the audit view), Catavigia (until the setting exists) | `http://cataudit:8084` | `http://localhost:8084` |
 | `CATAMETRICAS_URL` | Catapulsar (default of the editable URL of the overviews), Catavigia (until the setting exists) | `http://catametricas:8083` | `http://localhost:8083` |
@@ -658,14 +659,24 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
   jar (`java -Djarmode=tools`), non-root, `EXPOSE` the service port, JVM tuned with
   `-XX:MaxRAMPercentage=75`. The build context is `apps/` (`docker build -f <app>/Dockerfile .`): the build
   stage runs `mvn -pl <app> -am package` so catacommons is compiled with the app, with the Maven repository
-  in a BuildKit cache mount; `apps/.dockerignore` sends only the reactor.
+  in a BuildKit cache mount; `apps/.dockerignore` sends only the reactor. The build stage runs on the build
+  machine's platform (`FROM --platform=$BUILDPLATFORM`) and only the runtime stage is the target platform, so an
+  ARM Mac builds `linux/amd64` images for meloes without emulating Maven. Images for the cluster are built with
+  Podman by `apps/build/push.sh <app|all>` (decision 81).
 - **OPS-6 [MUST]** `apps/pom.xml` is an aggregator only: it lists `catacommons` and every app. Each module
   keeps `spring-boot-starter-parent` as its parent and its own version; apps depend on
   `catacommons` through a `catacommons.version` property. `mvn clean install` at `apps/` builds and checks
   everything.
-- **OPS-2 [MUST]** Image tags are immutable (`<version>-<git-sha>`); `latest` is never deployed.
-- **OPS-3 [MUST]** Kubernetes manifests live in the GitOps repo and are synced by ArgoCD. Each Deployment
-  sets resource requests/limits, liveness/readiness probes on Actuator, and config via ConfigMap + Secret.
+- **OPS-2 [MUST]** Image tags are immutable (`<version>-<git-sha>`); `latest` is never deployed. Images go to
+  the registry in MicroShift (`registry.catacumbas69.com`, decision 82). `apps/build/push.sh` refuses to build with
+  uncommitted changes under `apps/` (`FORCE=1` builds a `-dirty-<date-time>` tag, for tests only) and writes the
+  pushed tag into the app's `kustomization.yaml` (decision 83).
+- **OPS-3 [MUST]** Kubernetes manifests live in this repository under `microshift/` and are synced by ArgoCD
+  (one Application per app, Sync by hand). All apps share the namespace `catacumbas69-apps`, one folder per app
+  (`microshift/apps/catacumbas69-apps/<app>/`: ConfigMap, Deployment, Service, Route, kustomization). Each
+  Deployment sets resource requests/limits, startup/liveness/readiness probes on Actuator, and config via
+  ConfigMap + Secret; the MongoDB URI is the only secret and is never in git (decisions 84–87). Runbook:
+  `microshift/apps/catacumbas69-apps/README.md`.
 - **OPS-4 [MUST]** Cataponte may run several replicas with a rolling update (ARCH-5); during the update old
   and new pods run side by side, which Pulsar handles like any other replicas. Catametricas may run
   several replicas, all collecting: the `Shared` subscription of `collect-tasks` spreads the tasks and the claims
@@ -705,7 +716,6 @@ The code does not yet follow every rule. Agents fixing a gap remove it here in t
 |---|---|---|---|
 | G-6 | all | No Testcontainers integration tests (unit and slice tests exist) | TEST-3 |
 | G-11 | Catapulsar | No Playwright UI smoke test in the build | TEST-4 |
-| G-16 | all | No Kubernetes manifests in the GitOps repo yet (Dockerfiles exist) | OPS-2..4 |
 | G-17 | Catapulsar | No ESLint, Stylelint, html-validate or Prettier for the static UI | HTML-5, JS-6, CSS-6 |
 | G-18 | Catapulsar | JSDoc missing on most `catapulsar.js` methods | JS-4 |
 | G-20 | Catapulsar | Clickable `<div>`s in the sidebar tree and pickers; many inline `style=""`; modals without `role="dialog"`; decorative SVGs without `aria-hidden` | HTML-1, HTML-2, HTML-4 |
@@ -727,6 +737,10 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-09, MicroShift deployment** (G-16 closed; decisions 81–87): manifests for the five apps in
+  `microshift/apps/catacumbas69-apps/`, ArgoCD Applications, image registry in the cluster, `apps/build/push.sh`
+  (Podman, `linux/amd64`, tag written into the manifest), `apps/build/mongo-secret.sh`, MongoDB user
+  `catacumbas69-apps`, Dockerfiles with a native build stage, `apps/.dockerignore` includes Catavigia.
 - **2026-11-09, phase 7b of §15, step 3: alerts in Catapulsar** (`mvn clean install` at `apps/` green: catacommons
   39, Catapulsar 136, Cataponte 146, Catametricas 70, Cataudit 19, Catavigia 33 tests, 0 Checkstyle violations):
   Alerts button and badge, Alerts panel (Open and Archived, mark seen, actions to where each alert is fixed),
@@ -793,8 +807,7 @@ Closed on 2026-10-30:
 1. **UI conventions** — G-17, G-18, G-20: frontend lint tooling, JSDoc, semantic and accessible markup,
    inline styles moved to CSS.
 2. **Tests** — G-6, G-11: Testcontainers integration tests (MongoDB, Pulsar), Playwright smoke test.
-3. **Delivery** — G-16, G-21: manifests for ArgoCD (Cataponte and Catametricas with N replicas, probes, Secrets)
-   and a CI pipeline.
+3. **Delivery** — G-21: a CI pipeline (the MicroShift manifests are done, decisions 81–87).
 
 ---
 
@@ -1096,3 +1109,31 @@ Phase 7b, after the review of its design (2026-11-06, ADR 0015 points 8–13):
     chart (backlog, maximum, delivered, limit; 24 h by default). Catavigia's URL is in Settings → Connections and
     `catavigia` is a health component. Marking as seen and changing a limit are audited by both apps
     (`*-requested` by Catapulsar).
+
+MicroShift deployment (2026-11-09, closes G-16):
+
+81. **Images** are built with **Podman** on the Mac by `apps/build/push.sh <app|all>`, for `linux/amd64`. The
+    Dockerfiles' Maven stage runs on the build machine's own platform (`--platform=$BUILDPLATFORM`); only the
+    runtime stage is amd64 (its one `RUN` under Rosetta). Docker still works for local images.
+82. The **registry** runs in MicroShift (`registry:2.8.3`, namespace `registry`, 20 Gi PVC) behind the Route
+    `registry.catacumbas69.com`, in plain HTTP like the other Routes and without authentication, since it is
+    reachable only from the home network (the Route waits up to 5 min for a layer). CRI-O on meloes lists it as an
+    insecure registry; Podman pushes with `--tls-verify=false`.
+83. **Tags** are `<version>-<short sha>`. `push.sh` refuses to build with uncommitted changes under `apps/`
+    (`FORCE=1`: `-dirty-<date-time>`), pushes and **writes the tag** into the app's `kustomization.yaml`
+    (`images[].newTag`); the commit of that change is what ArgoCD deploys.
+84. The apps use their own **MongoDB user** `catacumbas69-apps` (read and write on `catacumbas69` only), declared
+    in `mongodb-cluster.yaml`. Its password is generated by `apps/build/mongo-secret.sh password` and never shown;
+    the operator's connection string is **copied** by `mongo-secret.sh copy` into the apps' namespace (Secret
+    `catacumbas69-apps-mongodb`, key `uri`), because the operator's `connectionStringSecretNamespace` gets that
+    Secret garbage-collected. The URI names `admin`, so the ConfigMaps set `SPRING_DATA_MONGODB_DATABASE`.
+85. **Layout**: one namespace `catacumbas69-apps`, one folder per app with ConfigMap, Deployment, Service and
+    **Route** (`<app>.catacumbas69.com`, all five). **Two replicas** of Cataponte, Cataudit, Catametricas and
+    Catavigia, **one** of Catapulsar; rolling updates with `maxUnavailable: 0`; requests **100m / 384 Mi**, limits
+    **1 CPU / 768 Mi**; startup probe up to 3 min; non-root, `seccomp` RuntimeDefault, no capabilities.
+86. One **ArgoCD Application** per app and one for the registry, in the namespace `argocd`, **synced by hand** in
+    the UI (no automated sync), in the start order Cataponte → Cataudit → Catametricas → Catavigia → Catapulsar.
+87. **Names, never IPs**, so that moving the homelab to another network (192.168.86.x → 192.168.69.x) only changes
+    DNS: the registry and the Routes are `*.catacumbas69.com`, and Pulsar's external listener is advertised as
+    `meloes:31650` (`microshift/apps/pulsar/broker-init-script.sh`). Both names must resolve on the Mac and on
+    meloes itself. The local URLs in the docs (IntelliJ) still name the IP for now.

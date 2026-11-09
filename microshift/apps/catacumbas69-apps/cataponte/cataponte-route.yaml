@@ -1,0 +1,12 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: cataponte
+spec:
+  host: cataponte.catacumbas69.com
+  to:
+    kind: Service
+    name: cataponte
+    weight: 100
+  port:
+    targetPort: http

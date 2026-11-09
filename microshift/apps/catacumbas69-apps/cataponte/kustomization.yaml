@@ -1,0 +1,13 @@
+# Cataponte: Bridges between Pulsar topics (orch.md OPS-3, decisions 81–86).
+# apps/build/push.sh cataponte builds the image, pushes it and writes newTag below; then commit and Sync in ArgoCD.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: catacumbas69-apps
+resources:
+  - cataponte-configmap.yaml
+  - cataponte-deployment.yaml
+  - cataponte-service.yaml
+  - cataponte-route.yaml
+images:
+  - name: registry.catacumbas69.com/cataponte
+    newTag: "not-built-yet"

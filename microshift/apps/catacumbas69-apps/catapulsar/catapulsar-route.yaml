@@ -1,0 +1,12 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: catapulsar
+spec:
+  host: catapulsar.catacumbas69.com
+  to:
+    kind: Service
+    name: catapulsar
+    weight: 100
+  port:
+    targetPort: http

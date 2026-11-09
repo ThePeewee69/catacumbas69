@@ -23,6 +23,18 @@ spec:
         - name: readWriteAnyDatabase
           db: admin
       scramCredentialsSecretName: peewee69-scram
+    # The catacumbas69 apps (orch.md decision 84): read and write on catacumbas69 only. Its password Secret is
+    # created by apps/build/mongo-secret.sh password (never in git); the operator writes the connection string to
+    # catacumbas69-apps-connection, which apps/build/mongo-secret.sh copy copies to the apps' namespace.
+    - name: catacumbas69-apps
+      db: admin
+      passwordSecretRef:
+        name: catacumbas69-apps-password
+      roles:
+        - name: readWrite
+          db: catacumbas69
+      scramCredentialsSecretName: catacumbas69-apps-scram
+      connectionStringSecretName: catacumbas69-apps-connection
   additionalMongodConfig:
     storage.wiredTiger.engineConfig.journalCompressor: zlib
   statefulSet:

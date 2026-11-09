@@ -1,0 +1,16 @@
+# Plain HTTP like the other Routes on meloes (orch.md decision 82). Image layers can take a while to upload, so the
+# router waits up to 5 minutes instead of its default 30 s.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: registry
+  annotations:
+    haproxy.router.openshift.io/timeout: 5m
+spec:
+  host: registry.catacumbas69.com
+  to:
+    kind: Service
+    name: registry
+    weight: 100
+  port:
+    targetPort: http

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: catavigia
+  labels:
+    app.kubernetes.io/name: catavigia
+spec:
+  selector:
+    app.kubernetes.io/name: catavigia
+  ports:
+    - name: http
+      port: 8085
+      targetPort: http

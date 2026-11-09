@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cataudit
+  labels:
+    app.kubernetes.io/name: cataudit
+spec:
+  selector:
+    app.kubernetes.io/name: cataudit
+  ports:
+    - name: http
+      port: 8084
+      targetPort: http

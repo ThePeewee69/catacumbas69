@@ -1,0 +1,13 @@
+# Catametricas: Pulsar statistics and their history (orch.md OPS-3, decisions 81–86).
+# apps/build/push.sh catametricas builds the image, pushes it and writes newTag below; then commit and Sync in ArgoCD.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: catacumbas69-apps
+resources:
+  - catametricas-configmap.yaml
+  - catametricas-deployment.yaml
+  - catametricas-service.yaml
+  - catametricas-route.yaml
+images:
+  - name: registry.catacumbas69.com/catametricas
+    newTag: "not-built-yet"
