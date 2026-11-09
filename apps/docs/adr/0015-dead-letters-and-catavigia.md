@@ -1,6 +1,6 @@
 # 15. Dead letters for poison messages, and Catavigia: alerts with history
 
-Date: 2026-11-06 · Status: Accepted (2026-11-06); phase 7a implemented (2026-11-06), 7b implemented (2026-11-08, steps 1–3) · Decisions: orch.md 42–49, 66–80
+Date: 2026-11-06 · Status: Accepted (2026-11-06); phase 7a implemented (2026-11-06), 7b implemented (2026-11-09) · Decisions: orch.md 42–49, 66–80
 
 ## Context
 

@@ -727,6 +727,11 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-09, phase 7b of §15, step 3: alerts in Catapulsar** (`mvn clean install` at `apps/` green: catacommons
+  39, Catapulsar 136, Cataponte 146, Catametricas 70, Cataudit 19, Catavigia 33 tests, 0 Checkstyle violations):
+  Alerts button and badge, Alerts panel (Open and Archived, mark seen, actions to where each alert is fixed),
+  Limit column and 📈 history chart on a subscription's row, Settings → Alerts and the Catavigia URL, alerts and
+  limits forwarded to Catavigia and audited by both apps (decision 80). **Phase 7 is complete.**
 - **2026-11-07/08, phase 7b of §15, steps 1–2: history per subscription and Catavigia** (`mvn clean install` at
   `apps/` green: catacommons 39, Catapulsar 130, Cataponte 146, Catametricas 70, Cataudit 19, Catavigia 33 tests,
   0 Checkstyle violations): Catametricas keeps each subscription's backlog and deliveries in the topic's snapshot,
@@ -795,7 +800,7 @@ Closed on 2026-10-30:
 
 ## 15. Target architecture (proposed — ADR 0008–0013)
 
-Status: **phases 1–5 implemented** (2026-10-31 – 2026-11-01); phase **7a implemented** (2026-11-06), 7b planned
+Status: **phases 1–5 implemented** (2026-10-31 – 2026-11-01); phase **7 implemented** (7a 2026-11-06, 7b 2026-11-09)
 (decisions 42–49, 66–80); phase 6 later. Until a phase below is implemented, the
 rules in sections 1–14 stay in force. When a phase lands, the rules it changes are updated in the same change
 and its ADRs become "Accepted".
@@ -840,7 +845,7 @@ Each phase ends with `mvn verify` green in every app, the docs updated and the a
 | 4 | Catametricas API and tasks | Query API (`topics`, `series`, `collector`); Catapulsar overviews built from it (Catametricas URL editable); collection tasks on Pulsar with claims and conditional snapshot updates; lease removed; `contario_*` → `catametricas_*` (renamed) | **Done** 2026-11-01 |
 | 5 | Cataponte replicas | `Exclusive` rejected; N replicas, status merged over replicas (`cataponte_worker_status`); ADR 0002 superseded; collections `cataponte_*` | **Done** 2026-11-01 |
 | 6 | Prometheus source (later) | Once Prometheus/OpenMetrics/Loki run on MicroShift: short ranges from PromQL in Catametricas | Later |
-| 7 | Alerts and dead letters | Dead-letter topics for our Shared/Key_Shared consumers; new service **Catavigia** with alert history; alerts and actions panel in Catapulsar; Settings dialog in tabs (decisions 42–49 and 66–72; [ADR 0015](docs/adr/0015-dead-letters-and-catavigia.md); 7a: DLQs and consumer control, 7b: Catavigia and alerts) | 7a **Done** 2026-11-06; 7b planned |
+| 7 | Alerts and dead letters | Dead-letter topics for our Shared/Key_Shared consumers; new service **Catavigia** with alert history; alerts and actions panel in Catapulsar; Settings dialog in tabs (decisions 42–49 and 66–80; [ADR 0015](docs/adr/0015-dead-letters-and-catavigia.md); 7a: DLQs and consumer control, 7b: Catavigia and alerts) | **Done** 2026-11-09 (7a 2026-11-06) |
 
 ### Decisions taken on 2026-10-31
 
