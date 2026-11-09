@@ -28,15 +28,27 @@ case "${1:-}" in
       echo "Secret $MDB_NAMESPACE/$PASSWORD_SECRET already exists; nothing changed."
       exit 0
     fi
-    # Letters and digits only, so the connection string needs no escaping
-    password="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+    # Letters and digits only, so the connection string needs no escaping. tr reads a fixed amount of random bytes
+    # (about 120 usable characters), so no command of the pipeline is cut short (with pipefail, a SIGPIPE would
+    # stop the script without a word).
+    password="$(head -c 512 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9')"
+    password="${password:0:32}"
+    if [[ ${#password} -lt 32 ]]; then
+      echo "Could not generate a password; nothing changed." >&2
+      exit 1
+    fi
     k -n "$MDB_NAMESPACE" create secret generic "$PASSWORD_SECRET" --from-literal=password="$password" >/dev/null
     unset password
     echo "Created Secret $MDB_NAMESPACE/$PASSWORD_SECRET. Now sync the mongodb Application, then run: $0 copy"
     ;;
   copy)
-    uri="$(k -n "$MDB_NAMESPACE" get secret "$OPERATOR_SECRET" -o jsonpath='{.data.connectionString\.standard}' \
-           | base64 --decode)"
+    if ! k -n "$MDB_NAMESPACE" get secret "$OPERATOR_SECRET" >/dev/null 2>&1; then
+      echo "Secret $MDB_NAMESPACE/$OPERATOR_SECRET does not exist yet: is mongodb synced and the user created?" >&2
+      exit 1
+    fi
+    encoded="$(k -n "$MDB_NAMESPACE" get secret "$OPERATOR_SECRET" -o jsonpath='{.data.connectionString\.standard}')"
+    uri="$(printf '%s' "$encoded" | base64 --decode)"
+    unset encoded
     if [[ -z "$uri" ]]; then
       echo "Secret $MDB_NAMESPACE/$OPERATOR_SECRET has no connection string yet: is the user created?" >&2
       exit 1
