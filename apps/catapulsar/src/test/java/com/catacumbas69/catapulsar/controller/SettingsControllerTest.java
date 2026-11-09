@@ -13,13 +13,19 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.catacumbas69.catapulsar.service.AlertThresholdsService;
+import com.catacumbas69.catapulsar.service.CatavigiaEndpoint;
 import com.catacumbas69.catapulsar.service.CollectIntervalService;
+import com.catacumbas69.catapulsar.service.IntegerSettingService;
 import com.catacumbas69.catapulsar.service.DeadLetterDeliveriesService;
 import com.catacumbas69.catapulsar.service.InvalidSettingException;
 import com.catacumbas69.catapulsar.service.CataponteEndpoint;
 import com.catacumbas69.catapulsar.service.CatametricasEndpoint;
 import com.catacumbas69.catapulsar.service.CatauditEndpoint;
 import com.catacumbas69.catapulsar.service.RefreshIntervalService;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,6 +58,57 @@ class SettingsControllerTest {
 
     @MockitoBean
     private DeadLetterDeliveriesService deliveries;
+
+    @MockitoBean
+    private CatavigiaEndpoint catavigia;
+
+    @MockitoBean
+    private AlertThresholdsService thresholds;
+
+    @Test
+    void alerts_listsEveryThreshold_andChangesOneByName() throws Exception {
+        IntegerSettingService debounce = org.mockito.Mockito.mock(IntegerSettingService.class);
+        when(debounce.value()).thenReturn(2);
+        when(debounce.defaultValue()).thenReturn(2);
+        when(debounce.min()).thenReturn(1);
+        when(debounce.max()).thenReturn(10);
+        when(debounce.change(eq(3), any())).thenReturn(3);
+        Map<String, IntegerSettingService> all = new LinkedHashMap<>();
+        all.put("debounce", debounce);
+        when(thresholds.all()).thenReturn(all);
+        when(thresholds.get("debounce")).thenReturn(Optional.of(debounce));
+
+        mvc.perform(get("/api/v1/settings/alerts"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("debounce"))
+                .andExpect(jsonPath("$[0].custom").value(false));
+        mvc.perform(put("/api/v1/settings/alerts/debounce").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"value\":3}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.value").value(3))
+                .andExpect(jsonPath("$.custom").value(true));
+    }
+
+    @Test
+    void alerts_unknownThreshold_is404() throws Exception {
+        when(thresholds.get("nope")).thenReturn(Optional.empty());
+
+        mvc.perform(delete("/api/v1/settings/alerts/nope")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void catavigia_urlCanBeChanged() throws Exception {
+        when(catavigia.url()).thenReturn("http://localhost:8085");
+        when(catavigia.defaultUrl()).thenReturn("http://catavigia:8085");
+        when(catavigia.isCustom()).thenReturn(true);
+
+        mvc.perform(put("/api/v1/settings/catavigia").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"url\":\"http://localhost:8085\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.url").value("http://localhost:8085"));
+
+        verify(catavigia).change(eq("http://localhost:8085"), any());
+    }
 
     @Test
     void deadLetters_changesTheDeliveriesForEveryApp() throws Exception {

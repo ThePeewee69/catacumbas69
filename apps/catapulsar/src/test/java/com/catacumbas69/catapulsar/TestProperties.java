@@ -27,6 +27,8 @@ public final class TestProperties {
                 new CatapulsarProperties.Catametricas("http://localhost:8083", Duration.ofSeconds(1),
                         Duration.ofSeconds(1), 60),
                 new CatapulsarProperties.Cataudit("http://localhost:8084", Duration.ofSeconds(1),
+                        Duration.ofSeconds(1)),
+                new CatapulsarProperties.Catavigia("http://localhost:8085", Duration.ofSeconds(1),
                         Duration.ofSeconds(1)));
     }
 }

@@ -1,27 +1,36 @@
 package com.catacumbas69.catapulsar.controller;
 
+import com.catacumbas69.catapulsar.dto.AlertThresholdResponse;
 import com.catacumbas69.catapulsar.dto.CountSettingRequest;
 import com.catacumbas69.catapulsar.dto.CountSettingResponse;
 import com.catacumbas69.catapulsar.dto.IntervalSettingRequest;
 import com.catacumbas69.catapulsar.dto.IntervalSettingResponse;
 import com.catacumbas69.catapulsar.dto.UrlSettingRequest;
 import com.catacumbas69.catapulsar.dto.UrlSettingResponse;
+import com.catacumbas69.catapulsar.service.AlertThresholdsService;
 import com.catacumbas69.catapulsar.service.CatametricasEndpoint;
 import com.catacumbas69.catapulsar.service.CataponteEndpoint;
 import com.catacumbas69.catapulsar.service.CatauditEndpoint;
+import com.catacumbas69.catapulsar.service.CatavigiaEndpoint;
 import com.catacumbas69.catapulsar.service.CollectIntervalService;
 import com.catacumbas69.catapulsar.service.DeadLetterDeliveriesService;
+import com.catacumbas69.catapulsar.service.IntegerSettingService;
 import com.catacumbas69.catapulsar.service.RefreshIntervalService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.util.ArrayList;
+import java.util.List;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Runtime settings changed from the UI. Changes are stored in MongoDB and audited.
@@ -37,6 +46,8 @@ public class SettingsController {
     private final RefreshIntervalService refresh;
     private final CollectIntervalService collect;
     private final DeadLetterDeliveriesService deliveries;
+    private final CatavigiaEndpoint catavigia;
+    private final AlertThresholdsService thresholds;
 
     /**
      * Creates the controller.
@@ -47,16 +58,111 @@ public class SettingsController {
      * @param refresh UI auto-refresh interval
      * @param collect Catametricas collection interval
      * @param deliveries deliveries before a dead-letter topic
+     * @param catavigia Catavigia base URL holder
+     * @param thresholds the alert thresholds
      */
     public SettingsController(CataponteEndpoint cataponte, CatauditEndpoint cataudit,
                               CatametricasEndpoint catametricas, RefreshIntervalService refresh,
-                              CollectIntervalService collect, DeadLetterDeliveriesService deliveries) {
+                              CollectIntervalService collect, DeadLetterDeliveriesService deliveries,
+                              CatavigiaEndpoint catavigia, AlertThresholdsService thresholds) {
         this.cataponte = cataponte;
         this.cataudit = cataudit;
         this.catametricas = catametricas;
         this.refresh = refresh;
         this.collect = collect;
         this.deliveries = deliveries;
+        this.catavigia = catavigia;
+        this.thresholds = thresholds;
+    }
+
+    /**
+     * Returns every alert threshold (ADR 0015, Settings → Alerts).
+     *
+     * @return backlog-limit, collection-stale-intervals, check-interval and debounce
+     */
+    @Operation(summary = "Alert thresholds read by Catavigia")
+    @GetMapping("/alerts")
+    public List<AlertThresholdResponse> alertThresholds() {
+        List<AlertThresholdResponse> all = new ArrayList<>();
+        thresholds.all().forEach((name, setting) -> all.add(AlertThresholdResponse.of(name, setting,
+                setting.value())));
+        return all;
+    }
+
+    /**
+     * Changes one alert threshold.
+     *
+     * @param name {@code backlog-limit}, {@code collection-stale-intervals}, {@code check-interval} or
+     *             {@code debounce}
+     * @param request the new value
+     * @param http current request, for who made it
+     * @return the threshold
+     */
+    @Operation(summary = "Change an alert threshold")
+    @PutMapping("/alerts/{name}")
+    public AlertThresholdResponse changeAlertThreshold(@PathVariable String name,
+                                                       @Valid @RequestBody CountSettingRequest request,
+                                                       HttpServletRequest http) {
+        IntegerSettingService setting = threshold(name);
+        return AlertThresholdResponse.of(name, setting, setting.change(request.value(), ClientAddress.of(http)));
+    }
+
+    /**
+     * Resets one alert threshold to its default.
+     *
+     * @param name threshold name
+     * @param http current request, for who made it
+     * @return the threshold
+     */
+    @Operation(summary = "Reset an alert threshold to its default")
+    @DeleteMapping("/alerts/{name}")
+    public AlertThresholdResponse resetAlertThreshold(@PathVariable String name, HttpServletRequest http) {
+        IntegerSettingService setting = threshold(name);
+        return AlertThresholdResponse.of(name, setting, setting.reset(ClientAddress.of(http)));
+    }
+
+    /**
+     * Returns the Catavigia URL in use.
+     *
+     * @return URL, default and whether it was changed
+     */
+    @Operation(summary = "Catavigia URL in use")
+    @GetMapping("/catavigia")
+    public UrlSettingResponse catavigia() {
+        return UrlSettingResponse.of(catavigia);
+    }
+
+    /**
+     * Changes the Catavigia URL.
+     *
+     * @param request the new URL
+     * @param http current request, for who made it
+     * @return the URL in use
+     */
+    @Operation(summary = "Change the Catavigia URL")
+    @PutMapping("/catavigia")
+    public UrlSettingResponse changeCatavigia(@Valid @RequestBody UrlSettingRequest request,
+                                              HttpServletRequest http) {
+        catavigia.change(request.url(), ClientAddress.of(http));
+        return UrlSettingResponse.of(catavigia);
+    }
+
+    /**
+     * Resets the Catavigia URL to its configured default.
+     *
+     * @param http current request, for who made it
+     * @return the URL in use
+     */
+    @Operation(summary = "Reset the Catavigia URL to its configured default")
+    @DeleteMapping("/catavigia")
+    public UrlSettingResponse resetCatavigia(HttpServletRequest http) {
+        catavigia.reset(ClientAddress.of(http));
+        return UrlSettingResponse.of(catavigia);
+    }
+
+    private IntegerSettingService threshold(String name) {
+        return thresholds.get(name).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                "Unknown alert threshold '" + name + "'"));
     }
 
     /**

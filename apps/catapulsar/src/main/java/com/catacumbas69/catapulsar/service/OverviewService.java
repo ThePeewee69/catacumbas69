@@ -72,6 +72,23 @@ public class OverviewService {
      * @param actor browser address, for Catametricas' audit
      * @return what was collected
      */
+    /**
+     * History of one subscription for the topic view's chart (orch.md decision 78; history only, OBS-10).
+     *
+     * @param tenant tenant name
+     * @param namespace namespace name without the tenant
+     * @param topic local topic name without partition suffix
+     * @param subscription subscription name
+     * @param period time range
+     * @return Catametricas' series
+     */
+    public CatametricasClient.SubscriptionSeries subscriptionHistory(String tenant, String namespace, String topic,
+                                                                     String subscription, OverviewPeriod period) {
+        Instant now = clock.instant();
+        return catametricas.subscriptionSeries(tenant, namespace, topic, subscription, period.buckets(now).get(0),
+                now, period.stepParameter());
+    }
+
     public CatametricasClient.ForcedCollection collect(String tenant, String namespace, String actor) {
         return catametricas.collect(tenant, namespace, actor);
     }

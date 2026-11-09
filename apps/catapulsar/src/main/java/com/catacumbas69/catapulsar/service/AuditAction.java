@@ -57,7 +57,14 @@ public enum AuditAction {
     /** An area change was requested. */
     UPDATE_AREA("area", "update-requested"),
     /** An area deletion was requested (details: what to do with its bridges). */
-    DELETE_AREA("area", "delete-requested");
+    DELETE_AREA("area", "delete-requested"),
+    /**
+     * Marking an alert as seen was requested through Catapulsar ({@code alert.seen-requested}, with Catavigia's HTTP
+     * status); Catavigia records it itself ({@code alert.seen}, ADR 0015).
+     */
+    SEE_ALERT("alert", "seen-requested"),
+    /** A change of a subscription's backlog limit was requested (Catavigia records {@code limit.changed}). */
+    CHANGE_LIMIT("limit", "change-requested");
 
     private final String entity;
     private final String verb;

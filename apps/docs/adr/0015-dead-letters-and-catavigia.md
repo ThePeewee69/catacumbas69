@@ -1,6 +1,6 @@
 # 15. Dead letters for poison messages, and Catavigia: alerts with history
 
-Date: 2026-11-06 · Status: Accepted (2026-11-06); phase 7a implemented (2026-11-06), 7b planned · Decisions: orch.md 42–49, 66–74
+Date: 2026-11-06 · Status: Accepted (2026-11-06); phase 7a implemented (2026-11-06), 7b implemented (2026-11-08, steps 1–3) · Decisions: orch.md 42–49, 66–80
 
 ## Context
 
@@ -164,8 +164,8 @@ audit (ADR 0010):
   (filters: type, subject, period).
 - The **DLQ view** of a poison alert lists the messages with their original topic, properties and delivery count,
   and offers *Send back*, *Discard* and *Discard all*, each confirmed first.
-- **Settings → Alerts** tab (7b): backlog limit, check interval, debounce. N deliveries already has its own
-  **Dead letters** tab (7a).
+- **Settings → Alerts** tab (7b): backlog limit, collection stale intervals, check interval, debounce, and the N
+  deliveries that had their own Dead letters tab in 7a (review point 24).
 - **Implemented in 7a:** the DLQ view is the *Dead letters* tab of the Consumers panel; it lists the DLQs of the
   apps' consumers and of the bridges, peeks up to 50 messages, and sends back or discards **any** of them, not only
   the first. Catapulsar does it with a short-lived consumer on the DLQ's `dlq` subscription that receives until it
@@ -230,3 +230,21 @@ audit (ADR 0010):
 19. With Pulsar down no check runs (**accepted**). A check that cannot read its source is **delivered again**, like
     any failed task, and goes to the DLQ after `dlq.max-deliveries`; a task of an old round still runs but
     changes no alert, since the debounce counts only newer rounds.
+
+### Review of Catapulsar's alerts (2026-11-08)
+
+20. The **Alerts** button shows the number of open alerts not seen: red if one is critical, orange otherwise,
+    nothing when none, grey `?` when Catavigia does not answer.
+21. Both tabs are **expandable tables**, like the Audit panel, with *Mark seen* and the action on each row.
+22. The action button opens the place where it is fixed **with the resource selected** (the DLQ peeked, the bridge
+    shown, the topic view with the subscription's history open).
+23. The badge asks Catavigia **every 30 s**, whatever the auto-refresh, while the browser tab is visible.
+24. Settings → **Alerts** holds the four thresholds **and** the deliveries before the DLQ; the Dead letters tab
+    goes. The API is `/api/v1/settings/alerts` and `/api/v1/settings/alerts/{name}`.
+25. A subscription's row gets a **Limit** column edited in place and a **📈** button opening its chart: backlog,
+    maximum shaded, delivered bars and the limit, 24 h by default (1 h, 7 d, 30 d).
+26. Catavigia's URL is in Settings → Connections, with a check button; `catavigia` is a component of Catapulsar's
+    health. Besides one by one, **Mark all seen**.
+27. Marking as seen and changing a limit are **audited by both apps**: Catapulsar publishes `alert.seen-requested`
+    and `limit.change-requested` with Catavigia's status, as for the bridges. The archive filters by type, subject
+    and period.

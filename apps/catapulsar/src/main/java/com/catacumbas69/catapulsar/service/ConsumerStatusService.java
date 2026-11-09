@@ -42,7 +42,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class ConsumerStatusService implements ApplicationListener<ApplicationReadyEvent>, DisposableBean {
 
     /** Apps whose consumers are controlled. */
-    public static final List<String> APPS = List.of("cataudit", "catametricas");
+    public static final List<String> APPS = List.of("cataudit", "catametricas", "catavigia");
 
     /** A replica that has not reported for this long is shown as gone. */
     static final Duration STALE_AFTER = Duration.ofSeconds(30);

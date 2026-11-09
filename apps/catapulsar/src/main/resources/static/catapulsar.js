@@ -20,6 +20,39 @@ const AUDIT_PAGE_SIZE = 50;
 
 /** Overview choices remembered per browser. */
 const OVERVIEW_PERIODS = ['1h', '24h', '7d', '30d'];
+
+// ── Alerts (Catavigia, ADR 0015) ─────────────────────────────────────────
+const ALERTS_API = '/api/v1/alerts';
+const LIMITS_API = '/api/v1/limits/backlog';
+/** The badge asks Catavigia this often, whatever the auto-refresh, while this browser tab is visible. */
+const ALERT_BADGE_MS = 30000;
+const ALERT_PAGE_SIZE = 50;
+const ALERT_PERIODS = { '24h': 86400e3, '7d': 7 * 86400e3, '30d': 30 * 86400e3, all: null };
+/** Every alert type, for the archive filter and the labels. */
+const ALERT_TYPES = {
+  'poison': 'Poison messages in a DLQ',
+  'bridge.failed': 'Bridge failed',
+  'bridge.blocked': 'Bridge blocked (loop)',
+  'collection.stale': 'Collection stale',
+  'backlog': 'Backlog above its limit',
+  'consumer.paused': 'Consumer paused',
+  'service.down': 'App down',
+  'pulsar.broker.down': 'Pulsar broker down',
+  'pulsar.bookie.down': 'Pulsar storage failing',
+  'mongodb.down': "Catavigia's MongoDB down",
+};
+/** Settings → Alerts: label and unit of each threshold (names from GET /api/v1/settings/alerts). */
+const ALERT_THRESHOLDS = {
+  'backlog-limit': { label: 'Backlog limit, global default (messages)', unit: '',
+    hint: 'A subscription above this many waiting messages opens a backlog alert, unless it has its own limit '
+      + '(set on its row in the topic view).' },
+  'collection-stale-intervals': { label: 'Collection stale after (intervals)', unit: '',
+    hint: 'How many Catametricas collection intervals without a sample open collection.stale.' },
+  'check-interval': { label: 'Check interval (seconds)', unit: 's',
+    hint: 'How often Catavigia runs every check. Applies from the next round.' },
+  'debounce': { label: 'Debounce (rounds)', unit: '',
+    hint: 'Rounds in a row that must see a problem to open its alert, and that must not see it to close it.' },
+};
 const OVERVIEW_METRICS = { in: 'Published', out: 'Delivered', backlog: 'Backlog' };
 /** Live mode: a forced collection every this many ms (Catametricas collects a namespace at most every 5 s). */
 const LIVE_EVERY_MS = 5000;
@@ -184,7 +217,7 @@ function app() {
 
     settings: {
       open: false,
-      tab: 'connections',   // connections | refresh
+      tab: 'connections',   // connections | refresh | alerts
       pulsarUrl: localStorage.getItem('pulsarUrl') || 'http://192.168.86.35:31080',
       healthState: null,   // null | 'checking' | 'ok' | 'error'
       healthMsg: ''
@@ -229,6 +262,22 @@ function app() {
       messages: [], peeking: false, busy: false,
     },
     dlqSetting: { value: 10, defaultValue: 10, min: 2, max: 100, custom: false, draft: 10 },
+    // ── Alerts (Catavigia, ADR 0015) ──────────────────────────────────────
+    alertsView: false,
+    alertBadge: { open: 0, unseen: 0, critical: 0, warning: 0, worst: null, error: '', loaded: false },
+    alerts: {
+      tab: 'open',               // 'open' | 'archived'
+      open: [], loading: false, error: '', expanded: null, busy: false,
+      archive: { items: [], total: 0, page: 0, loading: false, error: '', expanded: null,
+                 filters: { type: '', subject: '', period: storedChoice('alertsPeriod', '7d',
+                                                                         Object.keys(ALERT_PERIODS)) } },
+      settings: { url: '', defaultUrl: '', custom: false, draft: '', saving: false, healthState: null, healthMsg: '' },
+    },
+    alertThresholds: [],         // { name, value, defaultValue, min, max, custom, draft }
+    // Backlog limits per subscription (Catavigia), for the Limit column of the topic view.
+    subLimits: { global: null, byKey: {}, error: '', editing: null, draft: '', saving: false },
+    // History of a subscription (Catametricas), shown under its row with 📈.
+    subHistory: { open: {}, data: {}, loading: {}, error: {}, period: '24h', hover: null },
     audit: {
       items: [], total: 0, page: 0, loading: false, error: '', expanded: null,
       settings: { url: '', defaultUrl: '', custom: false, draft: '', saving: false, healthState: null, healthMsg: '' },
@@ -239,6 +288,7 @@ function app() {
 
     // ── Init ───────────────────────────────────────────────────────────────
     async init() {
+      this.startAlertBadge();
       await this.loadRefreshInterval();
       this.scheduleRefresh();
       await this.loadTenants();
@@ -285,12 +335,14 @@ function app() {
           work.push(this.refreshBridgeList(), this.loadBridgeStatus());
         } else if (this.auditView) {
           work.push(this.loadAudit(true));
+        } else if (this.alertsView) {
+          work.push(this.alerts.tab === 'open' ? this.loadAlerts(true) : this.loadAlertArchive(true));
         } else if (this.consumersView) {
           work.push(this.loadConsumers(true));
           if (this.cons.tab === 'deadletters') work.push(this.loadDeadLetters(true));
         } else if (this.sel.topic && this.tab === 'stats' && this.stats) {
           work.push(this.refreshStats());
-          if (this.auto.tick % INTERVAL_RELOAD_TICKS === 0) work.push(this.refreshBridgeList());
+          if (this.auto.tick % INTERVAL_RELOAD_TICKS === 0) work.push(this.refreshBridgeList(), this.loadSubLimits());
         } else if (this.sel.topic && this.tab === 'subs') {
           work.push(this.refreshSubs());
         } else if (this.sel.topic && this.tab === 'backlog') {
@@ -680,7 +732,7 @@ function app() {
     // ── Settings ───────────────────────────────────────────────────────────
     /**
      * Opens the Settings dialog on a tab and loads the current values.
-     * @param {'connections'|'refresh'|'deadletters'} [tab] tab to show first
+     * @param {'connections'|'refresh'|'alerts'} [tab] tab to show first
      */
     async openSettings(tab = 'connections') {
       this.settings.tab = tab;
@@ -689,17 +741,21 @@ function app() {
       this.bridges.settings.healthState = null;
       this.audit.settings.healthState = null;
       this.catametricas.healthState = null;
+      this.alerts.settings.healthState = null;
       await Promise.all([this.loadCataponteSettings(), this.loadCatauditSettings(), this.loadCatametricasSettings(),
-                         this.loadCollectInterval(), this.loadDlqSetting()]);
+                         this.loadCatavigiaSettings(), this.loadCollectInterval(), this.loadDlqSetting(),
+                         this.loadAlertThresholds()]);
       this.bridges.settings.draft = this.bridges.settings.url;
       this.audit.settings.draft = this.audit.settings.url;
+      this.alerts.settings.draft = this.alerts.settings.url;
       this.catametricas.draft = this.catametricas.url;
       this.collect.draft = this.collect.seconds;
     },
 
     /**
-     * Saves the Pulsar label (this browser) and whatever changed on the server (Cataponte, Cataudit and
-     * Catametricas URLs, Catametricas interval; all audited). The dialog stays open if a server change is refused.
+     * Saves the Pulsar label (this browser) and whatever changed on the server (Cataponte, Cataudit, Catametricas
+     * and Catavigia URLs, intervals, deliveries before the DLQ and alert thresholds; all audited). The dialog stays
+     * open if a server change is refused.
      */
     async saveSettings() {
       try { localStorage.setItem('pulsarUrl', this.settings.pulsarUrl); } catch { /* label not remembered */ }
@@ -718,6 +774,17 @@ function app() {
       if (m.draft && m.draft !== m.url) {
         if (!await this.changeCatametricasUrl('PUT', { url: m.draft })) return;
         changed = true;
+      }
+      const v = this.alerts.settings;
+      if (v.draft && v.draft !== v.url) {
+        if (!await this.changeCatavigiaUrl('PUT', { url: v.draft })) return;
+        changed = true;
+      }
+      for (const t of this.alertThresholds) {
+        if (Number(t.draft) !== t.value) {
+          if (!await this.saveAlertThreshold(t, 'PUT')) return;
+          changed = true;
+        }
       }
       if (Number(this.collect.draft) !== this.collect.seconds) {
         if (!await this.saveCollectInterval('PUT')) return;
@@ -1124,6 +1191,9 @@ function app() {
       this.produce = { payload: '', key: '', lastId: null };
       this.backlog = { sub: '', count: 10, messages: [], queried: false };
       this.subConsumersOpen = {};
+      this.subHistory = { ...this.subHistory, open: {}, data: {}, loading: {}, error: {}, hover: null };
+      this.subLimits.editing = null;
+      this.loadSubLimits();   // the Limit column; shows "—" when Catavigia is down
       await this.loadStats();
       await this.loadSubs();
       this.refreshBridgeList();   // which subscriptions belong to bridges; ignored when Cataponte is down
@@ -1275,17 +1345,570 @@ function app() {
       if (this.bridgesView) this.closeBridges();
       if (this.auditView) this.closeAudit();
       this.consumersView = false;
+      this.alertsView = false;
     },
 
-    /** @returns {boolean} whether a panel (Bridges, Audit, Consumers) covers the main view */
+    /** @returns {boolean} whether a panel (Bridges, Audit, Consumers, Alerts) covers the main view */
     panelOpen() {
-      return this.bridgesView || this.auditView || this.consumersView;
+      return this.bridgesView || this.auditView || this.consumersView || this.alertsView;
+    },
+
+    // ── Alerts (Catavigia, ADR 0015) ───────────────────────────────────────
+    /**
+     * Starts the badge: asks Catavigia now and every 30 s while this browser tab is visible, whatever the
+     * auto-refresh (orch.md decision 78), and again as soon as the tab becomes visible.
+     */
+    startAlertBadge() {
+      this.loadAlertSummary();
+      setInterval(() => { if (!document.hidden) this.loadAlertSummary(); }, ALERT_BADGE_MS);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) this.loadAlertSummary(); });
+    },
+
+    /** Reads the open alerts not marked as seen, by severity; an unreachable Catavigia greys the badge. */
+    async loadAlertSummary() {
+      try {
+        const r = await this.api(`${ALERTS_API}/summary`);
+        Object.assign(this.alertBadge, { open: r.open, unseen: r.unseen, critical: r.critical, warning: r.warning,
+                                         worst: r.worst, error: '', loaded: true });
+      } catch (e) {
+        Object.assign(this.alertBadge, { error: e.message, loaded: true });
+      }
+    },
+
+    /** @returns {string} the badge's number, `?` when Catavigia does not answer, '' when nothing is unseen */
+    alertBadgeText() {
+      const b = this.alertBadge;
+      if (b.error) return '?';
+      return b.unseen > 0 ? String(b.unseen) : '';
+    },
+
+    /** @returns {string} CSS class of the badge: critical, warning or unknown */
+    alertBadgeClass() {
+      const b = this.alertBadge;
+      if (b.error) return 'alert-badge-unknown';
+      return b.critical > 0 ? 'alert-badge-critical' : 'alert-badge-warning';
+    },
+
+    /** @returns {string} tooltip of the Alerts button */
+    alertBadgeTitle() {
+      const b = this.alertBadge;
+      if (b.error) return 'Catavigia does not answer: ' + b.error;
+      if (!b.loaded) return 'Alerts';
+      if (b.open === 0) return 'No open alert';
+      return `${b.unseen} not seen (${b.critical} critical, ${b.warning} warning) of ${b.open} open`;
+    },
+
+    /**
+     * Opens the Alerts panel.
+     * @param {'open'|'archived'} [tab] tab to show
+     */
+    openAlerts(tab) {
+      if (this.bridgesView) this.closeBridges();
+      if (this.auditView) this.closeAudit();
+      this.consumersView = false;
+      this.alertsView = true;
+      if (tab) this.alerts.tab = tab;
+      this.alerts.expanded = null;
+      this.loadCatavigiaSettings();
+      if (this.alerts.tab === 'open') this.loadAlerts(); else this.loadAlertArchive();
+    },
+
+    /**
+     * Shows a tab of the Alerts panel.
+     * @param {'open'|'archived'} tab the tab
+     */
+    selectAlertsTab(tab) {
+      this.alerts.tab = tab;
+      if (tab === 'open') this.loadAlerts(); else this.loadAlertArchive();
+    },
+
+    /**
+     * Loads the open alerts.
+     * @param {boolean} [quiet] no spinner, errors kept silent (auto-refresh)
+     */
+    async loadAlerts(quiet = false) {
+      if (!quiet) this.alerts.loading = true;
+      try {
+        const list = await this.api(ALERTS_API);
+        if (JSON.stringify(list) !== JSON.stringify(this.alerts.open)) this.alerts.open = list;
+        this.alerts.error = '';
+        this.loadAlertSummary();
+      } catch (e) {
+        if (!quiet) this.alerts.error = e.message;
+      } finally {
+        if (!quiet) this.alerts.loading = false;
+      }
+    },
+
+    /** @returns {string} query string of the archive's filters and page */
+    alertArchiveQuery() {
+      const a = this.alerts.archive;
+      const q = new URLSearchParams();
+      if (a.filters.type) q.set('type', a.filters.type);
+      if (a.filters.subject.trim()) q.set('subject', a.filters.subject.trim());
+      const back = ALERT_PERIODS[a.filters.period];
+      if (back) q.set('from', new Date(Date.now() - back).toISOString());
+      q.set('page', String(a.page));
+      q.set('size', String(ALERT_PAGE_SIZE));
+      return q.toString();
+    },
+
+    /**
+     * Loads one page of the archive.
+     * @param {boolean} [quiet] no spinner, errors kept silent (auto-refresh)
+     */
+    async loadAlertArchive(quiet = false) {
+      const a = this.alerts.archive;
+      const key = JSON.stringify([a.filters, a.page]);
+      if (!quiet) a.loading = true;
+      try {
+        const r = await this.api(`${ALERTS_API}/archive?${this.alertArchiveQuery()}`);
+        if (key !== JSON.stringify([a.filters, a.page])) return;
+        if (JSON.stringify(r.items) !== JSON.stringify(a.items)) a.items = r.items;
+        a.total = r.total;
+        a.error = '';
+      } catch (e) {
+        if (!quiet) a.error = e.message;
+      } finally {
+        if (!quiet) a.loading = false;
+      }
+    },
+
+    /** Applies the archive filters from the first page; the period is remembered in this browser. */
+    applyAlertFilters() {
+      const a = this.alerts.archive;
+      a.page = 0;
+      a.expanded = null;
+      try { localStorage.setItem('alertsPeriod', a.filters.period); } catch { /* not persisted */ }
+      this.loadAlertArchive();
+    },
+
+    clearAlertFilters() {
+      Object.assign(this.alerts.archive.filters, { type: '', subject: '' });
+      this.applyAlertFilters();
+    },
+
+    /** @returns {number} number of archive pages for the current filters */
+    alertArchivePages() {
+      return Math.max(1, Math.ceil(this.alerts.archive.total / ALERT_PAGE_SIZE));
+    },
+
+    /**
+     * Moves to another archive page.
+     * @param {number} delta -1 for newer, +1 for older
+     */
+    alertArchiveGo(delta) {
+      const a = this.alerts.archive;
+      const page = a.page + delta;
+      if (page < 0 || page >= this.alertArchivePages()) return;
+      a.page = page;
+      a.expanded = null;
+      this.loadAlertArchive();
+    },
+
+    /**
+     * Shows or hides an alert's details.
+     * @param {object} holder `alerts` or `alerts.archive`
+     * @param {string} id alert id
+     */
+    toggleAlert(holder, id) {
+      holder.expanded = holder.expanded === id ? null : id;
+    },
+
+    /** @param {string} type alert type @returns {string} what it means */
+    alertTypeLabel(type) {
+      return ALERT_TYPES[type] ?? type;
+    },
+
+    /** @returns {string[]} every alert type, for the archive filter */
+    alertTypes() {
+      return Object.keys(ALERT_TYPES);
+    },
+
+    /**
+     * How long ago, in words.
+     * @param {string} iso ISO-8601 instant
+     * @returns {string} e.g. `5 min`, `2 h 10 min`, `3 d 4 h`
+     */
+    alertAge(iso) {
+      if (!iso) return '—';
+      return this.alertDuration(Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000));
+    },
+
+    /**
+     * A duration in words.
+     * @param {number} seconds the duration
+     * @returns {string} e.g. `40 s`, `5 min`, `2 h 10 min`, `3 d 4 h`
+     */
+    alertDuration(seconds) {
+      const s = Math.round(seconds ?? 0);
+      if (s < 60) return `${s} s`;
+      const m = Math.floor(s / 60);
+      if (m < 60) return `${m} min`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return `${h} h ${m % 60} min`;
+      return `${Math.floor(h / 24)} d ${h % 24} h`;
+    },
+
+    /**
+     * Marks one open alert as seen: it stays open and leaves the badge.
+     * @param {object} alert the alert
+     */
+    async markAlertSeen(alert) {
+      this.alerts.busy = true;
+      try {
+        await this.api(`${ALERTS_API}/${alert.id}/seen`, { method: 'POST' });
+        await this.loadAlerts(true);
+      } catch (e) {
+        this.notify('Not marked as seen: ' + e.message, 'error');
+      } finally {
+        this.alerts.busy = false;
+      }
+    },
+
+    /** Marks every open alert not yet seen as seen, one by one (each recorded in the audit log). */
+    async markAllAlertsSeen() {
+      const unseen = this.alerts.open.filter(a => !a.seenAt && !a.local);
+      if (unseen.length === 0) return;
+      if (!confirm(`Mark ${unseen.length} alert(s) as seen? They stay open but leave the badge.`)) return;
+      this.alerts.busy = true;
+      let failed = 0;
+      for (const alert of unseen) {
+        try { await this.api(`${ALERTS_API}/${alert.id}/seen`, { method: 'POST' }); } catch { failed++; }
+      }
+      this.alerts.busy = false;
+      this.notify(failed ? `${failed} alert(s) not marked as seen` : `${unseen.length} alert(s) marked as seen`,
+                  failed ? 'error' : 'success');
+      await this.loadAlerts(true);
+    },
+
+    /**
+     * Label of the button that takes an alert to where it is fixed (ADR 0015 section 3).
+     * @param {object} alert the alert
+     * @returns {string} the label
+     */
+    alertActionLabel(alert) {
+      if (alert.type === 'poison') return 'Open DLQ';
+      if (alert.type.startsWith('bridge.')) return 'Open bridge';
+      if (alert.type === 'backlog') return 'Open subscription';
+      if (alert.type === 'consumer.paused') return 'Open consumers';
+      if (alert.type === 'collection.stale') return 'Collection settings';
+      return 'Connections';
+    },
+
+    /**
+     * Takes an alert to where its owner fixes it, with the resource selected.
+     * @param {object} alert the alert
+     */
+    async runAlertAction(alert) {
+      try {
+        if (alert.type === 'poison') {
+          this.openConsumers('deadletters');
+          await this.loadDeadLetters();
+          await this.peekDeadLetters(alert.subject);
+        } else if (alert.type.startsWith('bridge.')) {
+          await this.loadBridges();
+          const bridge = this.bridges.list.find(b => b.name === alert.subject);
+          if (bridge) await this.openBridgeOf(bridge); else this.openBridges();
+        } else if (alert.type === 'backlog') {
+          await this.openSubscriptionOf(alert.subject);
+        } else if (alert.type === 'consumer.paused') {
+          this.openConsumers('consumers');
+        } else if (alert.type === 'collection.stale') {
+          await this.openSettings('refresh');
+        } else {
+          await this.openSettings('connections');
+        }
+      } catch (e) {
+        this.notify('Could not open it: ' + e.message, 'error');
+      }
+    },
+
+    /**
+     * Opens the topic view of a backlog alert's subject, with the subscription's history open.
+     * @param {string} subject `persistent://tenant/namespace/topic|subscription`
+     */
+    async openSubscriptionOf(subject) {
+      const bar = subject.lastIndexOf('|');
+      const topic = subject.slice(0, bar);
+      const subscription = subject.slice(bar + 1);
+      const m = topic.match(/^[a-z-]+:\/\/([^/]+)\/([^/]+)\/(.+)$/);
+      if (!m) return;
+      await this.clickTreeTopic(m[1], m[2], m[3]);
+      this.tab = 'stats';
+      this.toggleSubHistory(subscription, true);
+      setTimeout(() => document.getElementById(`sub-row-${subscription}`)?.scrollIntoView({ block: 'center' }), 300);
+    },
+
+    // ── Catavigia URL (stored in MongoDB, audited) ──────────────────────────
+    async loadCatavigiaSettings() {
+      try {
+        Object.assign(this.alerts.settings, await this.api('/api/v1/settings/catavigia'));
+      } catch (e) { this.notify('Settings: ' + e.message, 'error'); }
+    },
+
+    async resetCatavigiaUrl() {
+      if (!confirm(`Go back to the default Catavigia URL ${this.alerts.settings.defaultUrl}?`)) return;
+      if (await this.changeCatavigiaUrl('DELETE')) this.alerts.settings.draft = this.alerts.settings.url;
+    },
+
+    /**
+     * Saves or resets the Catavigia URL, then reloads the badge from the new address.
+     * @param {'PUT'|'DELETE'} method PUT saves `body.url`, DELETE goes back to the default
+     * @param {{url: string}} [body] new URL
+     * @returns {Promise<boolean>} whether the change was saved
+     */
+    async changeCatavigiaUrl(method, body) {
+      const s = this.alerts.settings;
+      s.saving = true;
+      try {
+        const options = { method };
+        if (body) options.body = JSON.stringify(body);
+        Object.assign(s, await this.api('/api/v1/settings/catavigia', options));
+        s.healthState = null;
+        this.notify(`Catavigia URL set to ${s.url}`);
+        this.loadAlertSummary();
+        if (this.alertsView) this.loadAlerts();
+        return true;
+      } catch (e) {
+        this.notify('Catavigia URL not saved: ' + e.message, 'error');
+        return false;
+      } finally {
+        s.saving = false;
+      }
+    },
+
+    async checkCatavigia() {
+      const s = this.alerts.settings;
+      s.healthState = 'checking'; s.healthMsg = '';
+      try {
+        const r = await this.api(`${ALERTS_API}/summary`);
+        s.healthState = 'ok';
+        s.healthMsg = `${s.url} · ${r.open} open alert(s)`;
+      } catch (e) {
+        s.healthState = 'error';
+        s.healthMsg = e.message;
+      }
+    },
+
+    // ── Settings → Alerts: thresholds read by Catavigia ─────────────────────
+    async loadAlertThresholds() {
+      try {
+        const list = await this.api('/api/v1/settings/alerts');
+        this.alertThresholds = list.map(t => ({ ...t, draft: t.value }));
+      } catch (e) { this.notify('Alert settings: ' + e.message, 'error'); }
+    },
+
+    /** @param {string} name threshold name @returns {{label: string, hint: string}} its texts */
+    thresholdInfo(name) {
+      return ALERT_THRESHOLDS[name] ?? { label: name, hint: '' };
+    },
+
+    /**
+     * Saves or resets one threshold.
+     * @param {object} threshold the threshold, with its `draft`
+     * @param {'PUT'|'DELETE'} method PUT saves the draft, DELETE goes back to the default
+     * @returns {Promise<boolean>} whether it was saved
+     */
+    async saveAlertThreshold(threshold, method) {
+      try {
+        const options = { method };
+        if (method === 'PUT') options.body = JSON.stringify({ value: Number(threshold.draft) });
+        const r = await this.api(`/api/v1/settings/alerts/${threshold.name}`, options);
+        Object.assign(threshold, r, { draft: r.value });
+        if (method === 'DELETE') this.notify(`${this.thresholdInfo(threshold.name).label}: back to ${r.value}`);
+        return true;
+      } catch (e) {
+        this.notify(`${this.thresholdInfo(threshold.name).label} not saved: ${e.message}`, 'error');
+        return false;
+      }
+    },
+
+    // ── Backlog limit per subscription (topic view, Catavigia) ──────────────
+    /** Loads the global default and every subscription's own limit; an unreachable Catavigia shows "—". */
+    async loadSubLimits() {
+      try {
+        const r = await this.api(LIMITS_API);
+        const byKey = {};
+        (r.limits || []).forEach(l => { byKey[`${l.topic}|${l.subscription}`] = l.limit; });
+        Object.assign(this.subLimits, { global: r.globalLimit, byKey, error: '' });
+      } catch (e) {
+        Object.assign(this.subLimits, { global: null, byKey: {}, error: e.message });
+      }
+    },
+
+    /**
+     * Tells whether a subscription is watched by the backlog check (not a DLQ's own, not Pulsar's).
+     * @param {string} name subscription name
+     * @returns {boolean} whether it has a limit
+     */
+    subHasLimit(name) {
+      if (this.isSystemSub(name)) return false;
+      return !(name === 'dlq' && (this.sel.topic || '').endsWith('-DLQ'));
+    },
+
+    /**
+     * @param {string} name subscription name
+     * @returns {?number} its own limit, or null when the global default applies
+     */
+    subOwnLimit(name) {
+      return this.subLimits.byKey[`${this.currentTopicName()}|${name}`] ?? null;
+    },
+
+    /**
+     * @param {string} name subscription name
+     * @returns {?number} the limit that applies, or null when unknown
+     */
+    subLimit(name) {
+      return this.subOwnLimit(name) ?? this.subLimits.global;
+    },
+
+    /** @param {string} name subscription name @returns {string} what the Limit column shows */
+    subLimitLabel(name) {
+      if (!this.subHasLimit(name)) return '—';
+      if (this.subLimits.global == null) return '—';
+      const own = this.subOwnLimit(name);
+      return own != null ? this.fmtNum(own) : `global (${this.fmtNum(this.subLimits.global)})`;
+    },
+
+    /** @param {string} name subscription name */
+    editSubLimit(name) {
+      this.subLimits.editing = name;
+      this.subLimits.draft = this.subOwnLimit(name) ?? this.subLimits.global ?? '';
+    },
+
+    /**
+     * Saves a subscription's own limit, or removes it to use the global default (audited by both apps).
+     * @param {string} name subscription name
+     * @param {'PUT'|'DELETE'} method PUT saves the draft, DELETE uses the global default
+     */
+    async saveSubLimit(name, method) {
+      const q = new URLSearchParams({ topic: this.currentTopicName(), subscription: name });
+      this.subLimits.saving = true;
+      try {
+        const options = { method };
+        if (method === 'PUT') options.body = JSON.stringify({ limit: Number(this.subLimits.draft) });
+        await this.api(`${LIMITS_API}?${q}`, options);
+        this.subLimits.editing = null;
+        this.notify(method === 'PUT' ? `Limit of ${name} set to ${this.fmtNum(Number(this.subLimits.draft))}`
+                                     : `${name} uses the global limit again`);
+        await this.loadSubLimits();
+      } catch (e) {
+        this.notify('Limit not saved: ' + e.message, 'error');
+      } finally {
+        this.subLimits.saving = false;
+      }
+    },
+
+    // ── History of a subscription (Catametricas, decision 78) ───────────────
+    /**
+     * Shows or hides the chart under a subscription's row.
+     * @param {string} name subscription name
+     * @param {boolean} [open] force open
+     */
+    toggleSubHistory(name, open) {
+      const show = open ?? !this.subHistory.open[name];
+      this.subHistory.open = { ...this.subHistory.open, [name]: show };
+      if (show) this.loadSubHistory(name);
+    },
+
+    /**
+     * Loads a subscription's history for the chosen period.
+     * @param {string} name subscription name
+     */
+    async loadSubHistory(name) {
+      const h = this.subHistory;
+      const { tenant, namespace, topic } = this.sel;
+      const local = (topic || '').replace(/^.*\//, '');
+      h.loading = { ...h.loading, [name]: true };
+      try {
+        const r = await this.api(`/api/v1/overview/${tenant}/${namespace}/${encodeURIComponent(local)}`
+          + `/subscriptions/${encodeURIComponent(name)}?period=${h.period}`);
+        h.data = { ...h.data, [name]: r };
+        h.error = { ...h.error, [name]: '' };
+      } catch (e) {
+        h.error = { ...h.error, [name]: e.message };
+      } finally {
+        h.loading = { ...h.loading, [name]: false };
+      }
+    },
+
+    /**
+     * Changes the period of every open subscription chart.
+     * @param {string} period 1h, 24h, 7d or 30d
+     */
+    setSubHistoryPeriod(period) {
+      this.subHistory.period = period;
+      Object.entries(this.subHistory.open).forEach(([name, open]) => { if (open) this.loadSubHistory(name); });
+    },
+
+    /**
+     * Geometry of a subscription's chart: backlog line, its maximum shaded, delivered bars, limit line.
+     * @param {string} name subscription name
+     * @returns {object} paths, bars and labels
+     */
+    subChartModel(name) {
+      const d = this.subHistory.data[name];
+      const width = 760, height = 140;   // the same as the viewBox in index.html
+      const backlog = d?.backlog ?? [];
+      const backlogMax = d?.backlogMax ?? [];
+      const out = d?.msgsOut ?? [];
+      const limit = this.subHasLimit(name) ? this.subLimit(name) : null;
+      const top = this.niceMax(Math.max(0, ...backlogMax.filter(v => v != null), ...backlog.filter(v => v != null),
+                                        limit != null && limit < 10 * Math.max(1, ...backlog.filter(v => v != null))
+                                          ? limit : 0));
+      const outTop = this.niceMax(Math.max(0, ...out));
+      const n = Math.max(backlog.length, 1);
+      const barWidth = Math.max(1, width / n - 1);
+      // One path for every bar: Alpine cannot repeat elements inside an <svg>.
+      const barsPath = out.map((v, i) => {
+        const h = v ? Math.max(1, (v / outTop) * (height * 0.35)) : 0;
+        return h ? `M${((i * width) / n).toFixed(1)},${height}v${(-h).toFixed(1)}h${barWidth.toFixed(1)}`
+          + `v${h.toFixed(1)}Z` : '';
+      }).join('');
+      const times = d?.times ?? [];
+      const long = ['7d', '30d'].includes(this.subHistory.period);
+      const label = t => new Date(t).toLocaleString('en-GB', long
+        ? { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }
+        : { hour: '2-digit', minute: '2-digit' });
+      const xs = times.length ? [0, Math.floor((times.length - 1) / 2), times.length - 1] : [];
+      return {
+        width, height, top, outTop, barsPath,
+        line: this.linePath(backlog, width, height, top),
+        maxLine: this.linePath(backlogMax, width, height, top),
+        limitY: limit != null && limit <= top ? height - 1 - (limit / top) * (height - 2) : null,
+        yLabels: [top, top / 2, 0].map(v => this.fmtCompact(v)),
+        xLabels: xs.map(i => ({ x: times.length > 1 ? (i / (times.length - 1)) * width : 0, text: label(times[i]) })),
+        empty: backlog.every(v => v == null) && out.every(v => !v),
+        times, backlog, backlogMax, out, label,
+      };
+    },
+
+    /**
+     * Updates the hover text of a subscription's chart.
+     * @param {string} name subscription name
+     * @param {MouseEvent} event mouse move over the chart
+     */
+    subChartHover(name, event) {
+      const m = this.subChartModel(name);
+      if (m.times.length < 2) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+      const i = Math.round(ratio * (m.times.length - 1));
+      const b = m.backlog[i];
+      this.subHistory.hover = {
+        name, x: (i / (m.times.length - 1)) * m.width,
+        text: `${m.label(m.times[i])} · backlog ${b == null ? 'no data' : this.fmtNum(b)}`
+          + (m.backlogMax[i] != null ? ` (max ${this.fmtNum(m.backlogMax[i])})` : '')
+          + ` · delivered ${this.fmtNum(m.out[i] ?? 0)}`,
+      };
     },
 
     // ── Consumers and dead letters (ADR 0015) ──────────────────────────────
     openConsumers(tab) {
       if (this.bridgesView) this.closeBridges();
       if (this.auditView) this.closeAudit();
+      this.alertsView = false;
       this.consumersView = true;
       if (tab) this.cons.tab = tab;
       this.loadConsumers();
@@ -1480,6 +2103,7 @@ function app() {
     openAudit() {
       if (this.bridgesView) this.closeBridges();
       this.consumersView = false;
+      this.alertsView = false;
       this.auditView = true;
       this.loadCatauditSettings();
       this.audit.page = 0;
@@ -1651,6 +2275,7 @@ function app() {
     openBridges() {
       if (this.auditView) this.closeAudit();
       this.consumersView = false;
+      this.alertsView = false;
       this.bridgesView = true;
       this.loadCataponteSettings();
       this.loadBridges();

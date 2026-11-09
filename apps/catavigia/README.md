@@ -95,7 +95,7 @@ The following events are published on `catacumbas69/catavigia/events` and reach 
 
 Errors are RFC 9457 Problem Details: `400` for invalid input, `503` when MongoDB is down. The full contract is at
 `http://localhost:8085/swagger-ui.html`. Browsers reach the API only through Catapulsar, which forwards
-`/api/v1/alerts/**` and `/api/v1/limits/**` (phase 7b step 3).
+`/api/v1/alerts/**` and `/api/v1/limits/**` and shows the Alerts panel, the badge and the Limit column.
 
 ## Configuration
 
@@ -112,7 +112,7 @@ Errors are RFC 9457 Problem Details: `400` for invalid input, `503` when MongoDB
 | `catavigia.checks.initial-delay` | `15s` | Before the first round |
 | `catavigia.tasks.*` | subscription `catavigia`, retries 10 s → 5 min, claims 6 h | Check tasks |
 
-The thresholds are **shared settings**, edited in Catapulsar's Settings → Alerts (phase 7b step 3) and read
+The thresholds are **shared settings**, edited in Catapulsar's Settings → Alerts and read
 before every round. The keys, defaults and ranges are in catacommons `AlertSetting`:
 
 | Key | Default | Range |

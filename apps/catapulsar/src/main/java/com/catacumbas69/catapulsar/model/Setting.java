@@ -1,7 +1,10 @@
 package com.catacumbas69.catapulsar.model;
 
+import com.catacumbas69.catacommons.alerts.AlertSetting;
 import java.time.Instant;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -31,12 +34,20 @@ public class Setting {
     /** Catametricas' collection interval, in seconds; Catametricas reads it from the settings topic. */
     public static final String COLLECT_INTERVAL_SECONDS = "catametricas.collect-interval-seconds";
 
-    /** Deliveries before a message goes to its DLQ, read by Cataudit, Catametricas and Cataponte (ADR 0015). */
+    /** Catavigia base URL (ADR 0015). */
+    public static final String CATAVIGIA_URL = "catapulsar.catavigia-url";
+
+    /**
+     * Deliveries before a message goes to its DLQ, read by Cataudit, Catametricas, Cataponte and Catavigia
+     * (ADR 0015).
+     */
     public static final String DLQ_MAX_DELIVERIES = "dlq.max-deliveries";
 
     /** Every shared setting. */
-    private static final Set<String> IDS = Set.of(CATAPONTE_URL, CATAUDIT_URL, CATAMETRICAS_URL,
-            REFRESH_INTERVAL_SECONDS, COLLECT_INTERVAL_SECONDS, DLQ_MAX_DELIVERIES);
+    private static final Set<String> IDS = Stream.concat(
+            Stream.of(CATAPONTE_URL, CATAUDIT_URL, CATAMETRICAS_URL, CATAVIGIA_URL, REFRESH_INTERVAL_SECONDS,
+                    COLLECT_INTERVAL_SECONDS, DLQ_MAX_DELIVERIES),
+            AlertSetting.all().stream().map(AlertSetting::key)).collect(Collectors.toUnmodifiableSet());
 
     @Id
     private String id;

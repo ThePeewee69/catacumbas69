@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Catapulsar</title>
 <link rel="icon" type="image/svg+xml" href="/catapulsar-icon.svg">
-<link rel="stylesheet" href="/catapulsar.css?v=27">
-<script src="/catapulsar.js?v=27" defer></script>
+<link rel="stylesheet" href="/catapulsar.css?v=28">
+<script src="/catapulsar.js?v=28" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
 </head>
 <body x-data="app()" x-init="init()">
@@ -27,9 +27,9 @@
         <button type="button" role="tab" class="tab" id="settings-tab-refresh"
                 :class="{ active: settings.tab === 'refresh' }" :aria-selected="settings.tab === 'refresh'"
                 aria-controls="settings-panel-refresh" @click="settings.tab = 'refresh'">⏱ Refresh &amp; collection</button>
-        <button type="button" role="tab" class="tab" id="settings-tab-deadletters"
-                :class="{ active: settings.tab === 'deadletters' }" :aria-selected="settings.tab === 'deadletters'"
-                aria-controls="settings-panel-deadletters" @click="settings.tab = 'deadletters'">☠ Dead letters</button>
+        <button type="button" role="tab" class="tab" id="settings-tab-alerts"
+                :class="{ active: settings.tab === 'alerts' }" :aria-selected="settings.tab === 'alerts'"
+                aria-controls="settings-panel-alerts" @click="settings.tab = 'alerts'">🔔 Alerts</button>
       </div>
 
       <div class="settings-body">
@@ -148,6 +148,36 @@
               <span class="health-msg error">✕ <span x-text="catametricas.healthMsg"></span></span>
             </template>
           </div>
+
+          <div class="divider"></div>
+
+          <div class="field" style="margin-bottom:6px;">
+            <label for="catavigia-url">Catavigia URL</label>
+            <input id="catavigia-url" type="url" x-model.trim="alerts.settings.draft"
+                   placeholder="http://catavigia:8085" autocomplete="off" @keydown.enter="saveSettings()">
+          </div>
+          <p class="settings-hint">
+            Default (<span class="mono">CATAVIGIA_URL</span>): <span class="mono" x-text="alerts.settings.defaultUrl"></span>
+            <template x-if="alerts.settings.custom">
+              <button type="button" class="link-btn" :disabled="alerts.settings.saving"
+                      @click="resetCatavigiaUrl()">use default</button>
+            </template>
+            <br>Where the Alerts panel, the badge and the backlog limits come from. Applies to every user immediately,
+            is saved in MongoDB and recorded in the audit log.
+          </p>
+          <div class="health-row">
+            <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px;" @click="checkCatavigia()">
+              <template x-if="alerts.settings.healthState==='checking'"><span class="spinner" style="width:12px;height:12px;"></span></template>
+              <template x-if="alerts.settings.healthState!=='checking'"><span>🩺</span></template>
+              Check Catavigia
+            </button>
+            <template x-if="alerts.settings.healthState==='ok'">
+              <span class="health-msg ok">✓ <span x-text="alerts.settings.healthMsg"></span></span>
+            </template>
+            <template x-if="alerts.settings.healthState==='error'">
+              <span class="health-msg error">✕ <span x-text="alerts.settings.healthMsg"></span></span>
+            </template>
+          </div>
         </section>
 
         <section id="settings-panel-refresh" role="tabpanel" aria-labelledby="settings-tab-refresh"
@@ -184,8 +214,31 @@
           </p>
         </section>
 
-        <section id="settings-panel-deadletters" role="tabpanel" aria-labelledby="settings-tab-deadletters"
-                 x-show="settings.tab === 'deadletters'">
+        <section id="settings-panel-alerts" role="tabpanel" aria-labelledby="settings-tab-alerts"
+                 x-show="settings.tab === 'alerts'">
+          <p class="settings-hint" style="margin-top:0;">
+            Read by Catavigia before every round, for every user; saved in MongoDB and recorded in the audit log.
+          </p>
+          <template x-for="t in alertThresholds" :key="t.name">
+            <div>
+              <div class="field" style="margin-bottom:6px;">
+                <label :for="'alert-threshold-' + t.name" x-text="thresholdInfo(t.name).label"></label>
+                <input :id="'alert-threshold-' + t.name" type="number" step="1" :min="t.min" :max="t.max"
+                       x-model.number="t.draft" @keydown.enter="saveSettings()">
+              </div>
+              <p class="settings-hint">
+                <span x-text="fmtNum(t.min) + '–' + fmtNum(t.max) + ' · default ' + fmtNum(t.defaultValue)"></span>
+                <template x-if="t.custom">
+                  <button type="button" class="link-btn" @click="saveAlertThreshold(t, 'DELETE')">use default</button>
+                </template>
+                <br><span x-text="thresholdInfo(t.name).hint"></span>
+              </p>
+              <div class="divider"></div>
+            </div>
+          </template>
+          <template x-if="alertThresholds.length === 0">
+            <p class="muted" style="font-size:12px;">Alert settings could not be read.</p>
+          </template>
           <div class="field" style="margin-bottom:6px;">
             <label for="dlq-deliveries">Deliveries before a message goes to its dead-letter topic</label>
             <input id="dlq-deliveries" type="number" step="1" :min="dlqSetting.min" :max="dlqSetting.max"
@@ -197,7 +250,7 @@
               <button type="button" class="link-btn" @click="saveDlqSetting('DELETE')">use default</button>
             </template>
             <br>A message that keeps failing on its own is moved to <span class="mono">&lt;topic&gt;-&lt;subscription&gt;-DLQ</span>
-            after this many deliveries (Cataudit, Catametricas and unordered Shared/Key_Shared bridges). Outages do not
+            after this many deliveries (Cataudit, Catametricas, Catavigia and unordered Shared/Key_Shared bridges). Outages do not
             count. Changing it makes them subscribe again; saved in MongoDB and recorded in the audit log.
           </p>
         </section>
@@ -205,7 +258,8 @@
 
       <div class="settings-footer">
         <button class="btn btn-secondary" @click="settings.open=false">Cancel</button>
-        <button class="btn btn-primary" :disabled="bridges.settings.saving || audit.settings.saving || auto.saving"
+        <button class="btn btn-primary"
+                :disabled="bridges.settings.saving || audit.settings.saving || alerts.settings.saving || auto.saving"
                 @click="saveSettings()">Save</button>
       </div>
     </div>
@@ -678,10 +732,220 @@
       <span aria-hidden="true">⚙</span>
       Consumers
     </button>
+    <button class="btn btn-ghost bridges-btn alerts-btn" :class="{'active': alertsView}"
+            @click="alertsView ? (alertsView = false) : openAlerts()" :title="alertBadgeTitle()">
+      <span aria-hidden="true">🔔</span>
+      Alerts
+      <span class="alert-badge" :class="alertBadgeClass()" x-show="alertBadgeText()" x-text="alertBadgeText()"></span>
+    </button>
     <button class="btn btn-ghost" style="font-size:13px;padding:7px 10px;" @click="openSettings()" title="Settings">⚙️</button>
   </div>
 
   <div id="content">
+
+    <!-- ─ Alerts panel: open and archived alerts from Catavigia (ADR 0015) ─ -->
+    <template x-if="alertsView">
+      <div class="alerts-panel">
+        <div class="bridges-header">
+          <div>
+            <div style="font-size:16px;font-weight:700;color:var(--accent2);">Alerts</div>
+            <div class="muted" style="font-size:12px;">
+              What Catavigia sees on the platform. It only watches: each alert takes you to where it is fixed.
+            </div>
+            <button class="cataponte-url" @click="openSettings()" title="Change the Catavigia URL">
+              <span>Catavigia:</span>
+              <span class="mono" x-text="alerts.settings.url || '…'"></span>
+              <template x-if="alerts.settings.custom"><span class="tag tag-blue">custom</span></template>
+              <span aria-hidden="true">✎</span>
+            </button>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-ghost" style="font-size:12px;" @click="openSettings('alerts')"
+                    title="Thresholds: backlog limit, check interval, debounce">⚙ Thresholds</button>
+            <button class="btn btn-ghost" style="font-size:12px;" title="Refresh"
+                    @click="alerts.tab === 'open' ? loadAlerts() : loadAlertArchive()">↺</button>
+          </div>
+        </div>
+        <div class="tabs" role="tablist" aria-label="Alerts sections">
+          <button type="button" role="tab" class="tab" :class="{ active: alerts.tab === 'open' }"
+                  :aria-selected="alerts.tab === 'open'" @click="selectAlertsTab('open')">
+            Open
+            <span class="tab-count" x-show="alertBadge.open > 0" x-text="alertBadge.open"></span>
+          </button>
+          <button type="button" role="tab" class="tab" :class="{ active: alerts.tab === 'archived' }"
+                  :aria-selected="alerts.tab === 'archived'" @click="selectAlertsTab('archived')">Archived</button>
+        </div>
+
+        <!-- Open -->
+        <template x-if="alerts.tab === 'open'">
+          <div>
+            <template x-if="alerts.loading"><div style="text-align:center;padding:40px"><div class="spinner"></div></div></template>
+            <template x-if="!alerts.loading && alerts.error">
+              <div class="card empty">
+                <div class="big" aria-hidden="true">🔔</div>
+                <p style="font-weight:600;color:var(--danger);">Alerts unavailable</p>
+                <p class="muted" style="font-size:13px;margin-top:6px;" x-text="alerts.error"></p>
+              </div>
+            </template>
+            <template x-if="!alerts.loading && !alerts.error && alerts.open.length === 0">
+              <div class="card empty"><div class="big" aria-hidden="true">✓</div><p>No open alert.</p></div>
+            </template>
+            <template x-if="!alerts.loading && !alerts.error && alerts.open.length > 0">
+              <div>
+                <div class="alerts-toolbar">
+                  <span class="muted" style="font-size:12px;"
+                        x-text="alerts.open.length + ' open · ' + alerts.open.filter(a => !a.seenAt).length + ' not seen'"></span>
+                  <button class="btn btn-ghost btn-xs" :disabled="alerts.busy || !alerts.open.some(a => !a.seenAt && !a.local)"
+                          @click="markAllAlertsSeen()">Mark all seen</button>
+                </div>
+                <div class="table-wrap">
+                  <table class="audit-table alerts-table">
+                    <thead>
+                      <tr><th>Severity</th><th>Alert</th><th>Subject</th><th>Open for</th><th>Last seen</th><th>Seen by</th><th></th></tr>
+                    </thead>
+                    <template x-for="a in alerts.open" :key="a.id">
+                      <tbody>
+                        <tr class="audit-row" :class="{ 'expanded': alerts.expanded === a.id, 'alert-unseen': !a.seenAt }"
+                            @click="toggleAlert(alerts, a.id)">
+                          <td><span class="tag" :class="a.severity === 'critical' ? 'tag-failed' : 'tag-orange'" x-text="a.severity"></span></td>
+                          <td>
+                            <span class="mono" x-text="a.type"></span>
+                            <div class="muted alert-type-label" x-text="alertTypeLabel(a.type)"></div>
+                          </td>
+                          <td class="mono alert-subject" x-text="a.subject"></td>
+                          <td :title="auditTime(a.openedAt)" x-text="alertAge(a.openedAt)"></td>
+                          <td :title="auditTime(a.lastSeenAt)" x-text="alertAge(a.lastSeenAt) + ' ago'"></td>
+                          <td class="mono" x-text="a.seenBy || (a.local ? 'in memory' : '—')"></td>
+                          <td class="cell-actions" @click.stop>
+                            <button class="btn btn-ghost btn-xs" @click="runAlertAction(a)" x-text="alertActionLabel(a)"></button>
+                            <template x-if="!a.seenAt && !a.local">
+                              <button class="btn btn-ghost btn-xs" :disabled="alerts.busy" @click="markAlertSeen(a)">Mark seen</button>
+                            </template>
+                          </td>
+                        </tr>
+                        <tr x-show="alerts.expanded === a.id" class="audit-detail-row">
+                          <td colspan="7">
+                            <div class="audit-detail">
+                              <template x-if="auditPairs(a.details).length > 0">
+                                <table class="audit-kv">
+                                  <thead><tr><th>Detail</th><th>Value</th></tr></thead>
+                                  <tbody>
+                                    <template x-for="[k, v] in auditPairs(a.details)" :key="k">
+                                      <tr><td class="mono" x-text="k"></td><td class="payload" x-text="v"></td></tr>
+                                    </template>
+                                  </tbody>
+                                </table>
+                              </template>
+                              <div class="muted audit-meta">
+                                <span>Opened <span x-text="auditTime(a.openedAt)"></span></span>
+                                <template x-if="a.seenAt"><span>Seen <span x-text="auditTime(a.seenAt)"></span></span></template>
+                                <template x-if="a.local"><span>Kept in memory by this Catavigia replica until MongoDB answers</span></template>
+                                <span>Id <span class="mono" x-text="a.id"></span></span>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </template>
+                  </table>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- Archived -->
+        <template x-if="alerts.tab === 'archived'">
+          <div>
+            <form class="audit-filters card" @submit.prevent="applyAlertFilters()">
+              <div class="field">
+                <label for="alerts-type">Type</label>
+                <select id="alerts-type" x-model="alerts.archive.filters.type" @change="applyAlertFilters()">
+                  <option value="">All</option>
+                  <template x-for="t in alertTypes()" :key="t"><option :value="t" x-text="t"></option></template>
+                </select>
+              </div>
+              <div class="field audit-filter-wide">
+                <label for="alerts-subject">Subject starts with</label>
+                <input id="alerts-subject" type="text" x-model="alerts.archive.filters.subject"
+                       placeholder="persistent://tenant/namespace/ · bridge name · app">
+              </div>
+              <div class="field">
+                <label for="alerts-period">Closed in</label>
+                <select id="alerts-period" x-model="alerts.archive.filters.period" @change="applyAlertFilters()">
+                  <option value="24h">Last 24 hours</option>
+                  <option value="7d">Last 7 days</option>
+                  <option value="30d">Last 30 days</option>
+                  <option value="all">Everything</option>
+                </select>
+              </div>
+              <div class="audit-filter-actions">
+                <button type="submit" class="btn btn-primary" style="font-size:12px;">Search</button>
+                <button type="button" class="btn btn-ghost" style="font-size:12px;" @click="clearAlertFilters()">Clear</button>
+              </div>
+            </form>
+            <template x-if="alerts.archive.loading"><div style="text-align:center;padding:40px"><div class="spinner"></div></div></template>
+            <template x-if="!alerts.archive.loading && alerts.archive.error">
+              <div class="card empty"><p style="color:var(--danger);" x-text="'Archive unavailable: ' + alerts.archive.error"></p></div>
+            </template>
+            <template x-if="!alerts.archive.loading && !alerts.archive.error && alerts.archive.items.length === 0">
+              <div class="card empty"><p>No closed alert for these filters.</p></div>
+            </template>
+            <template x-if="!alerts.archive.loading && !alerts.archive.error && alerts.archive.items.length > 0">
+              <div>
+                <div class="table-wrap">
+                  <table class="audit-table alerts-table">
+                    <thead>
+                      <tr><th>Severity</th><th>Alert</th><th>Subject</th><th>Closed</th><th>Was open</th><th>Seen by</th></tr>
+                    </thead>
+                    <template x-for="a in alerts.archive.items" :key="a.id">
+                      <tbody>
+                        <tr class="audit-row" :class="{ 'expanded': alerts.archive.expanded === a.id }"
+                            @click="toggleAlert(alerts.archive, a.id)">
+                          <td><span class="tag" :class="a.severity === 'critical' ? 'tag-failed' : 'tag-orange'" x-text="a.severity"></span></td>
+                          <td><span class="mono" x-text="a.type"></span></td>
+                          <td class="mono alert-subject" x-text="a.subject"></td>
+                          <td class="muted audit-when" x-text="auditTime(a.closedAt)"></td>
+                          <td x-text="alertDuration(a.durationSeconds)"></td>
+                          <td class="mono" x-text="a.seenBy || '—'"></td>
+                        </tr>
+                        <tr x-show="alerts.archive.expanded === a.id" class="audit-detail-row">
+                          <td colspan="6">
+                            <div class="audit-detail">
+                              <template x-if="auditPairs(a.details).length > 0">
+                                <table class="audit-kv">
+                                  <thead><tr><th>Detail (last seen)</th><th>Value</th></tr></thead>
+                                  <tbody>
+                                    <template x-for="[k, v] in auditPairs(a.details)" :key="k">
+                                      <tr><td class="mono" x-text="k"></td><td class="payload" x-text="v"></td></tr>
+                                    </template>
+                                  </tbody>
+                                </table>
+                              </template>
+                              <div class="muted audit-meta">
+                                <span>Opened <span x-text="auditTime(a.openedAt)"></span></span>
+                                <span>Last seen <span x-text="auditTime(a.lastSeenAt)"></span></span>
+                                <template x-if="a.seenAt"><span>Seen <span x-text="auditTime(a.seenAt)"></span></span></template>
+                                <span>Id <span class="mono" x-text="a.id"></span></span>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </template>
+                  </table>
+                </div>
+                <div class="audit-pager">
+                  <button class="btn btn-ghost" style="font-size:12px;" :disabled="alerts.archive.page === 0" @click="alertArchiveGo(-1)">← Newer</button>
+                  <span class="muted" x-text="'Page ' + (alerts.archive.page + 1) + ' of ' + alertArchivePages() + ' · ' + alerts.archive.total + ' closed'"></span>
+                  <button class="btn btn-ghost" style="font-size:12px;" :disabled="alerts.archive.page + 1 >= alertArchivePages()" @click="alertArchiveGo(1)">Older →</button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+      </div>
+    </template>
 
     <!-- ─ Consumers panel: the apps' consumers and the dead-letter topics (ADR 0015) ─ -->
     <template x-if="consumersView">
@@ -1506,12 +1770,12 @@
                       <table>
                         <thead>
                           <tr>
-                            <th>Name</th><th>Type</th><th>Backlog</th><th>Msg/s</th><th>Consumers</th><th></th>
+                            <th>Name</th><th>Type</th><th>Backlog</th><th>Limit</th><th>Msg/s</th><th>Consumers</th><th></th>
                           </tr>
                         </thead>
                         <template x-for="[name, sub] in Object.entries(stats.subscriptions)" :key="name">
                           <tbody>
-                            <tr>
+                            <tr :id="'sub-row-' + name">
                               <td>
                                 <span class="mono" x-text="name"></span>
                                 <template x-if="bridgeForSub(name)">
@@ -1524,7 +1788,34 @@
                                 </template>
                               </td>
                               <td><span class="tag tag-blue" x-text="sub.type ?? '-'"></span></td>
-                              <td><span class="mono" x-text="fmtNum(sub.msgBacklog ?? 0)"></span></td>
+                              <td>
+                                <span class="mono" :class="{ 'over-limit': subHasLimit(name) && subLimit(name) != null && (sub.msgBacklog ?? 0) > subLimit(name) }"
+                                      x-text="fmtNum(sub.msgBacklog ?? 0)"></span>
+                              </td>
+                              <td class="sub-limit">
+                                <template x-if="subLimits.editing !== name">
+                                  <button type="button" class="link-btn" :disabled="!subHasLimit(name) || subLimits.global == null"
+                                          :title="!subHasLimit(name) ? 'Not watched by the backlog alert'
+                                                  : subLimits.global == null ? 'Catavigia does not answer: ' + subLimits.error
+                                                  : 'Change the backlog limit of this subscription'"
+                                          @click="editSubLimit(name)">
+                                    <span x-text="subLimitLabel(name)"></span>
+                                    <span x-show="subHasLimit(name) && subLimits.global != null" aria-hidden="true">✎</span>
+                                  </button>
+                                </template>
+                                <template x-if="subLimits.editing === name">
+                                  <form class="sub-limit-form" @submit.prevent="saveSubLimit(name, 'PUT')">
+                                    <input type="number" min="1" max="1000000000" step="1" x-model.number="subLimits.draft"
+                                           aria-label="Backlog limit" @keydown.escape="subLimits.editing = null">
+                                    <button type="submit" class="btn btn-primary btn-xs" :disabled="subLimits.saving">Save</button>
+                                    <template x-if="subOwnLimit(name) != null">
+                                      <button type="button" class="link-btn" :disabled="subLimits.saving"
+                                              @click="saveSubLimit(name, 'DELETE')">use global</button>
+                                    </template>
+                                    <button type="button" class="link-btn" @click="subLimits.editing = null">cancel</button>
+                                  </form>
+                                </template>
+                              </td>
                               <td x-text="fmt(sub.msgRateOut ?? 0)"></td>
                               <td>
                                 <button type="button" class="link-btn consumers-toggle" @click="toggleSubConsumers(name)"
@@ -1535,6 +1826,9 @@
                                 </button>
                               </td>
                               <td class="cell-actions">
+                                <button type="button" class="btn btn-ghost btn-xs" :aria-expanded="!!subHistory.open[name]"
+                                        :class="{ active: subHistory.open[name] }" title="History of this subscription (Catametricas)"
+                                        @click="toggleSubHistory(name)">📈</button>
                                 <span class="tag tag-binary" x-show="isSystemSub(name)"
                                       title="Pulsar's own subscription: it can be peeked but not changed">system</span>
                                 <button class="btn btn-danger btn-xs" x-show="!isSystemSub(name)"
@@ -1543,9 +1837,66 @@
                                         @click="clearBacklog(name, sub.msgBacklog)">Clear backlog</button>
                               </td>
                             </tr>
+                            <template x-if="subHistory.open[name]">
+                              <tr class="sub-history-row">
+                                <td colspan="7">
+                                  <div class="sub-history">
+                                    <div class="sub-history-head">
+                                      <span class="muted">History of <span class="mono" x-text="name"></span> · backlog (line, max shaded) and delivered (bars), from Catametricas</span>
+                                      <div class="period-switch">
+                                        <template x-for="p in ['1h', '24h', '7d', '30d']" :key="p">
+                                          <button type="button" class="btn btn-ghost btn-xs" :class="{ active: subHistory.period === p }"
+                                                  @click="setSubHistoryPeriod(p)" x-text="p"></button>
+                                        </template>
+                                      </div>
+                                    </div>
+                                    <template x-if="subHistory.loading[name] && !subHistory.data[name]">
+                                      <div style="text-align:center;padding:20px"><div class="spinner"></div></div>
+                                    </template>
+                                    <template x-if="subHistory.error[name]">
+                                      <p class="muted" style="color:var(--danger);" x-text="'History unavailable: ' + subHistory.error[name]"></p>
+                                    </template>
+                                    <template x-if="subHistory.data[name] && !subHistory.error[name]">
+                                      <div>
+                                        <template x-if="subChartModel(name).empty">
+                                          <p class="muted" style="font-size:12px;">No history for this period yet.</p>
+                                        </template>
+                                        <div class="sub-chart" x-show="!subChartModel(name).empty">
+                                          <div class="sub-chart-y">
+                                            <template x-for="(l, i) in subChartModel(name).yLabels" :key="i"><span x-text="l"></span></template>
+                                          </div>
+                                          <svg viewBox="0 0 760 140" preserveAspectRatio="none" class="sub-chart-svg"
+                                               @mousemove="subChartHover(name, $event)" @mouseleave="subHistory.hover = null">
+                                            <path class="sub-chart-bar" :d="subChartModel(name).barsPath"></path>
+                                            <path class="sub-chart-max" :d="subChartModel(name).maxLine"></path>
+                                            <path class="sub-chart-line" :d="subChartModel(name).line"></path>
+                                            <line class="sub-chart-limit" x1="0" :x2="subChartModel(name).width"
+                                                  x-show="subChartModel(name).limitY != null"
+                                                  :y1="subChartModel(name).limitY ?? 0" :y2="subChartModel(name).limitY ?? 0"></line>
+                                            <line class="chart-hover-line" x-show="subHistory.hover && subHistory.hover.name === name"
+                                                  :x1="subHistory.hover?.x ?? 0" :x2="subHistory.hover?.x ?? 0"
+                                                  y1="0" :y2="subChartModel(name).height"></line>
+                                          </svg>
+                                        </div>
+                                        <div class="sub-chart-x" x-show="!subChartModel(name).empty">
+                                          <template x-for="(l, i) in subChartModel(name).xLabels" :key="i"><span x-text="l.text"></span></template>
+                                        </div>
+                                        <div class="muted sub-chart-legend">
+                                          <span x-text="subHistory.hover && subHistory.hover.name === name ? subHistory.hover.text
+                                                        : 'Delivered bars scale to ' + fmtCompact(subChartModel(name).outTop) + ' per bucket'"></span>
+                                          <template x-if="subChartModel(name).limitY != null">
+                                            <span>· dashed line: limit <span x-text="fmtNum(subLimit(name))"></span></span>
+                                          </template>
+                                        </div>
+                                      </div>
+                                    </template>
+                                  </div>
+                                </td>
+                              </tr>
+                            </template>
                             <template x-if="subConsumersOpen[name] && (sub.consumers ?? []).length">
                               <tr class="consumers-row">
-                                <td colspan="6">
+                                <td colspan="7">
                                   <table class="consumers-table">
                                     <thead>
                                       <tr><th>Consumer</th><th>Address</th><th>Connected since</th><th>Client</th><th>Msg/s</th><th>Unacked</th></tr>

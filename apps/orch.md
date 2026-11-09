@@ -111,6 +111,7 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 | `CATAPONTE_URL` | Catapulsar (default of the editable URL), Catavigia (until the setting exists), Catametricas, Cataudit and Catavigia (audit bridge registration) | `http://cataponte.<ns>.svc.cluster.local:8082` | `http://localhost:8082` |
 | `CATAUDIT_URL` | Catapulsar (default of the editable URL of the audit view), Catavigia (until the setting exists) | `http://cataudit:8084` | `http://localhost:8084` |
 | `CATAMETRICAS_URL` | Catapulsar (default of the editable URL of the overviews), Catavigia (until the setting exists) | `http://catametricas:8083` | `http://localhost:8083` |
+| `CATAVIGIA_URL` | Catapulsar (default of the editable URL of the alerts) | `http://catavigia:8085` | `http://localhost:8085` |
 | `CATAPULSAR_URL` | Catavigia (`service.down` of Catapulsar, decision 78) | `http://catapulsar:8081` | `http://localhost:8081` |
 | `CATAVIGIA_EXPECTED_BROKERS` (optional) | Catavigia (`pulsar.broker.down` below this) | `1` | `1` |
 | `CATAPULSAR_REFRESH_INTERVAL_SECONDS` | Catapulsar | `10` | `10` |
@@ -795,7 +796,7 @@ Closed on 2026-10-30:
 ## 15. Target architecture (proposed — ADR 0008–0013)
 
 Status: **phases 1–5 implemented** (2026-10-31 – 2026-11-01); phase **7a implemented** (2026-11-06), 7b planned
-(decisions 42–49, 66–79); phase 6 later. Until a phase below is implemented, the
+(decisions 42–49, 66–80); phase 6 later. Until a phase below is implemented, the
 rules in sections 1–14 stay in force. When a phase lands, the rules it changes are updated in the same change
 and its ADRs become "Accepted".
 
@@ -1080,3 +1081,13 @@ Phase 7b, after the review of its design (2026-11-06, ADR 0015 points 8–13):
     paused replicas; `backlog` leaves out the DLQs' `dlq` and Pulsar's `__*`; with Pulsar down no check runs
     (accepted); a check that cannot read its source is **delivered again** like any failed task (up to the DLQ),
     and a task of an old round still runs but changes no alert.
+80. Catapulsar's alerts, after the review of their design (2026-11-08, ADR 0015 points 20–27): the **Alerts** button
+    counts the open alerts not seen (red if one is critical, orange otherwise, grey `?` when Catavigia does not
+    answer) and asks every 30 s while the browser tab is visible, whatever the auto-refresh; the panel's tabs Open
+    and Archived are expandable tables like the audit; **Mark seen** per alert and **Mark all seen**; each alert's
+    button opens where it is fixed, with the resource selected; the archive filters by type, subject and period.
+    Settings → **Alerts** holds the four thresholds (`/api/v1/settings/alerts/{name}`) and the deliveries before the
+    DLQ (the Dead letters tab is gone). A subscription's row gets a **Limit** column edited in place and a **📈**
+    chart (backlog, maximum, delivered, limit; 24 h by default). Catavigia's URL is in Settings → Connections and
+    `catavigia` is a health component. Marking as seen and changing a limit are audited by both apps
+    (`*-requested` by Catapulsar).

@@ -78,6 +78,31 @@ public class CatametricasClient {
      *
      * @return the collector state
      */
+    /**
+     * Reads one subscription's history ({@code GET /api/v1/subscriptions/series}, orch.md decision 77).
+     *
+     * @param tenant tenant
+     * @param namespace namespace
+     * @param topic local topic name without partition suffix
+     * @param subscription subscription name
+     * @param from start of the range
+     * @param to end of the range
+     * @param step bucket length, e.g. {@code 15m}
+     * @return the series
+     */
+    public SubscriptionSeries subscriptionSeries(String tenant, String namespace, String topic, String subscription,
+                                                 Instant from, Instant to, String step) {
+        URI uri = scope("/api/v1/subscriptions/series", tenant, namespace)
+                .queryParam("topic", topic)
+                .queryParam("subscription", subscription)
+                .queryParam("from", from.toString())
+                .queryParam("to", to.toString())
+                .queryParam("step", step)
+                .encode().build().toUri();
+        return get(uri, new ParameterizedTypeReference<SubscriptionSeries>() {
+        });
+    }
+
     public Collector collector() {
         return get(URI.create(endpoint.url() + "/api/v1/collector"), new ParameterizedTypeReference<Collector>() {
         });
@@ -201,6 +226,28 @@ public class CatametricasClient {
      * @param intervalSeconds interval in use
      */
     public record Collector(Instant lastCollectionAt, Integer intervalSeconds) {
+    }
+
+    /**
+     * One subscription's history, its partitions summed.
+     *
+     * @param source where the values come from
+     * @param tenant tenant
+     * @param namespace namespace
+     * @param topic local topic name without partition suffix
+     * @param subscription subscription name
+     * @param stepSeconds bucket length
+     * @param times bucket starts
+     * @param backlog messages waiting at the last sample of each bucket ({@code null} where none)
+     * @param backlogMax most messages waiting in each bucket
+     * @param msgsOut messages delivered in each bucket
+     * @param bytesOut bytes delivered in each bucket
+     * @param unacked messages not acknowledged at the last sample of each bucket
+     */
+    public record SubscriptionSeries(String source, String tenant, String namespace, String topic,
+                                     String subscription, long stepSeconds, List<Instant> times, List<Long> backlog,
+                                     List<Long> backlogMax, List<Long> msgsOut, List<Long> bytesOut,
+                                     List<Long> unacked) {
     }
 
     /**

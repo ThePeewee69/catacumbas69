@@ -91,6 +91,27 @@ public class OverviewController {
      * @param request current request, for the audit actor
      * @return what was collected
      */
+    /**
+     * History of one subscription, partitions summed, from Catametricas (orch.md decision 78).
+     *
+     * @param tenant tenant name
+     * @param namespace namespace name
+     * @param topic local topic name without partition suffix
+     * @param subscription subscription name
+     * @param period {@code 1h}, {@code 24h}, {@code 7d} or {@code 30d}
+     * @return backlog, its maximum, messages and bytes delivered and unacked per bucket
+     */
+    @Operation(summary = "History of one subscription (Catametricas)")
+    @GetMapping("/{tenant}/{namespace}/{topic}/subscriptions/{subscription}")
+    public CatametricasClient.SubscriptionSeries subscription(
+            @PathVariable @PulsarName String tenant,
+            @PathVariable @PulsarName String namespace,
+            @PathVariable @PulsarName String topic,
+            @PathVariable @PulsarName String subscription,
+            @RequestParam(defaultValue = "24h") @Pattern(regexp = OverviewPeriod.VALUES) String period) {
+        return overview.subscriptionHistory(tenant, namespace, topic, subscription, OverviewPeriod.of(period));
+    }
+
     @Operation(summary = "Collect the cluster, a tenant or a namespace now (Catametricas)")
     @PostMapping("/collect")
     public CatametricasClient.ForcedCollection collect(

@@ -5,6 +5,7 @@ import com.catacumbas69.catapulsar.service.PartitionedTopicExistsException;
 import com.catacumbas69.catapulsar.service.CatametricasUnavailableException;
 import com.catacumbas69.catapulsar.service.CataponteUnavailableException;
 import com.catacumbas69.catapulsar.service.CatauditUnavailableException;
+import com.catacumbas69.catapulsar.service.CatavigiaUnavailableException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.ElementKind;
@@ -182,6 +183,18 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     public ProblemDetail handleCatauditUnavailable(CatauditUnavailableException ex) {
         LOG.warn("{}", ex.getMessage());
         return problem(HttpStatus.SERVICE_UNAVAILABLE, "Cataudit unavailable", ex.getMessage());
+    }
+
+    /**
+     * Catavigia cannot be reached (RES-12): only the Alerts panel and badge are affected.
+     *
+     * @param ex the exception
+     * @return {@code 503}
+     */
+    @ExceptionHandler(CatavigiaUnavailableException.class)
+    public ProblemDetail handleCatavigiaUnavailable(CatavigiaUnavailableException ex) {
+        LOG.warn("{}", ex.getMessage());
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "Catavigia unavailable", ex.getMessage());
     }
 
     /**

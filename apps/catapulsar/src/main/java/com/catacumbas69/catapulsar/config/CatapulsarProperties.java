@@ -19,6 +19,7 @@ import org.springframework.validation.annotation.Validated;
  * @param ui web UI defaults
  * @param catametricas Catametricas HTTP client settings (overviews, ADR 0013) and shared defaults
  * @param cataudit Cataudit HTTP client settings (audit view, ADR 0009)
+ * @param catavigia Catavigia HTTP client settings (alerts, ADR 0015)
  */
 @Validated
 @ConfigurationProperties(prefix = "catapulsar")
@@ -28,7 +29,8 @@ public record CatapulsarProperties(
         @Valid @NotNull Mongo mongo,
         @Valid @NotNull Ui ui,
         @Valid @NotNull Catametricas catametricas,
-        @Valid @NotNull Cataudit cataudit) {
+        @Valid @NotNull Cataudit cataudit,
+        @Valid @NotNull Catavigia catavigia) {
 
     /** Smallest auto-refresh interval the UI may use, in seconds. */
     public static final int MIN_REFRESH_SECONDS = 2;
@@ -102,6 +104,19 @@ public record CatapulsarProperties(
      * @param readTimeout HTTP read timeout
      */
     public record Cataudit(
+            @NotBlank String url,
+            @NotNull Duration connectTimeout,
+            @NotNull Duration readTimeout) {
+    }
+
+    /**
+     * Catavigia client settings (ADR 0015, RES-2).
+     *
+     * @param url Catavigia base URL
+     * @param connectTimeout HTTP connect timeout
+     * @param readTimeout HTTP read timeout
+     */
+    public record Catavigia(
             @NotBlank String url,
             @NotNull Duration connectTimeout,
             @NotNull Duration readTimeout) {

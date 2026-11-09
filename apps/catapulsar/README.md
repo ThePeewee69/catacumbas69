@@ -18,13 +18,14 @@ Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs
 | **Sidebar** | Tenants and namespaces stay open as you open them (remembered per browser); click a name to select and open it, click the selected one again to close it; **Collapse all** keeps only the path to the selection. Auto-refresh reloads the selected node |
 | **Bridge problems** | A bridge card shows *destination unavailable* (the bridge resends its held messages until accepted) or *stuck on <message>* (an ordered bridge whose destination refuses a message), with **Skip this message** on `Failover` bridges (confirmed first; audited by Cataponte); bridges with a DLQ show a *DLQ* tag |
 | **Name fields** | New topic, new subscription, bridge name and subscription, and area name turn a character the name cannot have (a space included) into `-` as you type or paste, and skip a first character the name cannot start with; area patterns drop spaces |
-| **Subscription details** | Backlog per subscription in Overview, with **Clear backlog** (skips every message). A subscription a bridge uses shows a *bridge* tag with the bridge's name and destinations (click to open it in Bridges); the consumer count opens the list of who is connected: consumer name (ours are `app@instance`), address, connected since, client version, rate, unacked, *active* on `Failover`. The Backlog list shows the same bridge and consumers |
+| **Subscription details** | Backlog per subscription in Overview, with **Clear backlog** (skips every message). A subscription a bridge uses shows a *bridge* tag with the bridge's name and destinations (click to open it in Bridges); the consumer count opens the list of who is connected: consumer name (ours are `app@instance`), address, connected since, client version, rate, unacked, *active* on `Failover`. The Backlog list shows the same bridge and consumers. Column **Limit**: the backlog limit of the `backlog` alert, `global (10 000) ✎` or the subscription's own, edited in place (**use global** removes it; both apps audit it); the backlog turns red above it; the DLQs' `dlq` and Pulsar's `__*` show "—" (not watched). **📈** opens the subscription's history from Catametricas under its row: backlog (line, maximum shaded), messages delivered (bars) and the limit (dashed), 1 h / 24 h (default) / 7 d / 30 d. This chart is the only history in the topic view; its numbers still come from Pulsar (OBS-10, decision 78) |
 | **Backlog** | Subscriptions with backlog statistics (messages, size as computed by Pulsar on request, consumers, type, rate out, unacked) refreshed automatically; one click peeks up to 100 messages without consuming them (audited); view, edit & re-produce, skip one or all |
 | **Bridges** | Create, edit, enable/disable and delete Cataponte bridges (subscription `Shared`, `Failover` or `Key_Shared`); running state over every Cataponte replica ("1/3 replicas active"), errors, loop blocks and all-time message counts per topic. Tabs **System** (bridges the apps register), **Bridges** (no area) and one per **area** (ADR 0014), with counts; opens on the last tab used (per browser), System the first time. **+ Area** creates an area with glob patterns (`home/media/*`, `home/**`) and a preview of the topics they match; in an area the topic pickers show only those topics and the bridge must fit. Bridges left outside after the patterns changed are tagged *outside filter*. Deleting an area with bridges asks whether to delete them or move them to Bridges or another area. Deleting a bridge, or changing its source or subscription, warns first that Cataponte will delete its subscription about 30 s later and how many messages are still in its backlog (or that it is kept because another bridge uses it); a new bridge's subscription defaults to `cataponte-<name>` and must be unique for its source topic. Every area action is audited by Cataponte (Cataudit) |
-| **Settings** | ⚙️ Settings, in tabs: **Connections** (Pulsar label, Cataponte, Cataudit and Catametricas URLs, each with a check button) **Refresh & collection** (auto-refresh interval and Catametricas collection interval) and **Dead letters** (deliveries before a message goes to its DLQ, 2–100, default 10, for every app: they subscribe again when it changes). Changed at runtime: saved in MongoDB, audited, published on the settings topic. Only the body scrolls; title, tabs and buttons stay visible |
+| **Settings** | ⚙️ Settings, in tabs: **Connections** (Pulsar label, Cataponte, Cataudit, Catametricas and Catavigia URLs, each with a check button), **Refresh & collection** (auto-refresh interval and Catametricas collection interval) and **Alerts** (Catavigia's thresholds: global backlog limit, collection stale after N intervals, check interval, debounce; and the deliveries before a message goes to its DLQ, 2–100, default 10, for every app: they subscribe again when it changes). Changed at runtime: saved in MongoDB, audited, published on the settings topic. Only the body scrolls; title, tabs and buttons stay visible |
 | **Breadcrumb** | Cluster › tenant › namespace › topic, each part clickable |
 | **Auto-refresh** | Top bar "Auto N s": on/off per browser; ▾ sets the interval for everyone (2–300 s, default 10 s, saved in MongoDB, audited). Refreshes the sidebar, Overview, Subscriptions and Bridges; never repeats a backlog peek |
-| **Consumers** | ⚙ Consumers panel (ADR 0015), tab **Consumers**: every consumer of Cataudit (`audit`) and Catametricas (`collect-tasks`), per replica: state (*running*, *paused (auto)* with why, *paused by hand* with who, *gone* when not reported for 30 s), since when, the last MongoDB and Pulsar check, and **Pause** (confirmed), **Resume** and **Check** per replica or for all of them. Read from each app's `consumers` topic, so it works while MongoDB is down; commands go on its `consumer-commands` topic and apply within seconds. A pause by hand is never resumed automatically |
+| **Alerts** | 🔔 **Alerts** button: the number of open alerts not marked as seen, red if one is critical, orange otherwise, nothing when none; grey `?` when Catavigia does not answer. It asks Catavigia every 30 s while the browser tab is visible, whatever the auto-refresh. The **Alerts** panel (ADR 0015) has two tabs. **Open**: one row per alert (severity, type, subject, open for, last seen, seen by), click for its details; **Mark seen** per alert and **Mark all seen** (confirmed); the action button takes you where it is fixed, already selected: `poison` → the DLQ in Consumers → Dead letters, `bridge.*` → the bridge in Bridges, `backlog` → the topic view with the subscription's history open, `consumer.paused` → Consumers, `collection.stale` → Settings → Refresh, the rest → Settings → Connections. **Archived**: closed alerts, newest first, with how long they were open; filters type, subject (starts with), closed in (24 h, 7 d, 30 d, everything), 50 per page. Marking as seen and changing a limit are audited twice: by Catapulsar (`alert.seen-requested`, `limit.change-requested`, with Catavigia's status) and by Catavigia (`alert.seen`, `limit.changed`) |
+| **Consumers** | ⚙ Consumers panel (ADR 0015), tab **Consumers**: every consumer of Cataudit (`audit`), Catametricas (`collect-tasks`) and Catavigia (`check-tasks`), per replica: state (*running*, *paused (auto)* with why, *paused by hand* with who, *gone* when not reported for 30 s), since when, the last MongoDB and Pulsar check, and **Pause** (confirmed), **Resume** and **Check** per replica or for all of them. Read from each app's `consumers` topic, so it works while MongoDB is down; commands go on its `consumer-commands` topic and apply within seconds. A pause by hand is never resumed automatically |
 | **Dead letters** | Tab **Dead letters** of the Consumers panel: every DLQ (`<topic>-<subscription>-DLQ`) of the apps' consumers and of the bridges, with its backlog on `dlq` (or *not created yet*), and a count on the tab. Clicking one peeks up to 50 messages (audited): id, time, original topic, reason, key, payload. Per message **Send back** (to the original topic, same key and event time, without the DLQ properties) or **Discard**; **Send all back** and **Discard all**. Each is confirmed and audited (`dead-letter.sent-back`, `dead-letter.discarded`); a message without an original topic can only be discarded |
 | **Audit** | 🛡 Audit panel: the audit trail of every app, from Cataudit (ADR 0009). Filters by app, entity, action, subject prefix, actor and period. Each row expands into before/after and details; clicking a subject filters by it; refreshed automatically |
 
@@ -41,6 +42,7 @@ Catapulsar  :8081  (Spring Boot)
     ├── /api/v1/settings/**                        ──► MongoDB catapulsar_settings + settings topic (ADR 0011)
     ├── /api/v1/overview/**  (read-only, ADR 0013) ──► Catametricas API (URL from settings, default CATAMETRICAS_URL)
     ├── /api/v1/audit/**  (read-only, ADR 0009)     ──► Cataudit (URL from settings, default CATAUDIT_URL)
+    ├── /api/v1/alerts/**, /api/v1/limits/**  (BFF, ADR 0015) ──► Catavigia (URL from settings, default CATAVIGIA_URL)
     ├── /api/v1/consumers/**  (ADR 0015)            ──► Pulsar catacumbas69/<app>/consumers (TableView) and consumer-commands
     ├── /api/v1/dead-letters/**  (ADR 0015)         ──► Pulsar: consumer on the DLQ's `dlq` subscription, producer to the original topic
     └── /actuator/**, /swagger-ui.html
@@ -83,6 +85,7 @@ All settings have in-cluster defaults in `application.properties`; override them
 | `CATAPONTE_URL` | `http://cataponte:8082` | `http://localhost:8082` |
 | `CATAUDIT_URL` | `http://cataudit:8084` | `http://localhost:8084` |
 | `CATAMETRICAS_URL` | `http://catametricas:8083` | `http://localhost:8083` |
+| `CATAVIGIA_URL` | `http://catavigia:8085` | `http://localhost:8085` |
 | `CATAPULSAR_REFRESH_INTERVAL_SECONDS` | `10` | `10` |
 | `CATAMETRICAS_COLLECT_INTERVAL_SECONDS` | `60` (same as Catametricas) | `60` |
 | `SPRING_DATA_MONGODB_URI` | in-cluster ReplicaSet URI (Secret) | NodePort `32017` + `authSource=admin&directConnection=true` |
@@ -98,7 +101,8 @@ seconds, ADR 0011) and recorded in the audit log (`setting.changed`). "Use defau
 `CATAUDIT_URL` works the same way: it is the default of the Cataudit URL, editable in ⚙️ Settings → Connections or
 from the link in the Audit panel header, with a "Check Cataudit" button. So does `CATAMETRICAS_URL`, the
 default of the Catametricas URL, with a "Check Catametricas" button; when the overviews cannot reach
-Catametricas the panel offers a link to it.
+Catametricas the panel offers a link to it. And `CATAVIGIA_URL`, the default of the Catavigia URL, with a
+"Check Catavigia" button and a link in the Alerts panel header.
 
 ## Run locally (IntelliJ on necromancer)
 
@@ -106,7 +110,7 @@ Run `CatapulsarApplication` (port **8081**). Paste this line into the run config
 variables* and replace `<user>` and `<password>`; `.idea/` stays out of Git (CFG-2):
 
 ```
-PULSAR_SERVICE_URL=http://192.168.86.35:31080;PULSAR_BROKER_URL=pulsar://192.168.86.35:31650;PULSAR_LISTENER_NAME=external;SPRING_DATA_MONGODB_URI=mongodb://<user>:<password>@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true;CATAPONTE_URL=http://localhost:8082;CATAUDIT_URL=http://localhost:8084;CATAMETRICAS_URL=http://localhost:8083
+PULSAR_SERVICE_URL=http://192.168.86.35:31080;PULSAR_BROKER_URL=pulsar://192.168.86.35:31650;PULSAR_LISTENER_NAME=external;SPRING_DATA_MONGODB_URI=mongodb://<user>:<password>@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true;CATAPONTE_URL=http://localhost:8082;CATAUDIT_URL=http://localhost:8084;CATAMETRICAS_URL=http://localhost:8083;CATAVIGIA_URL=http://localhost:8085
 ```
 
 Start it **last**: Cataponte → Cataudit → Catametricas → Catapulsar. Catapulsar calls the other three, so its
@@ -155,6 +159,12 @@ Full contract: <http://localhost:8081/swagger-ui.html>. Errors are RFC 9457 Prob
 | `GET` / `PUT` / `DELETE` | `/api/v1/settings/refresh-interval` | UI auto-refresh interval / change `{seconds}` (2–300) / back to default |
 | `GET` / `PUT` / `DELETE` | `/api/v1/settings/collect-interval` | Catametricas collection interval / change `{seconds}` (15–600) / back to default |
 | `GET` / `PUT` / `DELETE` | `/api/v1/settings/dead-letters` | Deliveries before the DLQ (`dlq.max-deliveries`) / change `{value}` (2–100) / back to default (10) |
+| `GET` / `PUT` / `DELETE` | `/api/v1/settings/catavigia` | Catavigia URL in use / change `{url}` / back to default |
+| `GET` | `/api/v1/settings/alerts` | The alert thresholds read by Catavigia: `backlog-limit`, `collection-stale-intervals`, `check-interval`, `debounce` (value, default, min, max, custom) |
+| `PUT` / `DELETE` | `/api/v1/settings/alerts/{name}` | Change one `{value}` / back to its default (`404` for an unknown name) |
+| `*` | `/api/v1/alerts`, `/summary`, `/archive?…`, `/{id}`, `POST /{id}/seen` | Alerts, forwarded to Catavigia; marking as seen is also published as `alert.seen-requested` |
+| `GET` / `PUT` / `DELETE` | `/api/v1/limits/backlog?topic=&subscription=` | Backlog limits, forwarded to Catavigia; each change is also published as `limit.change-requested` |
+| `GET` | `/api/v1/overview/{tenant}/{namespace}/{topic}/subscriptions/{subscription}?period=` | A subscription's history from Catametricas (backlog, its maximum, delivered, unacked), for the 📈 chart |
 | `GET` | `/api/v1/consumers` | Every consumer of Cataudit and Catametricas per replica, with `stale` (not reported for 30 s) |
 | `POST` | `/api/v1/consumers/commands` | `{app, instance, consumer, action}` (`pause`, `resume`, `check`; `instance`/`consumer` `*` for all) → published on `catacumbas69/<app>/consumer-commands` (`202`; `400` unknown app or action; `503` Pulsar down) |
 | `POST` | `/api/v1/dead-letters/send-back` | `{topic, messageId}`: send one message back to its `REAL_TOPIC` and remove it from the DLQ; returns `{to}` (`404` not found, `409` no original topic) |
@@ -175,7 +185,7 @@ Full contract: <http://localhost:8081/swagger-ui.html>. Errors are RFC 9457 Prob
 | `404` / `409` | Pulsar says the resource is missing / already exists |
 | `409` *Partitioned topic exists* | Creating a topic whose name is taken by a partitioned topic that has no partitions yet, so it is not listed; the detail gives the `pulsar-admin` commands to delete it or create its partitions |
 | `502` | Pulsar failed or is unreachable |
-| `503` | Cataponte, Cataudit or Catametricas is unreachable (only its panel), or MongoDB is down while saving a setting |
+| `503` | Cataponte, Cataudit, Catametricas or Catavigia is unreachable (only its panel, or the alerts badge), or MongoDB is down while saving a setting |
 
 ## Operate
 
@@ -183,7 +193,7 @@ Full contract: <http://localhost:8081/swagger-ui.html>. Errors are RFC 9457 Prob
 |---|---|
 | `/actuator/health/liveness` | liveness probe |
 | `/actuator/health/readiness` | readiness probe (application state only — dependencies degrade per feature) |
-| `/actuator/health` | details: `pulsar`, `cataponte`, `cataudit`, `catametricas`, `mongo` components |
+| `/actuator/health` | details: `pulsar`, `cataponte`, `cataudit`, `catametricas`, `catavigia`, `mongo` components |
 | `/actuator/prometheus` | HTTP, JVM and Pulsar client metrics |
 
 Container image: `Dockerfile` (multi-stage, layered jar, non-root), built from `apps/` (see above).
