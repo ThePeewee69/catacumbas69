@@ -10,4 +10,4 @@ resources:
   - catapulsar-route.yaml
 images:
   - name: registry.catacumbas69.com/catapulsar
-    newTag: "not-built-yet"
+    newTag: "1.1.0-086448d"

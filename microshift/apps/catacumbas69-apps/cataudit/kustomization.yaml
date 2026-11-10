@@ -10,4 +10,4 @@ resources:
   - cataudit-route.yaml
 images:
   - name: registry.catacumbas69.com/cataudit
-    newTag: "not-built-yet"
+    newTag: "0.1.0-SNAPSHOT-086448d"
