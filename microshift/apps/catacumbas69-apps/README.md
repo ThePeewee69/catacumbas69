@@ -189,16 +189,37 @@ Catapulsar's settings topic may still hold the `localhost` URLs saved from Intel
 ConfigMap. Open `http://catapulsar.catacumbas69.com` → Settings → Connections and choose **use default** for
 Cataponte, Catametricas, Cataudit and Catavigia (Catavigia also reads the first three from there).
 
-## Every release
+## Every release (after changing code)
 
-```
-git commit …                            # the code under apps/ must be committed (OPS-2)
-apps/build/push.sh catavigia            # or several apps, or all
-git add microshift/apps/catacumbas69-apps && git commit -m "chore(microshift): catavigia <tag>" && git push
-```
+Everything happens on the Mac, except the Sync in ArgoCD. Nothing is needed on meloes.
 
-Then, on meloes, `git pull` to check, and in ArgoCD **Refresh** and **Sync** the app. The tag is `<version>-<short sha>`; the script stops when `apps/` has uncommitted
-changes, and `FORCE=1` builds anyway with a `-dirty-<date-time>` tag (for a quick test only).
+1. **Change the code** and check it, as always:
+   ```
+   cd apps && mvn clean install
+   ```
+2. **Commit and push the code.** `push.sh` refuses to build while `apps/` has uncommitted changes, because the
+   image tag is the commit's sha (OPS-2):
+   ```
+   git add … && git commit -m "feat(cataponte): …" && git push
+   ```
+3. **Build and push the images** of the apps that changed:
+   ```
+   apps/build/push.sh cataponte      # one app
+   apps/build/push.sh all            # after a change in catacommons, which goes into every app
+   ```
+4. **Commit and push the tags** that `push.sh` wrote into the `kustomization.yaml` files. This is the step that
+   is easy to forget: without it ArgoCD does not see the new tag and keeps running the previous image.
+   ```
+   git add microshift/apps/catacumbas69-apps
+   git commit -m "chore(microshift): deploy <sha>"
+   git push
+   ```
+5. **In ArgoCD**, for each app that changed: **Refresh**, then **Sync**. Several apps follow the start order
+   (Cataponte → Cataudit → Catametricas → Catavigia → Catapulsar).
+
+The tag is `<version>-<short sha>`. `FORCE=1 apps/build/push.sh <app>` builds with uncommitted changes and a
+`-dirty-<date-time>` tag, for a quick test only. To check on meloes: `git pull` and
+`grep newTag microshift/apps/catacumbas69-apps/*/kustomization.yaml`.
 
 ## Troubleshooting
 
