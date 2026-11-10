@@ -32,7 +32,8 @@ git commit + push ──▶ GitHub ──▶ ArgoCD (manual Sync) ──▶ ns c
 | Catavigia | 2 | 8085 | `http://catavigia.catacumbas69.com` |
 | Catapulsar | 1 | 8081 | `http://catapulsar.catacumbas69.com` |
 
-Every container asks for 100m CPU and 384 Mi and may use up to 1 CPU and 768 Mi. Probes are on Actuator
+Every container asks for 25m CPU and 384 Mi and may use up to 1 CPU and 768 Mi (meloes has 4 CPUs, most of
+them already requested by MongoDB and Pulsar). Probes are on Actuator
 (startup and liveness on `/actuator/health/liveness`, readiness on `/actuator/health/readiness`). The apps reach
 each other through their Services (`http://<app>:<port>`), Pulsar through `pulsar.pulsar.svc.cluster.local`, and
 MongoDB through the URI in the Secret `catacumbas69-apps-mongodb` (key `uri`), which is never in git.

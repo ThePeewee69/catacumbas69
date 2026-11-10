@@ -45,7 +45,7 @@ spec:
                   key: uri
           resources:
             requests:
-              cpu: 100m
+              cpu: 25m   # meloes has 4 CPUs and its requests were full (orch.md decision 85); the limit still allows 1 CPU
               memory: 384Mi
             limits:
               cpu: "1"

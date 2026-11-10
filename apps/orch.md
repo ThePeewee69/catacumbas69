@@ -1129,8 +1129,9 @@ MicroShift deployment (2026-11-09, closes G-16):
     Secret garbage-collected. The URI names `admin`, so the ConfigMaps set `SPRING_DATA_MONGODB_DATABASE`.
 85. **Layout**: one namespace `catacumbas69-apps`, one folder per app with ConfigMap, Deployment, Service and
     **Route** (`<app>.catacumbas69.com`, all five). **Two replicas** of Cataponte, Cataudit, Catametricas and
-    Catavigia, **one** of Catapulsar; rolling updates with `maxUnavailable: 0`; requests **100m / 384 Mi**, limits
-    **1 CPU / 768 Mi**; startup probe up to 3 min; non-root, `seccomp` RuntimeDefault, no capabilities.
+    Catavigia, **one** of Catapulsar; rolling updates with `maxUnavailable: 0`; requests **25m / 384 Mi** (meloes
+    has 4 CPUs and its requests were full: 100m did not fit the nine pods), limits **1 CPU / 768 Mi**; startup
+    probe up to 3 min; non-root, `seccomp` RuntimeDefault, no capabilities.
 86. One **ArgoCD Application** per app and one for the registry, in the namespace `argocd`, **synced by hand** in
     the UI (no automated sync), in the start order Cataponte → Cataudit → Catametricas → Catavigia → Catapulsar.
 87. **Names, never IPs**, so that moving the homelab to another network (192.168.86.x → 192.168.69.x) only changes
