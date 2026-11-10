@@ -47,10 +47,24 @@ Pulsar's external listener (used from IntelliJ) is advertised as `meloes:31650`.
 
 ## One-time setup
 
-The `oc` commands and `apps/build/mongo-secret.sh` run **on meloes**, from the root of a clone of this
-repository (`git pull` first), with `oc` pointed at MicroShift (`~/.kube/config` from
-`/var/lib/microshift/resources/kubeadmin/kubeconfig`). `apps/build/push.sh` runs **on the Mac** (Podman). If the
-scripts are not executable, `chmod +x apps/build/*.sh` once.
+Where each thing runs:
+
+- **On meloes** (fish shell): every `oc` command and `apps/build/mongo-secret.sh`, from the root of a read-only
+  clone of this repository, `~/GIT/github/catacumbas69` (`git pull` before each step, to get what was pushed from
+  the Mac). `oc` uses `~/.kube/config` from `/var/lib/microshift/resources/kubeadmin/kubeconfig`. Run the scripts
+  with `bash apps/build/<script>.sh`. The commands below work in fish and in bash (no `<<EOF`, no `$(…)`).
+- **On the Mac** (necromancer, Intel, macOS 13, zsh): `apps/build/push.sh` (Podman), commits and pushes. If the
+  scripts are not executable, `chmod 755 apps/build/*.sh` (and `git add --chmod=+x` to keep it in git).
+- **In the ArgoCD UI**: every Sync, by hand. After a push, press **Refresh** first: ArgoCD may still have the
+  previous commit and would deploy it.
+
+To make the clone on meloes the first time:
+
+```
+mkdir -p ~/GIT/github
+cd ~/GIT/github
+git clone https://github.com/ThePeewee69/catacumbas69.git
+```
 
 ### 1. Names (DNS)
 
@@ -67,13 +81,12 @@ Its ConfigMap keeps the same name, so after syncing `pulsar` in ArgoCD restart t
 ### 2. Let CRI-O pull from the registry over HTTP (on meloes)
 
 ```
-sudo tee /etc/containers/registries.conf.d/900-catacumbas69.conf >/dev/null <<'EOF'
-[[registry]]
-location = "registry.catacumbas69.com"
-insecure = true
-EOF
+printf '%s\n' '[[registry]]' 'location = "registry.catacumbas69.com"' 'insecure = true' | sudo tee /etc/containers/registries.conf.d/900-catacumbas69.conf
 sudo systemctl restart crio
 ```
+
+To check it: `sudo crictl pull registry.catacumbas69.com/<app>:<tag>` pulls exactly as the kubelet does, with the
+full error if it fails.
 
 If pods stay in `ErrImagePull` afterwards with an HTTPS error, restart MicroShift too
 (`sudo systemctl restart microshift`).
@@ -89,28 +102,54 @@ Sync `registry` in the ArgoCD UI, then check from the Mac: `curl http://registry
 
 ### 4. Install Podman (on the Mac)
 
+The Mac is an **Intel** Mac on macOS 13, so:
+
+- **Not Homebrew**: on macOS 13 it has no bottles and the `podman` formula (6.x) needs Apple silicon.
+- **Not Podman 6**: it dropped Intel Macs. The **5.8** series is the last one for them, with security and critical
+  fixes until June 2027.
+- **Podman Desktop** (universal `.dmg`, 1.29 or later) installs Podman 5 on an Intel Mac: open it, accept
+  *Install Podman*, then *Create Podman machine*. The machine here is called **`Catacumbas69`** (applehv).
+
+Check in a new terminal:
+
 ```
-brew install podman
-podman machine init
-podman machine start
+podman --version                                     # 5.8.x
+podman machine ls                                    # Catacumbas69, Currently running
+podman run --rm docker.io/library/alpine uname -m   # x86_64
+curl http://registry.catacumbas69.com/v2/            # {}
 ```
 
-The images are `linux/amd64` (meloes) and the Mac is ARM: the Maven stage runs natively, and the one `RUN` of the
-runtime stage runs under Rosetta, which Podman's machine uses by default on Apple silicon. If that step fails
-with `exec format error`, recreate the machine (`podman machine rm`, `init`, `start`) with an up-to-date Podman.
+meloes is `linux/amd64` too, so everything builds natively, without Rosetta. Commands that act on the machine
+need its name, e.g. `podman machine ssh Catacumbas69 -- top -b -n 1`. The first `push.sh` takes several minutes:
+Maven downloads every dependency into a cache and, with `-q`, prints nothing meanwhile (`java` at high CPU in
+that `top` means it is working). The next builds reuse the cache.
 
 ### 5. MongoDB user for the apps
 
-```
-apps/build/mongo-secret.sh password     # random password in Secret mongodb/catacumbas69-apps-password, never shown
-```
-
-Commit and push `microshift/apps/mongodb/mongodb-cluster.yaml` (if not done yet) and Sync `mongodb` in ArgoCD.
-Wait until the operator has created the user (the Secret `mongodb/catacumbas69-apps-connection` exists and the
-`MongoDBCommunity` is `Running` again: `oc -n mongodb get mdbc`), then:
+**First** create the password, **then** Sync `mongodb`: if the operator sees the new user before its password
+Secret exists, it goes `Failed` (`user password secret … not found`).
 
 ```
-apps/build/mongo-secret.sh copy         # Secret catacumbas69-apps/catacumbas69-apps-mongodb (key uri)
+git pull
+bash apps/build/mongo-secret.sh password     # random password in Secret mongodb/catacumbas69-apps-password, never shown
+```
+
+It must print `Created Secret mongodb/catacumbas69-apps-password…`. Then Sync `mongodb` in ArgoCD and wait until
+the operator has created the user:
+
+```
+oc -n mongodb get mdbc -w                                # Pending, then Running (Ctrl-C to leave)
+oc -n mongodb get secret catacumbas69-apps-connection    # created by the operator
+```
+
+If it stays `Failed` although the password Secret exists, the operator is waiting longer between retries; make it
+reconcile now with `oc -n mongodb rollout restart deploy/mongodb-kubernetes-operator`. The reason is in
+`oc -n mongodb get mdbc catacumbas69 -o jsonpath='{.status.message}{"\n"}'`. A `Failed` here does not stop
+MongoDB: the members keep serving. Then:
+
+```
+bash apps/build/mongo-secret.sh copy         # Secret catacumbas69-apps/catacumbas69-apps-mongodb (key uri)
+oc -n catacumbas69-apps get secret catacumbas69-apps-mongodb
 ```
 
 The operator cannot keep that Secret in another namespace (it is garbage-collected), so it is copied. Run `copy`
@@ -122,14 +161,27 @@ With everything under `apps/` committed:
 
 ```
 apps/build/push.sh all                  # on the Mac, in start order; writes each newTag
-git add microshift/apps/catacumbas69-apps && git commit -m "chore(microshift): deploy <tag>" && git push
-# on meloes, after git pull:
-oc apply -f microshift/argocd/cataponte.yaml -f microshift/argocd/cataudit.yaml \
-  -f microshift/argocd/catametricas.yaml -f microshift/argocd/catavigia.yaml -f microshift/argocd/catapulsar.yaml
+git status --short                      # only the five kustomization.yaml
+git add microshift/apps/catacumbas69-apps && git commit -m "chore(microshift): deploy <sha>" && git push
 ```
 
-Sync in the ArgoCD UI in the **start order**: Cataponte → Cataudit → Catametricas → Catavigia → Catapulsar,
-each one once the previous is Healthy.
+**The tags must be pushed before any Sync**: until then the manifests say `not-built-yet`, and a Sync deploys pods
+that can never pull (`manifest unknown`). On meloes:
+
+```
+git pull
+grep newTag microshift/apps/catacumbas69-apps/*/kustomization.yaml    # no not-built-yet left
+oc apply -f microshift/argocd/cataponte.yaml -f microshift/argocd/cataudit.yaml -f microshift/argocd/catametricas.yaml -f microshift/argocd/catavigia.yaml -f microshift/argocd/catapulsar.yaml
+oc -n catacumbas69-apps get pods -w
+```
+
+In the ArgoCD UI, **Refresh** then **Sync**, one app at a time in the **start order**: Cataponte → Cataudit →
+Catametricas → Catavigia → Catapulsar, each one once the previous is Healthy. The nine pods end `Running`, `1/1`.
+
+**CPU on meloes is tight.** It has 4 CPUs, and MongoDB (3 members × 750m), its operator (500m) and Pulsar (500m)
+already request most of them, so each app container requests only **25m** (orch.md decision 85). A pod that stays
+`Pending` with `Insufficient cpu` means the requests are full again; see them with
+`oc describe node meloes | grep -A 12 "Allocated resources"`.
 
 ### 7. Reset the URLs in Catapulsar
 
@@ -145,16 +197,20 @@ apps/build/push.sh catavigia            # or several apps, or all
 git add microshift/apps/catacumbas69-apps && git commit -m "chore(microshift): catavigia <tag>" && git push
 ```
 
-Then Sync the app in ArgoCD. The tag is `<version>-<short sha>`; the script stops when `apps/` has uncommitted
+Then, on meloes, `git pull` to check, and in ArgoCD **Refresh** and **Sync** the app. The tag is `<version>-<short sha>`; the script stops when `apps/` has uncommitted
 changes, and `FORCE=1` builds anyway with a `-dirty-<date-time>` tag (for a quick test only).
 
 ## Troubleshooting
 
 | Symptom | Look at |
 |---|---|
-| `ErrImagePull` / `ImagePullBackOff` | Steps 1–2 on meloes; the tag in the app's `kustomization.yaml` was pushed (`curl http://registry.catacumbas69.com/v2/<app>/tags/list`) |
+| `ErrImagePull` with tag `not-built-yet`, or an old tag | The tags were not pushed, or ArgoCD was not refreshed before the Sync: step 6 |
+| `ErrImagePull` / `ImagePullBackOff` with the right tag | Steps 1–2 on meloes; the tag is in the registry (`curl http://registry.catacumbas69.com/v2/<app>/tags/list`); `sudo crictl pull …` shows the full error |
+| `Pending`, `Insufficient cpu` | The node's requests are full: step 6, *CPU on meloes is tight* |
+| `mdbc` `Failed`, `user password secret … not found` | Step 5: `password` first, then restart the operator |
 | `CreateContainerConfigError` | The Secret `catacumbas69-apps-mongodb` is missing: step 5 (`copy`) |
 | Pod not Ready | `oc -n catacumbas69-apps logs deploy/<app>`; `/actuator/health/readiness` lists what is down (Pulsar, MongoDB) |
 | Catapulsar panels say an app does not answer | Step 7 |
+| `podman machine ssh` says `podman-machine-default … does not exist` | Name the machine: `podman machine ssh Catacumbas69` |
 | `podman push` fails with a timeout | The Route waits 5 min (`haproxy.router.openshift.io/timeout`); raise it in `registry-route.yaml` |
 | Registry full | Delete old tags through the registry API, then `registry garbage-collect /etc/docker/registry/config.yml` in its pod |

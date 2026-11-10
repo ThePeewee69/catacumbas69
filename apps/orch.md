@@ -1114,7 +1114,9 @@ MicroShift deployment (2026-11-09, closes G-16):
 
 81. **Images** are built with **Podman** on the Mac by `apps/build/push.sh <app|all>`, for `linux/amd64`. The
     Dockerfiles' Maven stage runs on the build machine's own platform (`--platform=$BUILDPLATFORM`); only the
-    runtime stage is amd64 (its one `RUN` under Rosetta). Docker still works for local images.
+    runtime stage is amd64. necromancer is an Intel Mac on macOS 13, so everything builds natively, with
+    **Podman 5.8** installed by Podman Desktop (Homebrew has no bottles for macOS 13 and Podman 6 dropped Intel
+    Macs; 5.8 is supported until June 2027). Docker still works for local images.
 82. The **registry** runs in MicroShift (`registry:2.8.3`, namespace `registry`, 20 Gi PVC) behind the Route
     `registry.catacumbas69.com`, in plain HTTP like the other Routes and without authentication, since it is
     reachable only from the home network (the Route waits up to 5 min for a layer). CRI-O on meloes lists it as an
