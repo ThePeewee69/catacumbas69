@@ -151,25 +151,4 @@ grafana:
       folderAnnotation: grafana_folder   # the dashboards of microshift/apps/monitoring/dashboards/ go to their folder
       provider:
         foldersFromFilesStructure: true
-  # Community dashboards, downloaded from grafana.com when Grafana starts
-  dashboardProviders:
-    dashboardproviders.yaml:
-      apiVersion: 1
-      providers:
-        - name: community
-          orgId: 1
-          folder: JVM
-          type: file
-          disableDeletion: true
-          editable: false
-          options:
-            path: /var/lib/grafana/dashboards/community
-  dashboards:
-    community:
-      jvm-micrometer:
-        gnetId: 4701
-        revision: 10
-        datasource: Prometheus
-      spring-boot-3:
-        url: https://grafana.com/api/dashboards/19004/revisions/latest/download
-        datasource: Prometheus
+  # Every other dashboard, the JVM ones from grafana.com included, is a JSON file in dashboards/ (kustomization.yaml)

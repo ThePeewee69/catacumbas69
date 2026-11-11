@@ -29,3 +29,10 @@ configMapGenerator:
     options:
       annotations:
         grafana_folder: Pulsar
+  - name: dashboards-jvm
+    files:
+      - dashboards/jvm-micrometer.json
+      - dashboards/spring-boot-3.json
+    options:
+      annotations:
+        grafana_folder: JVM

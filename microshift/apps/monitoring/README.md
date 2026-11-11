@@ -36,7 +36,7 @@ Alertmanager: Catavigia raises the alerts (ADR 0015). Prometheus still evaluates
 | catacumbas69 | **catacumbas69 · apps**: replicas up, open alerts, bridges, messages, audit, tasks, Pulsar backlog, HTTP, heap, memory against the limit, restarts | `dashboards/catacumbas69.json` (ours) |
 | catacumbas69 | **meloes · máquina**: CPU, load, memory, swap, disks, pressure, temperature, network, what is reserved on the node, top containers | `dashboards/meloes.json` (ours) |
 | Pulsar | Broker, Topic and Messaging Metrics | `dashboards/pulsar-*.json`, from [streamnative/apache-pulsar-grafana-dashboard](https://github.com/streamnative/apache-pulsar-grafana-dashboard) (`dashboards.kubernetes/`, commit `9a61a26`, Apache 2.0); changed: the `DataSource` variable no longer hides datasources named `Prometheus` (its `regex`), which hid the only one here |
-| JVM | JVM (Micrometer) 4701, Spring Boot 3.x Statistics 19004 | Downloaded from grafana.com when Grafana starts (values: `grafana.dashboards`) |
+| JVM | JVM (Micrometer), Spring Boot 3.x Statistics | `dashboards/jvm-micrometer.json` and `dashboards/spring-boot-3.json`, from grafana.com: 4701 revision 10 and 19004 as published on 2026-11-11; changed: every `${DS_PROMETHEUS}` (and one fixed uid) points at the datasource `prometheus` |
 | General | The chart's Kubernetes, node and Prometheus dashboards | kube-prometheus-stack |
 
 The JSON files are loaded by Grafana's sidecar from the ConfigMaps that `kustomization.yaml` generates (label
@@ -108,5 +108,4 @@ You can also change it in Grafana (**Profile → Change password**), but then th
 | Grafana `CreateContainerConfigError` | The Secret `grafana-admin` is missing: setup step 3 |
 | A target `DOWN` in Prometheus | Its error is on the Targets page; for an app, `curl http://<app>.catacumbas69.com/actuator/prometheus` |
 | The pressure panels are empty | `cat /proc/pressure/cpu`: no file means `psi=1` is missing |
-| The JVM dashboards are missing | Grafana downloads them from grafana.com at start: `oc -n monitoring logs deploy/prometheus-grafana -c download-dashboards` |
 | Prometheus restarts with `OOMKilled` | Raise `prometheus.prometheusSpec.resources.limits.memory` in the values |
