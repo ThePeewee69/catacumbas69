@@ -10,4 +10,4 @@ resources:
   - cataponte-route.yaml
 images:
   - name: registry.catacumbas69.com/cataponte
-    newTag: "0.2.0-SNAPSHOT-086448d"
+    newTag: "0.2.0-SNAPSHOT-daffac6"
