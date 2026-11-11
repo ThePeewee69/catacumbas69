@@ -18,8 +18,11 @@ spec:
       path: /metrics/
       interval: 30s
       honorLabels: true
+      # `action: replace` is the default, but written out: the CRD fills it in, and ArgoCD would show OutOfSync
       relabelings:
-        - targetLabel: job
+        - action: replace
+          targetLabel: job
           replacement: broker
-        - sourceLabels: [__meta_kubernetes_pod_name]
+        - action: replace
+          sourceLabels: [__meta_kubernetes_pod_name]
           targetLabel: kubernetes_pod_name
