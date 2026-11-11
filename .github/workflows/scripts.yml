@@ -1,0 +1,33 @@
+# The shell scripts (orch.md decision 88): shellcheck on every *.sh in the repository.
+name: scripts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.sh"
+      - ".github/workflows/scripts.yml"
+  pull_request:
+    paths:
+      - "**/*.sh"
+      - ".github/workflows/scripts.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: shellcheck
+        run: bash .github/scripts/shellcheck.sh

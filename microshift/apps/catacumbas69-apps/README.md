@@ -202,6 +202,9 @@ Everything happens on the Mac, except the Sync in ArgoCD. Nothing is needed on m
    ```
    git add … && git commit -m "feat(cataponte): …" && git push
    ```
+   The push starts the `apps` workflow on GitHub (the repository's **Actions** tab), which runs `mvn verify`
+   again; a change to the manifests also runs `manifests`, and a script `scripts`. If one fails, fix it before
+   going on.
 3. **Build and push the images** of the apps that changed:
    ```
    apps/build/push.sh cataponte      # one app

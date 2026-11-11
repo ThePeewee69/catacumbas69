@@ -585,9 +585,9 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
   `@DynamicPropertySource` / `@ServiceConnection`.
 - **TEST-4 [SHOULD]** A Playwright smoke test for the UI with the API mocked: load page, open a topic,
   open Bridges, create a bridge, go back to a topic, and fail on any console error.
-- **TEST-5 [MUST]** `mvn verify` passes before a change is considered done. Until CI exists (G-21), the
-  developer runs it on `necromancer` and attaches the result to the change. Tests MUST NOT depend on the
-  NUC or any shared environment.
+- **TEST-5 [MUST]** `mvn verify` passes before a change is considered done. The developer runs it on
+  `necromancer`, and GitHub Actions runs it again on every push to `main` and every pull request that changes
+  `apps/` (workflow `apps`, decision 88). Tests MUST NOT depend on the NUC or any shared environment.
 - **TEST-6 [SHOULD]** Test names describe behaviour: `reconcile_restartsWorker_whenUpdatedAtChanges()`.
 
 ---
@@ -719,7 +719,6 @@ The code does not yet follow every rule. Agents fixing a gap remove it here in t
 | G-17 | Catapulsar | No ESLint, Stylelint, html-validate or Prettier for the static UI | HTML-5, JS-6, CSS-6 |
 | G-18 | Catapulsar | JSDoc missing on most `catapulsar.js` methods | JS-4 |
 | G-20 | Catapulsar | Clickable `<div>`s in the sidebar tree and pickers; many inline `style=""`; modals without `role="dialog"`; decorative SVGs without `aria-hidden` | HTML-1, HTML-2, HTML-4 |
-| G-21 | all | No CI pipeline running `mvn verify` and the frontend linters on every push | TEST-5 |
 
 Closed on 2026-10-30:
 
@@ -737,6 +736,9 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-11, CI** (G-21 closed; decision 88): GitHub Actions workflows `apps` (`mvn verify`), `manifests`
+  (kustomize + kubeconform of `microshift/`, with the OpenShift Route schema in `.github/kubeconform/`) and
+  `scripts` (shellcheck); actions pinned by SHA and kept up to date by Dependabot.
 - **2026-11-09, MicroShift deployment** (G-16 closed; decisions 81–87): manifests for the five apps in
   `microshift/apps/catacumbas69-apps/`, ArgoCD Applications, image registry in the cluster, `apps/build/push.sh`
   (Podman, `linux/amd64`, tag written into the manifest), `apps/build/mongo-secret.sh`, MongoDB user
@@ -807,7 +809,8 @@ Closed on 2026-10-30:
 1. **UI conventions** — G-17, G-18, G-20: frontend lint tooling, JSDoc, semantic and accessible markup,
    inline styles moved to CSS.
 2. **Tests** — G-6, G-11: Testcontainers integration tests (MongoDB, Pulsar), Playwright smoke test.
-3. **Delivery** — G-21: a CI pipeline (the MicroShift manifests are done, decisions 81–87).
+3. **Delivery** — done: MicroShift manifests (decisions 81–87) and CI (decision 88). The frontend linters of
+   G-17 join the CI once `mvn verify` runs them.
 
 ---
 
@@ -1140,3 +1143,19 @@ MicroShift deployment (2026-11-09, closes G-16):
     DNS: the registry and the Routes are `*.catacumbas69.com`, and Pulsar's external listener is advertised as
     `meloes:31650` (`microshift/apps/pulsar/broker-init-script.sh`). Both names must resolve on the Mac and on
     meloes itself. The local URLs in the docs (IntelliJ) still name the IP for now.
+
+CI (2026-11-11, closes G-21):
+
+88. **GitHub Actions** on GitHub's runners (the repository is public, so they cost nothing), with three
+    workflows that run on pushes to `main` and on pull requests, each only when its files change: **`apps`**
+    (`mvn -B verify` of the reactor in `apps/`, Java 21 Temurin, Maven cache; the surefire and Checkstyle
+    reports are kept 7 days when it fails; Markdown changes do not trigger it), **`manifests`** (every folder of
+    `microshift/` with a `kustomization.yaml` is built with kustomize, every other YAML file is read as it is, and
+    kubeconform `-strict` checks each resource against Kubernetes 1.35, the CRDs-catalog for ArgoCD and the
+    MongoDB operator, and the **Route schema generated from openshift/api** into `.github/kubeconform/`) and
+    **`scripts`** (shellcheck on every `*.sh`). Actions are **pinned by commit SHA** and **Dependabot** updates
+    them weekly; kustomize and kubeconform are downloaded with their checksums checked. Every step that runs
+    something is a **script in `.github/scripts/`** (`apps-verify.sh`, `install-manifest-tools.sh`,
+    `validate-manifests.sh`, `shellcheck.sh`), so the YAML holds no logic and each check also runs by hand
+    outside the CI. No images are built or pushed: the registry is only reachable at home, so
+    `apps/build/push.sh` stays manual.
