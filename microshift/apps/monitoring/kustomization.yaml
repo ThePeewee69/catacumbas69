@@ -1,0 +1,31 @@
+# Monitoring on meloes (orch.md decision 90): what goes with the kube-prometheus-stack chart, in the same ArgoCD
+# Application (microshift/argocd/monitoring.yaml). The chart's values are in kube-prometheus-stack-values.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+resources:
+  - monitoring-scc.yaml
+  - grafana-route.yaml
+  - prometheus-route.yaml
+  - apps-podmonitor.yaml
+  - pulsar-podmonitor.yaml
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"   # picked up by Grafana's dashboard sidecar
+configMapGenerator:
+  - name: dashboards-catacumbas69
+    files:
+      - dashboards/catacumbas69.json
+      - dashboards/meloes.json
+    options:
+      annotations:
+        grafana_folder: catacumbas69
+  - name: dashboards-pulsar
+    files:
+      - dashboards/pulsar-broker.json
+      - dashboards/pulsar-topic.json
+      - dashboards/pulsar-messaging.json
+    options:
+      annotations:
+        grafana_folder: Pulsar

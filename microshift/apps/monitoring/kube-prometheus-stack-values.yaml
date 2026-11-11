@@ -1,0 +1,175 @@
+# Values of kube-prometheus-stack 93.2.2 on meloes (orch.md decision 90), read by microshift/argocd/monitoring.yaml.
+# A lean stack: operator, Prometheus, Grafana, kube-state-metrics and node-exporter; no Alertmanager (Catavigia
+# raises the alerts), and none of the control-plane targets MicroShift runs inside its own process.
+# CPU requests are small because meloes' requests are nearly full (decision 85); memory is what really counts.
+
+# ── Off: Alertmanager and what MicroShift does not expose ─────────────────
+alertmanager:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
+coreDns:
+  enabled: false   # openshift-dns serves its metrics behind kube-rbac-proxy
+kubeDns:
+  enabled: false
+windowsMonitoring:
+  enabled: false
+
+defaultRules:
+  create: true
+  rules:
+    alertmanager: false
+    etcd: false
+    kubeControllerManager: false
+    kubeProxy: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    windows: false
+
+# ── Operator ──────────────────────────────────────────────────────────────
+prometheusOperator:
+  # No admission webhooks: they need certificate jobs and hooks that ArgoCD keeps showing as out of sync
+  admissionWebhooks:
+    enabled: false
+  tls:
+    enabled: false
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+  prometheusConfigReloader:
+    resources:
+      requests:
+        cpu: 5m
+        memory: 25Mi
+      limits:
+        memory: 64Mi
+
+# ── Prometheus ────────────────────────────────────────────────────────────
+prometheus:
+  prometheusSpec:
+    # Every ServiceMonitor, PodMonitor and PrometheusRule in the cluster, not only the chart's
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    scrapeInterval: 30s
+    evaluationInterval: 30s
+    retention: 30d
+    retentionSize: 17GB   # deletes the oldest data before the 20 Gi volume fills
+    externalLabels:
+      kubernetes_cluster: meloes
+    resources:
+      requests:
+        cpu: 50m
+        memory: 512Mi
+      limits:
+        memory: 2Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: topolvm-provisioner
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
+
+# ── Kubelet: cAdvisor for the containers ──────────────────────────────────
+kubelet:
+  enabled: true
+  serviceMonitor:
+    cAdvisor: true
+
+# ── kube-state-metrics: pod and container state (restarts, Ready, limits) ─
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+# ── node-exporter: the meloes host (needs the privileged SCC, monitoring-scc.yaml) ─
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+  # Replaces the chart's list, so its two filesystem filters are repeated here, with CRI-O's paths
+  extraArgs:
+    - --collector.pressure   # PSI: needs psi=1 on the kernel command line (it has it since 2026-11-11)
+    - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run/containers/storage/.+|var/lib/containers/storage/.+|var/lib/kubelet/.+)($|/)
+    - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs|erofs|tmpfs)$
+
+# ── Grafana ───────────────────────────────────────────────────────────────
+grafana:
+  admin:
+    existingSecret: grafana-admin   # created by grafana-secret.sh, never in git
+    userKey: admin-user
+    passwordKey: admin-password
+  deploymentStrategy:
+    type: Recreate   # the volume is ReadWriteOnce
+  persistence:
+    enabled: true
+    storageClassName: topolvm-provisioner
+    size: 1Gi
+  initChownData:
+    enabled: false   # runs as root, which the SCC refuses; the volume is already owned by the pod's group
+  resources:
+    requests:
+      cpu: 25m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+  grafana.ini:
+    server:
+      domain: grafana.microshift.catacumbas69.com
+      root_url: http://grafana.microshift.catacumbas69.com
+    auth.anonymous:
+      enabled: true
+      org_role: Viewer
+    analytics:
+      reporting_enabled: false
+      check_for_updates: false
+  sidecar:
+    resources:
+      requests:
+        cpu: 5m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+    dashboards:
+      folderAnnotation: grafana_folder   # the dashboards of microshift/apps/monitoring/dashboards/ go to their folder
+      provider:
+        foldersFromFilesStructure: true
+  # Community dashboards, downloaded from grafana.com when Grafana starts
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: community
+          orgId: 1
+          folder: JVM
+          type: file
+          disableDeletion: true
+          editable: false
+          options:
+            path: /var/lib/grafana/dashboards/community
+  dashboards:
+    community:
+      jvm-micrometer:
+        gnetId: 4701
+        revision: 10
+        datasource: Prometheus
+      spring-boot-3:
+        url: https://grafana.com/api/dashboards/19004/revisions/latest/download
+        datasource: Prometheus

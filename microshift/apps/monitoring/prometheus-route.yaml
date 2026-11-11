@@ -1,0 +1,13 @@
+# Plain HTTP like the other Routes on meloes (orch.md decisions 82, 90). No authentication: home network only.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: prometheus
+spec:
+  host: prometheus.microshift.catacumbas69.com
+  to:
+    kind: Service
+    name: prometheus-kube-prometheus-prometheus
+    weight: 100
+  port:
+    targetPort: http-web

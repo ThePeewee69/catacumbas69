@@ -1,0 +1,29 @@
+# Security context constraints for the monitoring namespace (orch.md decision 90), declared here instead of with
+# `oc adm policy`. The chart's pods run with fixed non-root UIDs (Prometheus 1000, Grafana 472, kube-state-metrics
+# and the operator 65534), which the default restricted-v2 refuses: nonroot-v2 allows any non-root UID.
+# node-exporter reads the host (hostNetwork, hostPID, /proc, /sys, /): only its service account gets privileged.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: scc-nonroot-v2
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:nonroot-v2
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: system:serviceaccounts:monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: scc-privileged-node-exporter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:privileged
+subjects:
+  - kind: ServiceAccount
+    name: prometheus-prometheus-node-exporter
+    namespace: monitoring

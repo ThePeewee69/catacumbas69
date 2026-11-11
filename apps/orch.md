@@ -736,6 +736,9 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-11, monitoring on MicroShift** (decision 90): kube-prometheus-stack in `microshift/apps/monitoring/`
+  with the five apps, Pulsar, cAdvisor, kube-state-metrics and node-exporter, and our dashboards for the apps and
+  for meloes.
 - **2026-11-11, JVM memory** (decision 89): heap at 50 % of the limit and exit on OutOfMemoryError, set in each
   Deployment's `JAVA_TOOL_OPTIONS`; the Dockerfiles' `ENTRYPOINT` no longer sets JVM options.
 - **2026-11-11, CI** (G-21 closed; decision 88): GitHub Actions workflows `apps` (`mvn verify`), `manifests`
@@ -1172,3 +1175,20 @@ JVM memory (2026-11-11):
     the JVM exits and the pod restarts, instead of running half broken. The `ENTRYPOINT` no longer passes any
     `-XX` (a command-line option would override `JAVA_TOOL_OPTIONS`), so the options change through GitOps
     without a new image, and can differ per app.
+
+Monitoring on MicroShift (2026-11-11):
+
+90. **kube-prometheus-stack 93.2.2** on meloes, in the namespace `monitoring`, in one ArgoCD Application with
+    three sources (the chart, its values in `microshift/apps/monitoring/kube-prometheus-stack-values.yaml`, and
+    that folder), synced by hand with Server-Side Apply. **Lean**: operator, Prometheus, Grafana,
+    kube-state-metrics and node-exporter; **no Alertmanager** (Catavigia raises the alerts) and none of the
+    control-plane targets that MicroShift does not expose; small CPU requests (decision 85). Prometheus collects
+    the **five apps** (PodMonitor on `app.kubernetes.io/part-of: catacumbas69`), the **Pulsar broker**, the
+    **containers** (cAdvisor), the pods' state and **meloes** itself (node-exporter, with PSI since `psi=1` was
+    added to the kernel); **30 days**, at most 17 GB, on a 20 Gi PVC. Grafana at
+    `grafana.microshift.catacumbas69.com` (Prometheus at `prometheus.microshift.catacumbas69.com`; the K3s
+    stack keeps the plain names), anonymous **Viewer** and an `admin` whose password a script generates into a
+    Secret, never in git; 1 Gi PVC. Dashboards as code: **catacumbas69 · apps** and **meloes · máquina** (ours),
+    StreamNative's Pulsar broker, topic and messaging dashboards, and JVM (Micrometer) and Spring Boot 3 from
+    grafana.com. The SCCs are RoleBindings in git: `nonroot-v2` for the namespace, `privileged` only for the
+    node-exporter. Loki and OpenMetrics exemplars can come later without changing this choice.

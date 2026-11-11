@@ -1,0 +1,25 @@
+# The Pulsar broker: /metrics on its admin port (orch.md decision 90). The labels follow what the StreamNative
+# dashboards expect: job="broker" and kubernetes_pod_name. honorLabels keeps Pulsar's own `namespace` and `topic`
+# (a Pulsar namespace, not a Kubernetes one).
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: pulsar-broker
+spec:
+  namespaceSelector:
+    matchNames:
+      - pulsar
+  selector:
+    matchLabels:
+      app: pulsar
+  jobLabel: ""
+  podMetricsEndpoints:
+    - port: admin
+      path: /metrics/
+      interval: 30s
+      honorLabels: true
+      relabelings:
+        - targetLabel: job
+          replacement: broker
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: kubernetes_pod_name

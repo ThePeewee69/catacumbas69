@@ -1,0 +1,13 @@
+# Plain HTTP like the other Routes on meloes (orch.md decisions 82, 90)
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: grafana
+spec:
+  host: grafana.microshift.catacumbas69.com
+  to:
+    kind: Service
+    name: prometheus-grafana
+    weight: 100
+  port:
+    targetPort: http-web

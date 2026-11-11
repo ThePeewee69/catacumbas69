@@ -44,6 +44,9 @@ MongoDB through the URI in the Secret `catacumbas69-apps-mongodb` (key `uri`), w
 Pulsar's external listener (used from IntelliJ) is advertised as `meloes:31650`. When the network changes
 (192.168.86.x → 192.168.69.x), only the DNS records change. Like the other Routes, they are plain HTTP.
 
+Metrics and dashboards: Prometheus and Grafana on meloes collect every replica's `/actuator/prometheus`; see
+[`microshift/apps/monitoring/README.md`](../monitoring/README.md) (orch.md decision 90).
+
 > **No authentication yet** (orch.md SEC-2): anyone who reaches a Route can use that app. Keep the Routes inside
 > the home network.
 
