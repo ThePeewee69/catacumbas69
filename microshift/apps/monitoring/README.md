@@ -56,8 +56,7 @@ The `oc` commands run on meloes, in the clone of the repository (`git pull` firs
    bash microshift/apps/monitoring/grafana-secret.sh
    ```
    It creates the namespace and the Secret `monitoring/grafana-admin` with a random password, never shown.
-   `… grafana-secret.sh show` prints it when you need to log in; `… rotate` makes a new one (then restart
-   Grafana: `oc -n monitoring rollout restart deploy/prometheus-grafana`).
+   See [The admin password](#the-admin-password) to log in or choose your own.
 4. **ArgoCD**:
    ```
    oc apply -f microshift/argocd/monitoring.yaml
@@ -70,6 +69,28 @@ The `oc` commands run on meloes, in the clone of the repository (`git pull` firs
    ```
    Every pod `Running`: the operator, `prometheus-prometheus-kube-prometheus-prometheus-0`, Grafana,
    kube-state-metrics and the node-exporter. Then, in Prometheus, **Status → Targets**: every target `UP`.
+
+## The admin password
+
+Anyone can look at the dashboards without logging in. To change things, **Sign in** (top right) as `admin`.
+On meloes, in the clone:
+
+| Command | What it does |
+|---|---|
+| `bash microshift/apps/monitoring/grafana-secret.sh show` | Prints the current password, to copy into the login form |
+| `bash microshift/apps/monitoring/grafana-secret.sh set` | Asks twice for a password of your own (at least 12 characters; not shown, not kept in the shell history) and makes it the admin's |
+| `bash microshift/apps/monitoring/grafana-secret.sh rotate` | The same with a new random password |
+
+Grafana takes the password from the Secret **only the first time it starts**, when it creates its database on
+its PVC; after that the database has its own copy. So `set` and `rotate` change it in both places: in the
+database, with `grafana cli admin reset-admin-password --password-from-stdin` inside the Grafana pod, and in the
+Secret, so that `show` stays right. The password goes through stdin, never on a command line. Grafana must be
+running.
+
+**Forgot it?** `set` also works when you no longer know the current one: it does not ask for it.
+
+You can also change it in Grafana (**Profile → Change password**), but then the Secret keeps the old one and
+`show` prints a password that no longer works. Prefer `set`.
 
 ## Security context constraints
 
