@@ -656,9 +656,9 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 ## 12. Build and deploy
 
 - **OPS-1 [MUST]** Multi-stage Dockerfile per service: Maven build stage → JRE 21 runtime stage, layered
-  jar (`java -Djarmode=tools`), non-root, `EXPOSE` the service port, JVM tuned with
-  `-XX:MaxRAMPercentage=75`. The build context is `apps/` (`docker build -f <app>/Dockerfile .`): the build
-  stage runs `mvn -pl <app> -am package` so catacommons is compiled with the app, with the Maven repository
+  jar (`java -Djarmode=tools`), non-root, `EXPOSE` the service port; the JVM options come from
+  `JAVA_TOOL_OPTIONS` in the Deployment, never from the `ENTRYPOINT` (decision 89). The build context is `apps/`
+  (`docker build -f <app>/Dockerfile .`): the build stage runs `mvn -pl <app> -am package` so catacommons is compiled with the app, with the Maven repository
   in a BuildKit cache mount; `apps/.dockerignore` sends only the reactor. The build stage runs on the build
   machine's platform (`FROM --platform=$BUILDPLATFORM`) and only the runtime stage is the target platform, so an
   ARM Mac builds `linux/amd64` images for meloes without emulating Maven. Images for the cluster are built with
@@ -736,6 +736,8 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-11, JVM memory** (decision 89): heap at 50 % of the limit and exit on OutOfMemoryError, set in each
+  Deployment's `JAVA_TOOL_OPTIONS`; the Dockerfiles' `ENTRYPOINT` no longer sets JVM options.
 - **2026-11-11, CI** (G-21 closed; decision 88): GitHub Actions workflows `apps` (`mvn verify`), `manifests`
   (kustomize + kubeconform of `microshift/`, with the OpenShift Route schema in `.github/kubeconform/`) and
   `scripts` (shellcheck); actions pinned by SHA and kept up to date by Dependabot.
@@ -1159,3 +1161,14 @@ CI (2026-11-11, closes G-21):
     `validate-manifests.sh`, `shellcheck.sh`), so the YAML holds no logic and each check also runs by hand
     outside the CI. No images are built or pushed: the registry is only reachable at home, so
     `apps/build/push.sh` stays manual.
+
+JVM memory (2026-11-11):
+
+89. Each app's **JVM options** are in its Deployment, in `JAVA_TOOL_OPTIONS`:
+    `-XX:MaxRAMPercentage=50.0 -XX:+ExitOnOutOfMemoryError`. Measured on 2026-11-11 the apps used 50–70 MiB of
+    heap, 135–165 MiB of non-heap, 8 MiB of direct buffers and about 45 threads; with the former 75 % the heap
+    could reach 557 MiB and the worst case passed the 768 Mi limit (OOMKilled with the node full of free memory).
+    At 50 % the heap stops at about 384 MiB and the worst case stays around 650 MiB. On an `OutOfMemoryError`
+    the JVM exits and the pod restarts, instead of running half broken. The `ENTRYPOINT` no longer passes any
+    `-XX` (a command-line option would override `JAVA_TOOL_OPTIONS`), so the options change through GitOps
+    without a new image, and can differ per app.

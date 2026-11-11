@@ -38,6 +38,10 @@ spec:
             - configMapRef:
                 name: cataudit-config
           env:
+            # Heap up to 50 % of the memory limit (~384 Mi), leaving room for metaspace, code cache, Netty buffers and
+            # thread stacks; exit on OutOfMemoryError so the pod restarts (orch.md decision 89)
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=50.0 -XX:+ExitOnOutOfMemoryError"
             - name: SPRING_DATA_MONGODB_URI
               valueFrom:
                 secretKeyRef:

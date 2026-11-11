@@ -33,7 +33,9 @@ git commit + push ──▶ GitHub ──▶ ArgoCD (manual Sync) ──▶ ns c
 | Catapulsar | 1 | 8081 | `http://catapulsar.catacumbas69.com` |
 
 Every container asks for 25m CPU and 384 Mi and may use up to 1 CPU and 768 Mi (meloes has 4 CPUs, most of
-them already requested by MongoDB and Pulsar). Probes are on Actuator
+them already requested by MongoDB and Pulsar). The JVM options are in each Deployment's `JAVA_TOOL_OPTIONS`
+(heap up to 50 % of the limit, exit on `OutOfMemoryError`; orch.md decision 89): change them there and Sync, no
+new image needed. The log starts with `Picked up JAVA_TOOL_OPTIONS: …`, which is the JVM confirming them. Probes are on Actuator
 (startup and liveness on `/actuator/health/liveness`, readiness on `/actuator/health/readiness`). The apps reach
 each other through their Services (`http://<app>:<port>`), Pulsar through `pulsar.pulsar.svc.cluster.local`, and
 MongoDB through the URI in the Secret `catacumbas69-apps-mongodb` (key `uri`), which is never in git.

@@ -28,4 +28,6 @@ COPY --from=build /build/cataponte/target/extracted/application/ ./
 RUN chgrp -R 0 /app && chmod -R g=u /app
 USER 1001
 EXPOSE 8082
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "org.springframework.boot.loader.launch.JarLauncher"]
+# JVM options (heap size, exit on OutOfMemoryError) come from JAVA_TOOL_OPTIONS in the Deployment, so they change
+# without a new image (orch.md decision 89); without it the JVM uses its defaults.
+ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher"]
