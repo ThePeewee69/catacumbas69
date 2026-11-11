@@ -35,7 +35,7 @@ Alertmanager: Catavigia raises the alerts (ADR 0015). Prometheus still evaluates
 |---|---|---|
 | catacumbas69 | **catacumbas69 · apps**: replicas up, open alerts, bridges, messages, audit, tasks, Pulsar backlog, HTTP, heap, memory against the limit, restarts | `dashboards/catacumbas69.json` (ours) |
 | catacumbas69 | **meloes · máquina**: CPU, load, memory, swap, disks, pressure, temperature, network, what is reserved on the node, top containers | `dashboards/meloes.json` (ours) |
-| Pulsar | Broker, Topic and Messaging Metrics | `dashboards/pulsar-*.json`, from [streamnative/apache-pulsar-grafana-dashboard](https://github.com/streamnative/apache-pulsar-grafana-dashboard) (`dashboards.kubernetes/`, commit `9a61a26`, Apache 2.0) |
+| Pulsar | Broker, Topic and Messaging Metrics | `dashboards/pulsar-*.json`, from [streamnative/apache-pulsar-grafana-dashboard](https://github.com/streamnative/apache-pulsar-grafana-dashboard) (`dashboards.kubernetes/`, commit `9a61a26`, Apache 2.0); changed: the `DataSource` variable no longer hides datasources named `Prometheus` (its `regex`), which hid the only one here |
 | JVM | JVM (Micrometer) 4701, Spring Boot 3.x Statistics 19004 | Downloaded from grafana.com when Grafana starts (values: `grafana.dashboards`) |
 | General | The chart's Kubernetes, node and Prometheus dashboards | kube-prometheus-stack |
 

@@ -2263,22 +2263,16 @@
   "templating": {
     "list": [
       {
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
-
+        "current": {},
         "hide": 0,
         "includeAll": false,
         "label": "DataSource",
         "multi": false,
         "name": "DataSource",
-        "options": [],
         "query": "prometheus",
         "queryValue": "",
         "refresh": 1,
-        "regex": "^(?!Prometheus).*$",
+        "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
       },
@@ -2288,7 +2282,6 @@
           "text": "All",
           "value": "$__all"
         },
-
         "datasource": {
           "type": "prometheus",
           "uid": "${DataSource}"
