@@ -92,7 +92,12 @@ build/push.sh cataudit   # image for MicroShift (Podman, linux/amd64), pushed, t
 
 Deploying to MicroShift (registry, ArgoCD, MongoDB Secret): [`microshift/apps/catacumbas69-apps/README.md`](../../microshift/apps/catacumbas69-apps/README.md).
 
-Unit tests need no Docker, MongoDB or Pulsar.
+Unit tests need no Docker, MongoDB or Pulsar. The integration tests (`*IT`, run by failsafe in `mvn verify`)
+start a real Pulsar and MongoDB with Testcontainers: `AuditTrailIT` produces to `catacumbas69/cataudit/audit` as
+the `audit-<app>` bridges do and checks that an event is stored and served by `GET /api/v1/audit/{id}`, that the
+same event delivered twice is stored once, and that a message that is not a CloudEvent goes to
+`audit-cataudit-DLQ`. Locally they need Docker or Podman: see
+[catacommons' README](../catacommons/README.md#integration-tests-catacumbascontainers).
 
 ## Operate
 

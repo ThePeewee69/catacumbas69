@@ -149,6 +149,13 @@ apps/build/push.sh catavigia                    # image for MicroShift (Podman),
 
 Deploying to MicroShift (registry, ArgoCD, MongoDB Secret): [`microshift/apps/catacumbas69-apps/README.md`](../../microshift/apps/catacumbas69-apps/README.md).
 
+The integration tests (`*IT`, run by failsafe in `mvn verify`) start a real Pulsar and MongoDB with
+Testcontainers: `ServiceDownAlertIT` points the watched apps at a fake one (a JDK `HttpServer`) whose readiness
+answers `DOWN`, waits for the `service.down` alert to open, switches it to `UP` and waits for the alert to close
+and reach the archive. It sets `alerts.check-interval` to 10 s and `alerts.debounce` to 1 on the settings topic
+first, so it takes about a minute. Locally they need Docker or Podman: see
+[catacommons' README](../catacommons/README.md#integration-tests-catacumbascontainers).
+
 ## Operate
 
 | Endpoint | Use |

@@ -89,7 +89,9 @@ class SomethingIT {
 }
 ```
 
-`pulsarClient()`, `pulsarAdmin()` and `mongoUri(database)` give the test its own clients. An app uses it with
+`pulsarClient()`, `pulsarAdmin()` and `mongoUri(database)` give the test its own clients, and
+`setting(key, value)` writes a shared setting on the settings topic as Catapulsar does (call it in `@BeforeAll`,
+before the app starts; Catavigia's test uses it for shorter rounds). An app uses it with
 the dependency `com.catacumbas69:catacommons` of type `test-jar`, scope `test`, plus `org.testcontainers:pulsar`
 (which brings Testcontainers itself) and the failsafe plugin (see Cataponte's `pom.xml`); the MongoDB driver comes
 with `spring-boot-starter-data-mongodb`. MongoDB is a plain `mongo:7.0` container started with `--replSet`, and
@@ -102,16 +104,20 @@ which fails through Podman's API on the Mac.
    ```
    printf 'docker.host=unix://%s\n' "$(podman machine inspect Catacumbas69 --format '{{.ConnectionInfo.PodmanSocket.Path}}')" > ~/.testcontainers.properties
    ```
-2. Turn off Ryuk, Testcontainers' cleanup container: it mounts the Docker socket by its path on the Mac, which
-   does not exist inside Podman's machine (`mkdir …Catacumbas69-api.sock: operation not supported`). Only the
-   environment variable turns it off, so in `~/.zshrc`:
+2. Point Ryuk, Testcontainers' cleanup container, at the Docker socket *inside* Podman's machine. By default
+   it mounts the socket by its path on the Mac, which does not exist in the machine
+   (`mkdir …Catacumbas69-api.sock: operation not supported`). The machine is rootful and has
+   `/var/run/docker.sock` → `/run/podman/podman.sock`. Testcontainers reads this only from the environment
+   (`~/.testcontainers.properties` does not work), so in IntelliJ, in **Run → Edit Configurations… → Edit
+   configuration templates…**, add to *Environment variables* of the **JUnit** template:
    ```
-   export TESTCONTAINERS_RYUK_DISABLED=true
+   TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
    ```
-   and in IntelliJ, in **Run → Edit Configurations… → Edit configuration templates… → JUnit**, add
-   `TESTCONTAINERS_RYUK_DISABLED=true` to *Environment variables*.
+   and the same in **Settings → Build, Execution, Deployment → Build Tools → Maven → Runner → Environment
+   variables**. A `mvn` run from a terminal needs it exported in that shell.
 
-Without Ryuk, `CatacumbasContainers` stops the containers itself when the test JVM ends (a shutdown hook); only
-a killed JVM leaves them behind, and `podman ps -a` shows them.
-The CI keeps Ryuk (GitHub's runners have Docker). The first run downloads the two images (about 1 GB for
-Pulsar).
+Ryuk removes the containers when the test JVM ends, even if it is killed. `CatacumbasContainers` also stops them
+itself in a shutdown hook, as a safety net; if both fail, `podman ps -a` shows what was left behind.
+
+The CI needs none of this: GitHub's runners have Docker, and Ryuk works there as it is. The first run downloads
+the two images (about 1 GB for Pulsar).

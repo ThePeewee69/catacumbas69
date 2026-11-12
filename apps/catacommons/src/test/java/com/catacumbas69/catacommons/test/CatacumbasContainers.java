@@ -1,12 +1,19 @@
 package com.catacumbas69.catacommons.test;
 
+import com.catacumbas69.catacommons.pulsar.CatacumbasTopics;
+import com.catacumbas69.catacommons.settings.SettingValue;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
 import java.time.Duration;
+import java.util.HashSet;
 import org.apache.pulsar.client.admin.PulsarAdmin;
+import org.apache.pulsar.client.admin.PulsarAdminException;
+import org.apache.pulsar.client.api.Producer;
 import org.apache.pulsar.client.api.PulsarClient;
 import org.apache.pulsar.client.api.PulsarClientException;
+import org.apache.pulsar.client.api.Schema;
+import org.apache.pulsar.common.policies.data.TenantInfo;
 import org.bson.Document;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.testcontainers.containers.GenericContainer;
@@ -54,7 +61,7 @@ public final class CatacumbasContainers {
     static {
         Startables.deepStart(PULSAR, MONGO).join();
         initiateReplicaSet();
-        // Ryuk removes them too, but it is turned off with Podman (catacommons' README): stop them when the JVM ends
+        // Ryuk removes them when the JVM ends; this hook is a safety net for when Ryuk is not running
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             PULSAR.stop();
             MONGO.stop();
@@ -98,6 +105,37 @@ public final class CatacumbasContainers {
      */
     public static PulsarAdmin pulsarAdmin() throws PulsarClientException {
         return PulsarAdmin.builder().serviceHttpUrl(PULSAR.getHttpServiceUrl()).build();
+    }
+
+    /**
+     * Writes a shared setting on the settings topic (ADR 0011) as Catapulsar does, creating the tenant and
+     * Catapulsar's namespace first if needed. Call it before the app starts (in {@code @BeforeAll}) so the app
+     * reads it at start-up, e.g. to shorten Catavigia's rounds.
+     *
+     * @param key setting key, e.g. {@code alerts.check-interval}
+     * @param value its value
+     * @throws PulsarClientException if Pulsar cannot be reached
+     * @throws PulsarAdminException if the tenant or the namespace cannot be created
+     */
+    public static void setting(String key, String value) throws PulsarClientException, PulsarAdminException {
+        try (PulsarAdmin admin = pulsarAdmin(); PulsarClient client = pulsarClient()) {
+            try {
+                admin.tenants().createTenant(CatacumbasTopics.TENANT, TenantInfo.builder()
+                        .allowedClusters(new HashSet<>(admin.clusters().getClusters())).build());
+            } catch (PulsarAdminException.ConflictException alreadyThere) {
+                // created by an earlier call or by the app
+            }
+            try {
+                admin.namespaces().createNamespace(CatacumbasTopics.namespace(CatacumbasTopics.SETTINGS_OWNER));
+            } catch (PulsarAdminException.ConflictException alreadyThere) {
+                // created by an earlier call
+            }
+            try (Producer<SettingValue> producer = client.newProducer(Schema.JSON(SettingValue.class))
+                    .topic(CatacumbasTopics.settings())
+                    .create()) {
+                producer.newMessage().key(key).value(new SettingValue(value)).send();
+            }
+        }
     }
 
     /**

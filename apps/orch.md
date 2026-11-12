@@ -716,7 +716,7 @@ The code does not yet follow every rule. Agents fixing a gap remove it here in t
 
 | ID | Service | Gap | Rule |
 |---|---|---|---|
-| G-6 | Catavigia, Cataudit, Catametricas, Catapulsar | No Testcontainers integration tests yet (Cataponte has its bridge test; unit and slice tests exist) | TEST-3 |
+| G-6 | Catametricas, Catapulsar | No Testcontainers integration tests yet (Cataponte, Catavigia and Cataudit have theirs; unit and slice tests exist) | TEST-3 |
 | G-11 | Catapulsar | No Playwright UI smoke test in the build | TEST-4 |
 | G-17 | Catapulsar | No ESLint, Stylelint, html-validate or Prettier for the static UI | HTML-5, JS-6, CSS-6 |
 | G-18 | Catapulsar | JSDoc missing on most `catapulsar.js` methods | JS-4 |
@@ -738,6 +738,11 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-12, integration tests, step 2** (decision 91): Catavigia's `ServiceDownAlertIT` (a fake app's
+  readiness opens and closes `service.down`, through the task topic and MongoDB) and Cataudit's `AuditTrailIT`
+  (an event stored and served, a duplicate stored once, a message that is not a CloudEvent sent to the DLQ);
+  `CatacumbasContainers.setting(key, value)` writes shared settings before an app starts. Locally Ryuk works with
+  Podman through `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` (catacommons' README).
 - **2026-11-12, integration tests, step 1** (decision 91): Testcontainers and failsafe, `CatacumbasContainers`
   in catacommons' test-jar, Cataponte's `BridgeForwardingIT`.
 - **2026-11-11, monitoring on MicroShift** (decision 90): kube-prometheus-stack in `microshift/apps/monitoring/`
@@ -1205,6 +1210,7 @@ Integration tests (2026-11-12, first step of G-6):
     and shared by every test class; each test uses topics and names of its own, and each app a database
     `it_<app>`. `CatacumbasContainers.register(registry, "<app>")` points `<app>.pulsar.*` and
     `spring.data.mongodb.uri` at them. The critical flows first: Cataponte's bridge relaying messages with keys
-    and properties (`BridgeForwardingIT`), then Catavigia opening and closing an alert and Cataudit storing an
-    event; the other apps afterwards. The CI runs them (GitHub's runners have Docker); locally they need Docker
+    and properties (`BridgeForwardingIT`), then Catavigia opening and closing an alert (`ServiceDownAlertIT`,
+    against a fake app on a JDK `HttpServer`, no extra dependency) and Cataudit storing an event
+    (`AuditTrailIT`); the other apps afterwards. The CI runs them (GitHub's runners have Docker); locally they need Docker
     or Podman.
