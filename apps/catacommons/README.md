@@ -116,8 +116,10 @@ which fails through Podman's API on the Mac.
    and the same in **Settings → Build, Execution, Deployment → Build Tools → Maven → Runner → Environment
    variables**. A `mvn` run from a terminal needs it exported in that shell.
 
-Ryuk removes the containers when the test JVM ends, even if it is killed. `CatacumbasContainers` also stops them
-itself in a shutdown hook, as a safety net; if both fail, `podman ps -a` shows what was left behind.
+Ryuk removes the containers when the test JVM ends, even if it is killed. `CatacumbasContainers` does not stop
+them itself: a shutdown hook would stop them while Spring is still closing the app, whose Pulsar and MongoDB
+clients would then keep the JVM alive until failsafe kills it 30 s later. If something is left behind,
+`podman ps -a` shows it.
 
 The CI needs none of this: GitHub's runners have Docker, and Ryuk works there as it is. The first run downloads
 the two images (about 1 GB for Pulsar).

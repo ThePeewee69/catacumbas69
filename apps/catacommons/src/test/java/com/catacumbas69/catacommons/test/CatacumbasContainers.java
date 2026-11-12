@@ -61,11 +61,8 @@ public final class CatacumbasContainers {
     static {
         Startables.deepStart(PULSAR, MONGO).join();
         initiateReplicaSet();
-        // Ryuk removes them when the JVM ends; this hook is a safety net for when Ryuk is not running
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            PULSAR.stop();
-            MONGO.stop();
-        }, "catacumbas-containers-stop"));
+        // Not stopped here: Ryuk removes them after the JVM has ended (or, with Ryuk off, Testcontainers' own
+        // shutdown hook does). A hook of ours would stop them while Spring is still closing the app.
     }
 
     private CatacumbasContainers() {

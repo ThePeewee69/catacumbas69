@@ -742,7 +742,8 @@ Closed on 2026-10-30:
   readiness opens and closes `service.down`, through the task topic and MongoDB) and Cataudit's `AuditTrailIT`
   (an event stored and served, a duplicate stored once, a message that is not a CloudEvent sent to the DLQ);
   `CatacumbasContainers.setting(key, value)` writes shared settings before an app starts. Locally Ryuk works with
-  Podman through `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` (catacommons' README).
+  Podman through `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` (catacommons' README), and removes the containers;
+  `CatacumbasContainers` no longer stops them in a shutdown hook, which raced Spring's own and kept the JVM up.
 - **2026-11-12, integration tests, step 1** (decision 91): Testcontainers and failsafe, `CatacumbasContainers`
   in catacommons' test-jar, Cataponte's `BridgeForwardingIT`.
 - **2026-11-11, monitoring on MicroShift** (decision 90): kube-prometheus-stack in `microshift/apps/monitoring/`
