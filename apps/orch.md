@@ -582,7 +582,9 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 - **TEST-3 [MUST]** Integration tests with **Testcontainers** for MongoDB and Pulsar
   (`org.testcontainers:mongodb`, `org.testcontainers:pulsar`): at least one test that creates a bridge
   and observes a message arriving on every destination. Containers are wired with
-  `@DynamicPropertySource` / `@ServiceConnection`.
+  `@DynamicPropertySource` / `@ServiceConnection`. They are classes named `*IT`, run by failsafe in
+  `mvn verify`, against `CatacumbasContainers` from catacommons' test-jar (decision 91). Locally they need a
+  container engine: with Podman, see catacommons' README.
 - **TEST-4 [SHOULD]** A Playwright smoke test for the UI with the API mocked: load page, open a topic,
   open Bridges, create a bridge, go back to a topic, and fail on any console error.
 - **TEST-5 [MUST]** `mvn verify` passes before a change is considered done. The developer runs it on
@@ -714,7 +716,7 @@ The code does not yet follow every rule. Agents fixing a gap remove it here in t
 
 | ID | Service | Gap | Rule |
 |---|---|---|---|
-| G-6 | all | No Testcontainers integration tests (unit and slice tests exist) | TEST-3 |
+| G-6 | Catavigia, Cataudit, Catametricas, Catapulsar | No Testcontainers integration tests yet (Cataponte has its bridge test; unit and slice tests exist) | TEST-3 |
 | G-11 | Catapulsar | No Playwright UI smoke test in the build | TEST-4 |
 | G-17 | Catapulsar | No ESLint, Stylelint, html-validate or Prettier for the static UI | HTML-5, JS-6, CSS-6 |
 | G-18 | Catapulsar | JSDoc missing on most `catapulsar.js` methods | JS-4 |
@@ -736,6 +738,8 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-12, integration tests, step 1** (decision 91): Testcontainers and failsafe, `CatacumbasContainers`
+  in catacommons' test-jar, Cataponte's `BridgeForwardingIT`.
 - **2026-11-11, monitoring on MicroShift** (decision 90): kube-prometheus-stack in `microshift/apps/monitoring/`
   with the five apps, Pulsar, cAdvisor, kube-state-metrics and node-exporter, and our dashboards for the apps and
   for meloes.
@@ -1192,3 +1196,15 @@ Monitoring on MicroShift (2026-11-11):
     StreamNative's Pulsar broker, topic and messaging dashboards, and JVM (Micrometer) and Spring Boot 3 from
     grafana.com. The SCCs are RoleBindings in git: `nonroot-v2` for the namespace, `privileged` only for the
     node-exporter. Loki and OpenMetrics exemplars can come later without changing this choice.
+
+Integration tests (2026-11-12, first step of G-6):
+
+91. **Testcontainers** in `mvn verify`: classes named `*IT` run by **failsafe** after the unit tests, against
+    real **Pulsar 4.2.2** and **MongoDB 7.0** (single-member replica set), the versions of meloes. One Pulsar and
+    one MongoDB per test JVM, so **per module**, started once by `CatacumbasContainers` (catacommons' test-jar)
+    and shared by every test class; each test uses topics and names of its own, and each app a database
+    `it_<app>`. `CatacumbasContainers.register(registry, "<app>")` points `<app>.pulsar.*` and
+    `spring.data.mongodb.uri` at them. The critical flows first: Cataponte's bridge relaying messages with keys
+    and properties (`BridgeForwardingIT`), then Catavigia opening and closing an alert and Cataudit storing an
+    event; the other apps afterwards. The CI runs them (GitHub's runners have Docker); locally they need Docker
+    or Podman.

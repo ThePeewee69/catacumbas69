@@ -124,7 +124,10 @@ build/push.sh cataponte   # image for MicroShift (Podman, linux/amd64), pushed, 
 
 Deploying to MicroShift (registry, ArgoCD, MongoDB Secret): [`microshift/apps/catacumbas69-apps/README.md`](../../microshift/apps/catacumbas69-apps/README.md).
 
-Unit tests need no Docker, MongoDB or Pulsar.
+Unit tests need no Docker, MongoDB or Pulsar. The integration tests (`*IT`, run by failsafe in `mvn verify`)
+start a real Pulsar and MongoDB with Testcontainers: `BridgeForwardingIT` creates a bridge through the API and
+checks that 20 messages arrive on the destination with their keys and properties. Locally they need Docker or
+Podman: see [catacommons' README](../catacommons/README.md#integration-tests-catacumbascontainers).
 
 ## API
 

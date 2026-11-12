@@ -71,3 +71,47 @@ cd apps
 mvn clean install            # catacommons first, then every app
 mvn -pl catacommons verify   # the library alone: unit tests + Checkstyle
 ```
+
+## Integration tests (`CatacumbasContainers`)
+
+The test-jar of catacommons carries `com.catacumbas69.catacommons.test.CatacumbasContainers`: the real Pulsar
+(4.2.2) and MongoDB (7.0, replica set) that every app's integration tests run against (orch.md TEST-3,
+decision 91). One of each per test JVM, started on first use and shared by every `*IT` class of the module:
+
+```java
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+class SomethingIT {
+
+    @DynamicPropertySource
+    static void containers(DynamicPropertyRegistry registry) {
+        CatacumbasContainers.register(registry, "cataponte");   // <app>.pulsar.*, spring.data.mongodb.uri
+    }
+}
+```
+
+`pulsarClient()`, `pulsarAdmin()` and `mongoUri(database)` give the test its own clients. An app uses it with
+the dependency `com.catacumbas69:catacommons` of type `test-jar`, scope `test`, plus `org.testcontainers:pulsar`
+(which brings Testcontainers itself) and the failsafe plugin (see Cataponte's `pom.xml`); the MongoDB driver comes
+with `spring-boot-starter-data-mongodb`. MongoDB is a plain `mongo:7.0` container started with `--replSet`, and
+the replica set is initiated through the driver: Testcontainers' `MongoDBContainer` does it with `docker exec`,
+which fails through Podman's API on the Mac.
+
+**Locally they need a container engine.** On necromancer (Podman Desktop, machine `Catacumbas69`), once:
+
+1. Tell Testcontainers where Podman's socket is, in `~/.testcontainers.properties` (read by Maven and IntelliJ):
+   ```
+   printf 'docker.host=unix://%s\n' "$(podman machine inspect Catacumbas69 --format '{{.ConnectionInfo.PodmanSocket.Path}}')" > ~/.testcontainers.properties
+   ```
+2. Turn off Ryuk, Testcontainers' cleanup container: it mounts the Docker socket by its path on the Mac, which
+   does not exist inside Podman's machine (`mkdir …Catacumbas69-api.sock: operation not supported`). Only the
+   environment variable turns it off, so in `~/.zshrc`:
+   ```
+   export TESTCONTAINERS_RYUK_DISABLED=true
+   ```
+   and in IntelliJ, in **Run → Edit Configurations… → Edit configuration templates… → JUnit**, add
+   `TESTCONTAINERS_RYUK_DISABLED=true` to *Environment variables*.
+
+Without Ryuk, `CatacumbasContainers` stops the containers itself when the test JVM ends (a shutdown hook); only
+a killed JVM leaves them behind, and `podman ps -a` shows them.
+The CI keeps Ryuk (GitHub's runners have Docker). The first run downloads the two images (about 1 GB for
+Pulsar).
