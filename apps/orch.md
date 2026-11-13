@@ -738,7 +738,8 @@ Closed on 2026-10-30:
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
 - **2026-11-13, resources on meloes** (decision 92): the apps' startup probe allows 5 minutes and every probe
-  has a 3 s timeout; Grafana may use 1 Gi with `GOMEMLIMIT`; the Pulsar Manager is limited to 1 Gi.
+  has a 3 s timeout; Grafana may use 1 Gi with `GOMEMLIMIT`; the Pulsar Manager is limited to 1 Gi, with a fixed
+  `-Xmx512m` because its Java 8 does not see cgroup v2 limits.
 - **2026-11-13, integration tests, step 3** (G-6 closed; decision 91): Catametricas' `ForcedCollectionIT` (a
   known backlog read by a forced collection and served by the subscription and topic APIs) and Catapulsar's
   `CatapulsarApiIT` (topic, subscription, produce and peek through the UI's API, clear a backlog, an alert
@@ -1230,6 +1231,9 @@ Resources after the reboot of 2026-11-12 (2026-11-13):
     **3 s timeout** (was 1 s). **Grafana** stopped answering near its 512 Mi limit and was killed (exit 137): it
     now asks for 256 Mi, may use **1 Gi**, and `GOMEMLIMIT=800MiB` makes Go's garbage collector stop below the
     limit. The **Pulsar Manager**, little used, had no limit and reached 1.6 GiB (its one Java 8 JVM took ¼ of the
-    node): it asks for 10m CPU and 384 Mi, may use **1 Gi**, and `JAVA_TOOL_OPTIONS` keeps its heap at 50 % with
-    exit on `OutOfMemoryError`, as for the apps (decision 89). Requests are always written out: with limits
+    node): it asks for 10m CPU and 384 Mi and may use **1 Gi**. Its Java 8 does not read cgroup v2 limits (only
+    from 8u372), so a percentage would be of the node's 15 GiB (`MaxHeapSize` measured at 7.5 GiB):
+    `JAVA_TOOL_OPTIONS` fixes the heap at `-Xmx512m` and direct memory at 256 MiB, with exit on
+    `OutOfMemoryError`. The apps run Java 21, which reads the limit (decision 89). Requests are always written
+    out: with limits
     only, Kubernetes copies them into the requests and the node's CPU, 97 % requested, would run out.
