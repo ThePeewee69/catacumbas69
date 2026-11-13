@@ -739,6 +739,8 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-13, UI started once**: `index.html` no longer has `x-init="init()"` on `<body>`. Alpine already calls
+  the component's `init()`, so it ran twice: every first request went out twice and the alert badge had two timers.
 - **2026-11-13, UI smoke test** (G-11 closed; decision 93): Catapulsar's `CatapulsarUiIT` opens the UI in a
   headless Google Chrome with the API mocked, opens a topic, creates a bridge and goes back to the topic; it fails
   on a call without a fixture, a console error or warning, an uncaught exception or a failed request.
