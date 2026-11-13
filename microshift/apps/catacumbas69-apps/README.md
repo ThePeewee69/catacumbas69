@@ -20,7 +20,7 @@ git commit + push ──▶ GitHub ──▶ ArgoCD (manual Sync) ──▶ ns c
 | `microshift/apps/registry/` | The image registry: `registry:2.8.3`, 20 Gi PVC (`topolvm-provisioner`), Route `registry.catacumbas69.com`, HTTP without authentication (home network only) |
 | `microshift/apps/catacumbas69-apps/<app>/` | Per app: ConfigMap, Deployment, Service, Route and a `kustomization.yaml` holding the image tag |
 | `microshift/apps/mongodb/mongodb-cluster.yaml` | The MongoDB ReplicaSet, with the user `catacumbas69-apps` (read and write on `catacumbas69` only) |
-| `microshift/argocd/` | One ArgoCD Application per app and one for the registry. No automated sync: Sync by hand in the UI |
+| `microshift/argocd/` | One ArgoCD Application per app and one for the registry and the monitoring, with no automated sync: Sync by hand in the UI. Also `pulsar`, `mongodb` (the operator's chart) and `mongodb-cluster`, which sync **on their own** (prune, selfHeal): change those folders in git, then Refresh; an `oc apply` by hand is undone |
 | `apps/build/push.sh` | Builds an image with Podman (linux/amd64), pushes it and writes its tag into the app's `kustomization.yaml` |
 | `apps/build/mongo-secret.sh` | Creates the apps' MongoDB password and copies their connection string into `catacumbas69-apps` |
 

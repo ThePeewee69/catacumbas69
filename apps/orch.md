@@ -737,6 +737,8 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-13, platform Applications in git** (decision 86): `pulsar`, `mongodb` and `mongodb-cluster`, created in
+  the ArgoCD UI, are now in `microshift/argocd/` as they are in the cluster (automated sync, prune, selfHeal).
 - **2026-11-13, resources on meloes** (decision 92): the apps' startup probe allows 5 minutes and every probe
   has a 3 s timeout; Grafana may use 1 Gi with `GOMEMLIMIT`; the Pulsar Manager is limited to 1 Gi, with a fixed
   `-Xmx512m` because its Java 8 does not see cgroup v2 limits.
@@ -1160,6 +1162,11 @@ MicroShift deployment (2026-11-09, closes G-16):
     probe up to 3 min; non-root, `seccomp` RuntimeDefault, no capabilities.
 86. One **ArgoCD Application** per app and one for the registry, in the namespace `argocd`, **synced by hand** in
     the UI (no automated sync), in the start order Cataponte → Cataudit → Catametricas → Catavigia → Catapulsar.
+    The platform's own Applications, created earlier in the UI and kept in `microshift/argocd/` since 2026-11-13
+    as they are in the cluster, sync **automatically** with prune and selfHeal: `pulsar` (`microshift/apps/pulsar`),
+    `mongodb-cluster` (`microshift/apps/mongodb`) and `mongodb` (the `community-operator` chart, `targetRevision`
+    `*`, so it follows the newest chart). A push to `main` in those folders reaches the cluster on its own, and an
+    `oc apply` by hand there is undone within minutes: change git, then Refresh.
 87. **Names, never IPs**, so that moving the homelab to another network (192.168.86.x → 192.168.69.x) only changes
     DNS: the registry and the Routes are `*.catacumbas69.com`, and Pulsar's external listener is advertised as
     `meloes:31650` (`microshift/apps/pulsar/broker-init-script.sh`). Both names must resolve on the Mac and on

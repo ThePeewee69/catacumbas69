@@ -1,0 +1,25 @@
+# ArgoCD Application of Pulsar on meloes: the broker, the Pulsar Manager and the Admin Console
+# (microshift/apps/pulsar). Created in the UI and kept here as it is in the cluster (orch.md decision 86).
+# AUTOMATED sync with prune and selfHeal: a push to main reaches the cluster on its own, and an `oc apply` by
+# hand is undone within minutes. Change the manifests in git, then Refresh.
+# Apply (no-op while the cluster already matches): oc apply -f microshift/argocd/pulsar.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pulsar
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ThePeewee69/catacumbas69
+    targetRevision: main
+    path: microshift/apps/pulsar
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: pulsar
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,25 @@
+# ArgoCD Application of the MongoDB ReplicaSet and its web tools on meloes (microshift/apps/mongodb), run by the
+# operator of the Application mongodb. Created in the UI and kept here as it is in the cluster (orch.md decision
+# 86). AUTOMATED sync with prune and selfHeal: a push to main reaches the cluster on its own, and an `oc apply` by
+# hand is undone within minutes. Change the manifests in git, then Refresh.
+# Apply (no-op while the cluster already matches): oc apply -f microshift/argocd/mongodb-cluster.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mongodb-cluster
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ThePeewee69/catacumbas69
+    targetRevision: main
+    path: microshift/apps/mongodb
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mongodb
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
