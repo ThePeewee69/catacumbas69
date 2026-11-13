@@ -1,0 +1,213 @@
+{
+  "scope": "namespace",
+  "tenant": "public",
+  "namespace": "default",
+  "period": "24h",
+  "stepSeconds": 3600,
+  "times": [
+    "2026-11-13T17:00:00Z",
+    "2026-11-13T18:00:00Z",
+    "2026-11-13T19:00:00Z",
+    "2026-11-13T20:00:00Z"
+  ],
+  "collectedAt": "2026-11-13T20:59:30Z",
+  "intervalSeconds": 30,
+  "summary": {
+    "name": null,
+    "current": {
+      "topics": 3,
+      "partitions": 3,
+      "backlogMsgs": 10,
+      "backlogBytes": 1200,
+      "msgRateIn": 1.5,
+      "msgRateOut": 1.5,
+      "throughputIn": 180.0,
+      "throughputOut": 180.0,
+      "storageSize": 524288,
+      "subscriptions": 3,
+      "producers": 1,
+      "consumers": 2
+    },
+    "period": {
+      "msgsIn": 5400,
+      "msgsOut": 5390,
+      "bytesIn": 648000,
+      "bytesOut": 646800
+    },
+    "total": {
+      "msgsIn": 120000,
+      "msgsOut": 119990,
+      "bytesIn": 14400000,
+      "bytesOut": 14398800
+    },
+    "series": {
+      "msgsIn": [
+        1300,
+        1400,
+        1350,
+        1350
+      ],
+      "msgsOut": [
+        1300,
+        1395,
+        1350,
+        1345
+      ],
+      "backlog": [
+        0,
+        5,
+        0,
+        10
+      ]
+    }
+  },
+  "rows": [
+    {
+      "name": "orders",
+      "current": {
+        "topics": 1,
+        "partitions": 1,
+        "backlogMsgs": 10,
+        "backlogBytes": 1200,
+        "msgRateIn": 1.5,
+        "msgRateOut": 1.5,
+        "throughputIn": 180.0,
+        "throughputOut": 180.0,
+        "storageSize": 524288,
+        "subscriptions": 2,
+        "producers": 1,
+        "consumers": 2
+      },
+      "period": {
+        "msgsIn": 5400,
+        "msgsOut": 5390,
+        "bytesIn": 648000,
+        "bytesOut": 646800
+      },
+      "total": {
+        "msgsIn": 120000,
+        "msgsOut": 119990,
+        "bytesIn": 14400000,
+        "bytesOut": 14398800
+      },
+      "series": {
+        "msgsIn": [
+          1300,
+          1400,
+          1350,
+          1350
+        ],
+        "msgsOut": [
+          1300,
+          1395,
+          1350,
+          1345
+        ],
+        "backlog": [
+          0,
+          5,
+          0,
+          10
+        ]
+      }
+    },
+    {
+      "name": "orders-archive",
+      "current": {
+        "topics": 1,
+        "partitions": 1,
+        "backlogMsgs": 0,
+        "backlogBytes": 0,
+        "msgRateIn": 1.5,
+        "msgRateOut": 1.5,
+        "throughputIn": 180.0,
+        "throughputOut": 180.0,
+        "storageSize": 524288,
+        "subscriptions": 1,
+        "producers": 1,
+        "consumers": 2
+      },
+      "period": {
+        "msgsIn": 5400,
+        "msgsOut": 5390,
+        "bytesIn": 648000,
+        "bytesOut": 646800
+      },
+      "total": {
+        "msgsIn": 120000,
+        "msgsOut": 119990,
+        "bytesIn": 14400000,
+        "bytesOut": 14398800
+      },
+      "series": {
+        "msgsIn": [
+          1300,
+          1400,
+          1350,
+          1350
+        ],
+        "msgsOut": [
+          1300,
+          1395,
+          1350,
+          1345
+        ],
+        "backlog": [
+          0,
+          5,
+          0,
+          10
+        ]
+      }
+    },
+    {
+      "name": "orders-eu",
+      "current": {
+        "topics": 1,
+        "partitions": 1,
+        "backlogMsgs": 0,
+        "backlogBytes": 0,
+        "msgRateIn": 1.5,
+        "msgRateOut": 1.5,
+        "throughputIn": 180.0,
+        "throughputOut": 180.0,
+        "storageSize": 524288,
+        "subscriptions": 0,
+        "producers": 1,
+        "consumers": 2
+      },
+      "period": {
+        "msgsIn": 5400,
+        "msgsOut": 5390,
+        "bytesIn": 648000,
+        "bytesOut": 646800
+      },
+      "total": {
+        "msgsIn": 120000,
+        "msgsOut": 119990,
+        "bytesIn": 14400000,
+        "bytesOut": 14398800
+      },
+      "series": {
+        "msgsIn": [
+          1300,
+          1400,
+          1350,
+          1350
+        ],
+        "msgsOut": [
+          1300,
+          1395,
+          1350,
+          1345
+        ],
+        "backlog": [
+          0,
+          5,
+          0,
+          10
+        ]
+      }
+    }
+  ]
+}

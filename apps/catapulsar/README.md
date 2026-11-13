@@ -140,6 +140,40 @@ subscription through the API, produces a message and peeks it with its key and p
 changes an alert threshold, which must be saved in MongoDB and published on the settings topic. Locally they
 need Docker or Podman: see [catacommons' README](../catacommons/README.md#integration-tests-catacumbascontainers).
 
+### UI smoke test (`CatapulsarUiIT`)
+
+`CatapulsarUiIT` (TEST-4, [orch.md decision 93](../orch.md)) opens the UI in the installed Google Chrome, headless,
+with [Playwright for Java](https://playwright.dev/java/): it loads the page, opens the topic `orders` from the tree,
+opens Bridges, creates a bridge from `orders` to `orders-eu`, checks what was sent to `POST /api/v1/bridges`, and
+goes back to the topic, where the new bridge's subscription is shown. It needs no Docker and no server: Playwright's
+`route()` answers every request of the page.
+
+| Request | Answered with |
+|---|---|
+| `/`, `/catapulsar.js`, `/catapulsar.css`… | `static/` on the classpath (`target/classes`) |
+| Alpine on cdnjs | the `org.webjars.npm:alpinejs` webjar; `alpinejs.version` in the pom must match `index.html` |
+| `/api/**` | a JSON file in `src/test/resources/ui-smoke/`, mapped in `mockApi()` |
+| anything else | aborted, and the test fails |
+
+The test fails on an `/api` call without a fixture (answered 501), a console error or warning, an uncaught
+exception or a failed request. When it fails it keeps in `target/ui-smoke/` a screenshot, the list of those
+problems, and a Playwright trace: open it with
+`mvn exec:java -Dexec.classpathScope=test -Dexec.mainClass=com.microsoft.playwright.CLI
+-Dexec.args="show-trace target/ui-smoke/<test>-trace.zip"` from `apps/catapulsar`, or drop it on
+<https://trace.playwright.dev>.
+
+- **Google Chrome must be installed** (`/Applications/Google Chrome.app` on macOS, `/opt/google/chrome` on Linux;
+  GitHub's runners have it). The test uses it (`channel=chrome`) and downloads no browser: Playwright no longer
+  ships a browser for macOS 13 (no Chromium since 1.62), but Google's Chrome still runs there.
+- **Changing the UI**: the elements the test uses have a `data-testid` (`tree-topic`, `bridges-open`,
+  `bridge-form-save`, `sub-row`, `toast`…). Keep them when you change the markup; a change of label does not break
+  the test.
+- **A new call on the page**: if a step now calls another endpoint, add its JSON to `ui-smoke/` and a line to
+  `mockApi()`. A fixture can be copied from the real API (`curl http://localhost:8081/api/v1/...`).
+- **Run only this test**: from `apps/`,
+  `mvn -pl catapulsar -am verify -Dit.test=CatapulsarUiIT -Dtest=none -Dsurefire.failIfNoSpecifiedTests=false`,
+  or run the class from IntelliJ (it does not need the `TESTCONTAINERS_*` variables).
+
 Static files are versioned (`catapulsar.js?v=N`, `catapulsar.css?v=N`); bump `N` in `index.html` whenever you
 change them (UI-2). The server sends `Cache-Control: no-cache`.
 

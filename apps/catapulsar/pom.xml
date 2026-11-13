@@ -27,6 +27,10 @@
         <springdoc.version>2.8.9</springdoc.version>
         <maven-checkstyle-plugin.version>3.5.0</maven-checkstyle-plugin.version>
         <checkstyle.version>10.18.2</checkstyle.version>
+        <!-- TEST-4: the UI smoke test (CatapulsarUiIT, orch.md decision 93) -->
+        <playwright.version>1.63.0</playwright.version>
+        <!-- Same Alpine as the cdnjs URL in index.html: CatapulsarUiIT fails, naming both, when they differ -->
+        <alpinejs.version>3.14.8</alpinejs.version>
     </properties>
 
     <dependencies>
@@ -96,6 +100,26 @@
             <artifactId>pulsar</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- TEST-4: the UI in a headless Chromium with the API mocked (CatapulsarUiIT, orch.md decision 93) -->
+        <dependency>
+            <groupId>com.microsoft.playwright</groupId>
+            <artifactId>playwright</artifactId>
+            <version>${playwright.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Alpine for that test, served in place of cdnjs; cdn.min.js bundles its own dependencies -->
+        <dependency>
+            <groupId>org.webjars.npm</groupId>
+            <artifactId>alpinejs</artifactId>
+            <version>${alpinejs.version}</version>
+            <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
     </dependencies>
 
     <build>
@@ -104,7 +128,8 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
-            <!-- TEST-3: the *IT classes run against real Pulsar and MongoDB in mvn verify (orch.md decision 91) -->
+            <!-- TEST-3: the *IT classes run against real Pulsar and MongoDB in mvn verify (orch.md decision 91);
+                 TEST-4: CatapulsarUiIT runs here too, in a headless Chromium (decision 93) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>

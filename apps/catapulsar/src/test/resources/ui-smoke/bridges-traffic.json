@@ -1,0 +1,22 @@
+[
+  {
+    "bridgeId": "6734a1f0c2b1a10001000001",
+    "bridgeName": "orders-archive",
+    "role": "SOURCE",
+    "topic": "persistent://public/default/orders",
+    "messages": 5400,
+    "bytes": 648000,
+    "firstAt": "2026-11-10T10:00:00Z",
+    "lastAt": "2026-11-13T20:59:00Z"
+  },
+  {
+    "bridgeId": "6734a1f0c2b1a10001000001",
+    "bridgeName": "orders-archive",
+    "role": "DESTINATION",
+    "topic": "persistent://public/default/orders-archive",
+    "messages": 5400,
+    "bytes": 648000,
+    "firstAt": "2026-11-10T10:00:00Z",
+    "lastAt": "2026-11-13T20:59:00Z"
+  }
+]

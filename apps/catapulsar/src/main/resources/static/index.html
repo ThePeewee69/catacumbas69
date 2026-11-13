@@ -9,7 +9,7 @@
 <script src="/catapulsar.js?v=28" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
 </head>
-<body x-data="app()" x-init="init()">
+<body x-data="app()">
 
 <!-- ══ Settings overlay ════════════════════════════════════════════════════ -->
 <template x-if="settings.open">
@@ -323,7 +323,7 @@
 <!-- ══ Bridge form modal ══════════════════════════════════════════════════ -->
 <template x-if="bridges.form !== null">
   <div class="overlay" @click.self="closeBridgeForm()">
-    <div class="bridge-form-box">
+    <div class="bridge-form-box" data-testid="bridge-form">
       <div class="settings-title">
         <span x-text="bridges.form && bridges.form.id ? '✏️ Edit Bridge' : '⇌ New Bridge'"></span>
         <button class="close-btn" @click="closeBridgeForm()">✕</button>
@@ -332,7 +332,7 @@
       <div class="form-row">
         <div class="field">
           <label>Name *</label>
-          <input type="text" x-model="bridges.form.name" placeholder="e.g. orders-to-dlq" x-name-chars="cataponte" title="Spaces and other characters a name cannot have become &quot;-&quot; as you type"
+          <input type="text" x-model="bridges.form.name" data-testid="bridge-form-name" placeholder="e.g. orders-to-dlq" x-name-chars="cataponte" title="Spaces and other characters a name cannot have become &quot;-&quot; as you type"
                  @input="onBridgeNameInput()" @keydown.enter="saveBridge()">
         </div>
         <div class="field">
@@ -379,7 +379,8 @@
             <div class="sub-picker-empty">no topics found</div>
           </template>
           <template x-for="t in filteredTopics(bridges.srcFilter, bridges.form.destinations.map(d => d.topic))" :key="t">
-            <div class="sub-picker-item" :class="{ selected: bridges.form.source.topic === t }"
+            <div class="sub-picker-item" data-testid="bridge-form-source-topic"
+                 :class="{ selected: bridges.form.source.topic === t }"
                  @click="bridges.form.source.topic = t" :title="t" x-text="t"></div>
           </template>
         </div>
@@ -425,7 +426,8 @@
             <div class="sub-picker-empty">no topics found</div>
           </template>
           <template x-for="t in filteredTopics(bridges.dstFilter, bridges.form.source.topic)" :key="t">
-            <div class="sub-picker-item topic-multi-item" :class="{ selected: isDestSelected(t) }"
+            <div class="sub-picker-item topic-multi-item" data-testid="bridge-form-dest-topic"
+                 :class="{ selected: isDestSelected(t) }"
                  @click="toggleDestination(t)" :title="t">
               <span class="topic-check" x-text="isDestSelected(t) ? '✓' : ''"></span>
               <span class="topic-multi-name" x-text="t"></span>
@@ -460,7 +462,7 @@
       <div class="divider"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
         <button class="btn btn-secondary" @click="closeBridgeForm()">Cancel</button>
-        <button class="btn btn-primary" @click="saveBridge()"
+        <button class="btn btn-primary" data-testid="bridge-form-save" @click="saveBridge()"
                 :disabled="!bridgeFormValid() || bridges.formSaving">
           <template x-if="bridges.formSaving"><span class="spinner"></span></template>
           Save Bridge
@@ -589,7 +591,7 @@
 
     <template x-for="tenant in tenants" :key="tenant">
       <div class="tree-section">
-        <div class="tree-item" :class="{active: sel.tenant===tenant && !sel.namespace}"
+        <div class="tree-item" data-testid="tree-tenant" :class="{active: sel.tenant===tenant && !sel.namespace}"
              :aria-expanded="isTreeOpen(tenant)"
              :title="sel.tenant===tenant && !sel.namespace ? 'Click again to ' + (isTreeOpen(tenant) ? 'close' : 'open') : ''"
              @click="clickTreeTenant(tenant)">
@@ -601,7 +603,7 @@
           <div>
             <template x-for="ns in treeNamespaces(tenant)" :key="ns">
               <div class="tree-section">
-                <div class="tree-item tree-indent1"
+                <div class="tree-item tree-indent1" data-testid="tree-namespace"
                      :class="{active: sel.tenant===tenant && sel.namespace===ns && !sel.topic}"
                      :aria-expanded="isTreeOpen(tenant + '/' + ns)"
                      @click="clickTreeNamespace(tenant, ns)">
@@ -612,7 +614,7 @@
                 <template x-if="isTreeOpen(tenant + '/' + ns)">
                   <div>
                     <template x-for="topic in treeTopics(tenant, ns)" :key="topic">
-                      <div class="tree-item tree-indent2"
+                      <div class="tree-item tree-indent2" data-testid="tree-topic"
                            :class="{active: sel.tenant===tenant && sel.namespace===ns && sel.topic===topic}"
                            @click="clickTreeTopic(tenant, ns, topic)">
                         <span class="icon">📨</span>
@@ -707,7 +709,7 @@
     </div>
 
     <button class="btn btn-secondary" style="font-size:12px;" @click="reload()">↺ Refresh</button>
-    <button class="btn btn-ghost bridges-btn" :class="{'active': bridgesView}"
+    <button class="btn btn-ghost bridges-btn" data-testid="bridges-open" :class="{'active': bridgesView}"
             @click="bridgesView ? closeBridges() : openBridges()" title="Cataponte Bridges">
       <svg viewBox="0 0 32 32" style="width:14px;height:14px;flex-shrink:0;">
         <rect x="1" y="9" width="9" height="14" rx="2.5" fill="#4f46e5"/>
@@ -1302,7 +1304,7 @@
             <button class="btn btn-ghost" style="font-size:12px;"
                     @click="loadBridges();loadBridgeStatus()" title="Refresh">↺</button>
             <template x-if="bridges.tab !== 'system'">
-              <button class="btn btn-primary" style="font-size:12px;" @click="openNewBridge()"
+              <button class="btn btn-primary" style="font-size:12px;" data-testid="bridge-new" @click="openNewBridge()"
                       :title="currentArea() ? 'New bridge in area ' + currentArea().name : 'New bridge without an area'">+ New Bridge</button>
             </template>
           </div>
@@ -1312,7 +1314,8 @@
         <div class="bridge-tabs-row">
           <div class="tabs bridge-tabs" role="tablist" aria-label="Bridge groups">
             <template x-for="t in bridgeTabs()" :key="t.key">
-              <button type="button" role="tab" class="tab" :class="{ active: bridges.tab === t.key }"
+              <button type="button" role="tab" class="tab" data-testid="bridge-tab"
+                      :class="{ active: bridges.tab === t.key }"
                       :aria-selected="bridges.tab === t.key" @click="selectBridgeTab(t.key)">
                 <span x-text="t.label"></span>
                 <span class="tab-count" x-text="t.count"></span>
@@ -1376,7 +1379,7 @@
 
             <!-- Bridge cards -->
             <template x-for="bridge in tabBridges()" :key="bridge.id">
-              <div class="bridge-card" :id="'bridge-card-' + bridge.id"
+              <div class="bridge-card" data-testid="bridge-card" :id="'bridge-card-' + bridge.id"
                    :class="{'bridge-disabled': !bridge.enabled, 'bridge-highlight': bridges.highlight === bridge.id}">
                 <div class="bridge-card-header">
                   <div class="bridge-status-dot"
@@ -1508,7 +1511,7 @@
       <section class="overview" aria-labelledby="overview-title">
         <header class="overview-head">
           <div>
-            <h2 id="overview-title" x-text="overviewTitle()"></h2>
+            <h2 id="overview-title" data-testid="overview-title" x-text="overviewTitle()"></h2>
             <p class="muted overview-fresh" x-text="overviewFreshness()"></p>
           </div>
           <div class="overview-controls">
@@ -1775,11 +1778,12 @@
                         </thead>
                         <template x-for="[name, sub] in Object.entries(stats.subscriptions)" :key="name">
                           <tbody>
-                            <tr :id="'sub-row-' + name">
+                            <tr data-testid="sub-row" :id="'sub-row-' + name">
                               <td>
                                 <span class="mono" x-text="name"></span>
                                 <template x-if="bridgeForSub(name)">
-                                  <button type="button" class="sub-bridge" @click="openBridgeOf(bridgeForSub(name))"
+                                  <button type="button" class="sub-bridge" data-testid="sub-bridge"
+                                          @click="openBridgeOf(bridgeForSub(name))"
                                           :title="'Open bridge ' + bridgeForSub(name).name + ' in the Bridges panel'">
                                     <span class="tag tag-orange">bridge</span>
                                     <span class="sub-bridge-name" x-text="bridgeForSub(name).name"></span>
@@ -2156,7 +2160,7 @@
 </div>
 
 <!-- ══ Toast ════════════════════════════════════════════════════════════════ -->
-<div x-show="toast.msg" x-transition class="toast"
+<div x-show="toast.msg" x-transition class="toast" data-testid="toast"
      :class="toast.type==='error' ? 'toast-error' : 'toast-success'">
   <span x-text="toast.type==='error' ? '✕' : '✓'"></span>
   <span x-text="toast.msg"></span>

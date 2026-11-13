@@ -1,0 +1,86 @@
+{
+  "msgRateIn": 1.5,
+  "msgThroughputIn": 180.0,
+  "msgRateOut": 3.0,
+  "msgThroughputOut": 360.0,
+  "msgInCounter": 120000,
+  "bytesInCounter": 14400000,
+  "msgOutCounter": 239980,
+  "bytesOutCounter": 28797600,
+  "averageMsgSize": 120.0,
+  "storageSize": 524288,
+  "backlogSize": 1200,
+  "offloadedStorageSize": 0,
+  "publishers": [
+    {
+      "producerName": "standalone-0-1",
+      "msgRateIn": 1.5,
+      "msgThroughputIn": 180.0,
+      "averageMsgSize": 120.0,
+      "address": "/10.42.0.30:41234",
+      "connectedSince": "2026-11-13T18:00:00Z"
+    }
+  ],
+  "waitingPublishers": 0,
+  "subscriptions": {
+    "orders-worker": {
+      "msgRateOut": 1.5,
+      "msgThroughputOut": 180.0,
+      "msgBacklog": 10,
+      "backlogSize": 1200,
+      "unackedMessages": 0,
+      "type": "Shared",
+      "msgRateExpired": 0.0,
+      "isDurable": true,
+      "isReplicated": false,
+      "consumers": [
+        {
+          "consumerName": "orders-worker-1",
+          "msgRateOut": 1.5,
+          "msgThroughputOut": 180.0,
+          "unackedMessages": 0,
+          "availablePermits": 990,
+          "address": "/10.42.0.31:50000",
+          "connectedSince": "2026-11-13T18:00:00Z"
+        }
+      ]
+    },
+    "cataponte-orders-archive": {
+      "msgRateOut": 1.5,
+      "msgThroughputOut": 180.0,
+      "msgBacklog": 0,
+      "backlogSize": 0,
+      "unackedMessages": 0,
+      "type": "Failover",
+      "msgRateExpired": 0.0,
+      "isDurable": true,
+      "isReplicated": false,
+      "consumers": [
+        {
+          "consumerName": "cataponte-0",
+          "msgRateOut": 1.5,
+          "msgThroughputOut": 180.0,
+          "unackedMessages": 0,
+          "availablePermits": 990,
+          "address": "/10.42.0.31:50000",
+          "connectedSince": "2026-11-13T18:00:00Z"
+        }
+      ]
+    },
+    "cataponte-orders-to-eu": {
+      "msgRateOut": 1.5,
+      "msgThroughputOut": 180.0,
+      "msgBacklog": 0,
+      "backlogSize": 0,
+      "unackedMessages": 0,
+      "type": "Failover",
+      "msgRateExpired": 0.0,
+      "isDurable": true,
+      "isReplicated": false,
+      "consumers": []
+    }
+  },
+  "replication": {},
+  "deduplicationStatus": "Disabled",
+  "topicEpoch": 0
+}

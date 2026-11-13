@@ -1,0 +1,29 @@
+[
+  {
+    "id": "6734a1f0c2b1a10001000001",
+    "name": "orders-archive",
+    "description": "Copies orders to the archive",
+    "enabled": true,
+    "source": {
+      "topic": "persistent://public/default/orders",
+      "subscription": "cataponte-orders-archive",
+      "subscriptionType": "Failover"
+    },
+    "destinations": [
+      {
+        "topic": "persistent://public/default/orders-archive"
+      }
+    ],
+    "preserveKey": true,
+    "preserveProperties": true,
+    "ordered": true,
+    "maxInFlight": 1000,
+    "system": false,
+    "areaId": null,
+    "outsideArea": false,
+    "outsideTopics": [],
+    "version": 1,
+    "createdAt": "2026-11-10T10:00:00Z",
+    "updatedAt": "2026-11-10T10:00:00Z"
+  }
+]

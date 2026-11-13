@@ -586,7 +586,10 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
   `mvn verify`, against `CatacumbasContainers` from catacommons' test-jar (decision 91). Locally they need a
   container engine: with Podman, see catacommons' README.
 - **TEST-4 [SHOULD]** A Playwright smoke test for the UI with the API mocked: load page, open a topic,
-  open Bridges, create a bridge, go back to a topic, and fail on any console error.
+  open Bridges, create a bridge, go back to a topic, and fail on any console error. It is Catapulsar's
+  `CatapulsarUiIT` (decision 93), run by failsafe in `mvn verify`; its fixtures are in
+  `src/test/resources/ui-smoke/`. Elements it uses carry a `data-testid` (kebab-case, by zone: `tree-topic`,
+  `bridge-form-save`…): keep them when the markup changes.
 - **TEST-5 [MUST]** `mvn verify` passes before a change is considered done. The developer runs it on
   `necromancer`, and GitHub Actions runs it again on every push to `main` and every pull request that changes
   `apps/` (workflow `apps`, decision 88). Tests MUST NOT depend on the NUC or any shared environment.
@@ -716,7 +719,6 @@ The code does not yet follow every rule. Agents fixing a gap remove it here in t
 
 | ID | Service | Gap | Rule |
 |---|---|---|---|
-| G-11 | Catapulsar | No Playwright UI smoke test in the build | TEST-4 |
 | G-17 | Catapulsar | No ESLint, Stylelint, html-validate or Prettier for the static UI | HTML-5, JS-6, CSS-6 |
 | G-18 | Catapulsar | JSDoc missing on most `catapulsar.js` methods | JS-4 |
 | G-20 | Catapulsar | Clickable `<div>`s in the sidebar tree and pickers; many inline `style=""`; modals without `role="dialog"`; decorative SVGs without `aria-hidden` | HTML-1, HTML-2, HTML-4 |
@@ -737,6 +739,10 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-13, UI smoke test** (G-11 closed; decision 93): Catapulsar's `CatapulsarUiIT` opens the UI in a
+  headless Google Chrome with the API mocked, opens a topic, creates a bridge and goes back to the topic; it fails
+  on a call without a fixture, a console error or warning, an uncaught exception or a failed request.
+  `data-testid` on the elements it uses.
 - **2026-11-13, app of apps** (decision 86): the root Application `microshift` (`microshift/bootstrap/`) applies
   every file in `microshift/argocd/` on its own (prune, selfHeal); the apps' Applications stay manual.
 - **2026-11-13, platform Applications in git** (decision 86): `pulsar`, `mongodb` and `mongodb-cluster`, created in
@@ -833,7 +839,8 @@ Closed on 2026-10-30:
 
 1. **UI conventions** — G-17, G-18, G-20: frontend lint tooling, JSDoc, semantic and accessible markup,
    inline styles moved to CSS.
-2. **Tests** — G-11: Playwright smoke test. G-6 done: Testcontainers integration tests in every app (decision 91).
+2. **Tests** — done: Testcontainers integration tests in every app (G-6, decision 91) and the Playwright smoke
+   test of the UI (G-11, decision 93).
 3. **Delivery** — done: MicroShift manifests (decisions 81–87) and CI (decision 88). The frontend linters of
    G-17 join the CI once `mvn verify` runs them.
 
@@ -1181,19 +1188,19 @@ MicroShift deployment (2026-11-09, closes G-16):
 
 CI (2026-11-11, closes G-21):
 
-88. **GitHub Actions** on GitHub's runners (the repository is public, so they cost nothing), with three
-    workflows that run on pushes to `main` and on pull requests, each only when its files change: **`apps`**
-    (`mvn -B verify` of the reactor in `apps/`, Java 21 Temurin, Maven cache; the surefire and Checkstyle
-    reports are kept 7 days when it fails; Markdown changes do not trigger it), **`manifests`** (every folder of
-    `microshift/` with a `kustomization.yaml` is built with kustomize, every other YAML file is read as it is, and
-    kubeconform `-strict` checks each resource against Kubernetes 1.35, the CRDs-catalog for ArgoCD and the
-    MongoDB operator, and the **Route schema generated from openshift/api** into `.github/kubeconform/`) and
-    **`scripts`** (shellcheck on every `*.sh`). Actions are **pinned by commit SHA** and **Dependabot** updates
-    them weekly; kustomize and kubeconform are downloaded with their checksums checked. Every step that runs
-    something is a **script in `.github/scripts/`** (`apps-verify.sh`, `install-manifest-tools.sh`,
-    `validate-manifests.sh`, `shellcheck.sh`), so the YAML holds no logic and each check also runs by hand
-    outside the CI. No images are built or pushed: the registry is only reachable at home, so
-    `apps/build/push.sh` stays manual.
+88. **GitHub Actions** on GitHub's runners (the repository is public, so they cost nothing), with three workflows
+    that run on pushes to `main` and on pull requests, each only when its files change: **`apps`** (`mvn -B verify`
+    of the reactor in `apps/`, Java 21 Temurin, Maven cache; the surefire, failsafe and Checkstyle reports, and the
+    UI smoke test's trace and screenshot, are kept 7 days when it fails; Markdown changes do not trigger it),
+    **`manifests`** (every folder of `microshift/` with a `kustomization.yaml` is built with kustomize, every other
+    YAML file is read as it is, and kubeconform `-strict` checks each resource against Kubernetes 1.35, the
+    CRDs-catalog for ArgoCD and the MongoDB operator, and the **Route schema generated from openshift/api** into
+    `.github/kubeconform/`) and **`scripts`** (shellcheck on every `*.sh`). Actions are **pinned by commit SHA** and
+    **Dependabot** updates them weekly; kustomize and kubeconform are downloaded with their checksums checked. Every
+    step that runs something is a **script in `.github/scripts/`** (`apps-verify.sh`, `install-manifest-tools.sh`,
+    `validate-manifests.sh`, `shellcheck.sh`), so the YAML holds no logic and each check also runs by hand outside
+    the CI. No images are built or pushed: the registry is only reachable at home, so `apps/build/push.sh` stays
+    manual.
 
 JVM memory (2026-11-11):
 
@@ -1251,3 +1258,21 @@ Resources after the reboot of 2026-11-12 (2026-11-13):
     `OutOfMemoryError`. The apps run Java 21, which reads the limit (decision 89). Requests are always written
     out: with limits
     only, Kubernetes copies them into the requests and the node's CPU, 97 % requested, would run out.
+
+UI smoke test (2026-11-13, G-11):
+
+93. **Playwright for Java 1.63.0** in Catapulsar's `mvn verify`: `CatapulsarUiIT`, run by failsafe like the other
+    `*IT`, opens the UI in the **installed Google Chrome** (`channel=chrome`), headless, and in no other browser: a
+    smoke test does not need several. Playwright **no longer ships browsers for macOS 13** (no Chromium since 1.62,
+    none at all in 1.63; necromancer is an Intel Mac on macOS 13), but Google's Chrome still runs there, and
+    GitHub's runners have it at `/opt/google/chrome`; so **nothing is downloaded**
+    (`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`, without which `Playwright.create()` would fetch every browser), and the
+    Chrome version is whatever the machine has. **No server runs**: `context.route()` answers every request, the
+    page and its assets from `static/` on the classpath, **Alpine** from the `org.webjars.npm:alpinejs` webjar in
+    place of cdnjs (the test reads the version from `index.html` and fails, naming both, if `alpinejs.version` in
+    the pom differs), and each `/api/**` call from a **JSON file** in `src/test/resources/ui-smoke/`, mapped in
+    `mockApi()`. A call **without a fixture** is answered 501 and fails the test, as do **console errors and
+    warnings**, **uncaught exceptions** and **failed requests**. Auto-refresh is off during the test, so what the
+    page asks for depends only on the steps. Elements are found by **`data-testid`** (kebab-case, by zone), so a
+    label can change without breaking the test. On failure it keeps a **Playwright trace**, a screenshot and the
+    list of problems in `target/ui-smoke/`; the CI keeps them with the reports.

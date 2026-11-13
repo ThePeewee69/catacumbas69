@@ -1,0 +1,27 @@
+{
+  "activeCount": 1,
+  "workers": [
+    {
+      "bridgeId": "6734a1f0c2b1a10001000001",
+      "name": "orders-archive",
+      "state": "RUNNING",
+      "running": true,
+      "messagesForwarded": 5400,
+      "errors": 0,
+      "inFlight": 0,
+      "startedAt": "2026-11-13T18:00:00Z",
+      "sourceTopic": "persistent://public/default/orders",
+      "destinationTopics": [
+        "persistent://public/default/orders-archive"
+      ],
+      "ordered": true,
+      "lastError": null,
+      "nextRetryAt": null,
+      "replicas": 1,
+      "activeReplicas": 1,
+      "problem": null,
+      "stuckMessageId": null,
+      "deadLetterTopic": null
+    }
+  ]
+}
