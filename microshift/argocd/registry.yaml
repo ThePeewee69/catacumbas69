@@ -1,5 +1,5 @@
 # ArgoCD Application of the image registry (orch.md decision 82): manual Sync in the UI.
-# Apply once, on meloes: oc apply -f microshift/argocd/registry.yaml
+# Applied by the root Application microshift (microshift/bootstrap/microshift.yaml): commit and push.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

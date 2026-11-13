@@ -20,7 +20,8 @@ git commit + push ──▶ GitHub ──▶ ArgoCD (manual Sync) ──▶ ns c
 | `microshift/apps/registry/` | The image registry: `registry:2.8.3`, 20 Gi PVC (`topolvm-provisioner`), Route `registry.catacumbas69.com`, HTTP without authentication (home network only) |
 | `microshift/apps/catacumbas69-apps/<app>/` | Per app: ConfigMap, Deployment, Service, Route and a `kustomization.yaml` holding the image tag |
 | `microshift/apps/mongodb/mongodb-cluster.yaml` | The MongoDB ReplicaSet, with the user `catacumbas69-apps` (read and write on `catacumbas69` only) |
-| `microshift/argocd/` | One ArgoCD Application per app and one for the registry and the monitoring, with no automated sync: Sync by hand in the UI. Also `pulsar`, `mongodb` (the operator's chart) and `mongodb-cluster`, which sync **on their own** (prune, selfHeal): change those folders in git, then Refresh; an `oc apply` by hand is undone |
+| `microshift/argocd/` | Applied by the root Application `microshift`: a new or changed file there reaches the cluster with a push, and deleting a file deletes its Application (not what it deployed). One ArgoCD Application per app and one for the registry and the monitoring, with no automated sync: Sync by hand in the UI. Also `pulsar`, `mongodb` (the operator's chart) and `mongodb-cluster`, which sync **on their own** (prune, selfHeal): change those folders in git, then Refresh; an `oc apply` by hand is undone |
+| `microshift/bootstrap/microshift.yaml` | The root Application (app of apps): it reads `microshift/argocd/` with automated sync, prune and selfHeal. Applied once by hand; it does not manage itself |
 | `apps/build/push.sh` | Builds an image with Podman (linux/amd64), pushes it and writes its tag into the app's `kustomization.yaml` |
 | `apps/build/mongo-secret.sh` | Creates the apps' MongoDB password and copies their connection string into `catacumbas69-apps` |
 
@@ -178,9 +179,12 @@ that can never pull (`manifest unknown`). On meloes:
 ```
 git pull
 grep newTag microshift/apps/catacumbas69-apps/*/kustomization.yaml    # no not-built-yet left
-oc apply -f microshift/argocd/cataponte.yaml -f microshift/argocd/cataudit.yaml -f microshift/argocd/catametricas.yaml -f microshift/argocd/catavigia.yaml -f microshift/argocd/catapulsar.yaml
+oc apply -f microshift/bootstrap/microshift.yaml     # once: the root Application, which creates the others
 oc -n catacumbas69-apps get pods -w
 ```
+
+The root Application `microshift` creates every Application in `microshift/argocd/` on its own; the apps' own
+Applications stay manual, so nothing is deployed until you Sync them.
 
 In the ArgoCD UI, **Refresh** then **Sync**, one app at a time in the **start order**: Cataponte → Cataudit →
 Catametricas → Catavigia → Catapulsar, each one once the previous is Healthy. The nine pods end `Running`, `1/1`.

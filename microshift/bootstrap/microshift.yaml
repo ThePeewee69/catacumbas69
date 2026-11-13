@@ -1,0 +1,27 @@
+# The root ArgoCD Application on meloes ("app of apps", orch.md decision 86): it applies every Application in
+# microshift/argocd/, so a new or changed file there reaches the cluster with a push.
+# AUTOMATED sync with prune and selfHeal: deleting a file there deletes its Application, but not what the
+# Application deployed (none of them has the resources-finalizer; do not add it, or deleting a file would delete
+# the app with it). Each Application keeps its own sync policy (the apps stay manual).
+# This file is outside the folder it reads, so the root does not manage itself. Apply once, on meloes:
+#   oc apply -f microshift/bootstrap/microshift.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: microshift
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ThePeewee69/catacumbas69.git
+    targetRevision: main
+    path: microshift/argocd
+    directory:
+      include: "*.yaml"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

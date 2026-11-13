@@ -737,6 +737,8 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-13, app of apps** (decision 86): the root Application `microshift` (`microshift/bootstrap/`) applies
+  every file in `microshift/argocd/` on its own (prune, selfHeal); the apps' Applications stay manual.
 - **2026-11-13, platform Applications in git** (decision 86): `pulsar`, `mongodb` and `mongodb-cluster`, created in
   the ArgoCD UI, are now in `microshift/argocd/` as they are in the cluster (automated sync, prune, selfHeal).
 - **2026-11-13, resources on meloes** (decision 92): the apps' startup probe allows 5 minutes and every probe
@@ -1166,7 +1168,12 @@ MicroShift deployment (2026-11-09, closes G-16):
     as they are in the cluster, sync **automatically** with prune and selfHeal: `pulsar` (`microshift/apps/pulsar`),
     `mongodb-cluster` (`microshift/apps/mongodb`) and `mongodb` (the `community-operator` chart, `targetRevision`
     `*`, so it follows the newest chart). A push to `main` in those folders reaches the cluster on its own, and an
-    `oc apply` by hand there is undone within minutes: change git, then Refresh.
+    `oc apply` by hand there is undone within minutes: change git, then Refresh. Since 2026-11-13 a root Application
+    **`microshift`** ("app of apps", `microshift/bootstrap/microshift.yaml`, applied once by hand and outside the
+    folder it reads, so it does not manage itself) applies every file in `microshift/argocd/` with automated sync,
+    prune and selfHeal: a new or changed Application reaches the cluster with a push, and deleting its file
+    deletes the Application but not what it deployed, because none of them carries the
+    `resources-finalizer.argocd.argoproj.io` (it must not be added). Each Application keeps its own sync policy.
 87. **Names, never IPs**, so that moving the homelab to another network (192.168.86.x → 192.168.69.x) only changes
     DNS: the registry and the Routes are `*.catacumbas69.com`, and Pulsar's external listener is advertised as
     `meloes:31650` (`microshift/apps/pulsar/broker-init-script.sh`). Both names must resolve on the Mac and on

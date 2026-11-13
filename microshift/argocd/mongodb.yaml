@@ -2,7 +2,7 @@
 # the namespace mongodb. Created in the UI and kept here as it is in the cluster (orch.md decision 86).
 # AUTOMATED sync with prune and selfHeal, and targetRevision "*": it follows the newest chart version on its own,
 # so a new release of the operator is installed without a change here.
-# Apply (no-op while the cluster already matches): oc apply -f microshift/argocd/mongodb.yaml
+# Applied by the root Application microshift (microshift/bootstrap/microshift.yaml): commit and push.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

@@ -1,7 +1,7 @@
 # ArgoCD Application of the monitoring on meloes (orch.md decision 90): manual Sync in the UI.
 # Three sources: the kube-prometheus-stack chart, this repository for its values ($values), and
 # microshift/apps/monitoring (SCC bindings, Routes, PodMonitors, dashboards).
-# Apply once, on meloes: oc apply -f microshift/argocd/monitoring.yaml
+# Applied by the root Application microshift (microshift/bootstrap/microshift.yaml): commit and push.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

@@ -1,5 +1,5 @@
 # ArgoCD Application of Catavigia (orch.md decision 86): manual Sync in the UI after each commit.
-# Apply once, on meloes: oc apply -f microshift/argocd/catavigia.yaml
+# Applied by the root Application microshift (microshift/bootstrap/microshift.yaml): commit and push.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
