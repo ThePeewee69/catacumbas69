@@ -124,12 +124,16 @@ grafana:
     size: 1Gi
   initChownData:
     enabled: false   # runs as root, which the SCC refuses; the volume is already owned by the pod's group
+  # 512Mi was too tight for Grafana 12 (search indexes in memory): near the limit it stopped answering and was
+  # killed. GOMEMLIMIT tells Go's garbage collector where to stop, below the container limit.
+  env:
+    GOMEMLIMIT: 800MiB
   resources:
     requests:
       cpu: 25m
-      memory: 128Mi
+      memory: 256Mi
     limits:
-      memory: 512Mi
+      memory: 1Gi
   grafana.ini:
     server:
       domain: grafana.microshift.catacumbas69.com

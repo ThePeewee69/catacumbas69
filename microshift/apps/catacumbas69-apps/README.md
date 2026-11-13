@@ -36,7 +36,9 @@ Every container asks for 25m CPU and 384 Mi and may use up to 1 CPU and 768 Mi (
 them already requested by MongoDB and Pulsar). The JVM options are in each Deployment's `JAVA_TOOL_OPTIONS`
 (heap up to 50 % of the limit, exit on `OutOfMemoryError`; orch.md decision 89): change them there and Sync, no
 new image needed. The log starts with `Picked up JAVA_TOOL_OPTIONS: …`, which is the JVM confirming them. Probes are on Actuator
-(startup and liveness on `/actuator/health/liveness`, readiness on `/actuator/health/readiness`). The apps reach
+(startup and liveness on `/actuator/health/liveness`, readiness on `/actuator/health/readiness`), each with a 3 s
+timeout; an app has up to 5 minutes to start, because after meloes reboots every pod starts at once on its 4 CPUs
+(orch.md decision 92). The apps reach
 each other through their Services (`http://<app>:<port>`), Pulsar through `pulsar.pulsar.svc.cluster.local`, and
 MongoDB through the URI in the Secret `catacumbas69-apps-mongodb` (key `uri`), which is never in git.
 
@@ -239,6 +241,7 @@ The tag is `<version>-<short sha>`. `FORCE=1 apps/build/push.sh <app>` builds wi
 | `mdbc` `Failed`, `user password secret … not found` | Step 5: `password` first, then restart the operator |
 | `CreateContainerConfigError` | The Secret `catacumbas69-apps-mongodb` is missing: step 5 (`copy`) |
 | Pod not Ready | `oc -n catacumbas69-apps logs deploy/<app>`; `/actuator/health/readiness` lists what is down (Pulsar, MongoDB) |
+| Restarts with `Error`, exit 143, a few minutes after meloes boots | The startup probe gave up (5 minutes): see `oc -n catacumbas69-apps get pods -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.containerStatuses[0].lastState.terminated.exitCode}{"\n"}{end}'`; they recover on their own, raise `failureThreshold` of the `startupProbe` if it keeps happening |
 | Catapulsar panels say an app does not answer | Step 7 |
 | `podman machine ssh` says `podman-machine-default … does not exist` | Name the machine: `podman machine ssh Catacumbas69` |
 | `podman push` fails with a timeout | The Route waits 5 min (`haproxy.router.openshift.io/timeout`); raise it in `registry-route.yaml` |

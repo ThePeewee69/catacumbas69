@@ -12,6 +12,7 @@ They are separate from the kube-prometheus-stack of the K3s cluster (`apps/monit
 | ArgoCD | Application `monitoring` (`microshift/argocd/monitoring.yaml`): the chart, its values and this folder |
 | History | 30 days, at most 17 GB, on a 20 Gi PVC (`topolvm-provisioner`) |
 | Grafana data | 1 Gi PVC: what is made in the UI survives restarts |
+| Grafana memory | Asks for 256 Mi, limit 1 Gi, `GOMEMLIMIT=800MiB` so Go's garbage collector stops below the limit (512 Mi was too tight for Grafana 12) |
 
 ## What it collects
 
@@ -109,3 +110,4 @@ You can also change it in Grafana (**Profile → Change password**), but then th
 | A target `DOWN` in Prometheus | Its error is on the Targets page; for an app, `curl http://<app>.catacumbas69.com/actuator/prometheus` |
 | The pressure panels are empty | `cat /proc/pressure/cpu`: no file means `psi=1` is missing |
 | Prometheus restarts with `OOMKilled` | Raise `prometheus.prometheusSpec.resources.limits.memory` in the values |
+| Grafana stops answering and restarts with exit 137 | Memory near its limit: compare with `grafana.resources.limits.memory`; raise it and `grafana.env.GOMEMLIMIT` (about 80 % of the limit) together |

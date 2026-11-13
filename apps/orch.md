@@ -716,7 +716,6 @@ The code does not yet follow every rule. Agents fixing a gap remove it here in t
 
 | ID | Service | Gap | Rule |
 |---|---|---|---|
-| G-6 | Catametricas, Catapulsar | No Testcontainers integration tests yet (Cataponte, Catavigia and Cataudit have theirs; unit and slice tests exist) | TEST-3 |
 | G-11 | Catapulsar | No Playwright UI smoke test in the build | TEST-4 |
 | G-17 | Catapulsar | No ESLint, Stylelint, html-validate or Prettier for the static UI | HTML-5, JS-6, CSS-6 |
 | G-18 | Catapulsar | JSDoc missing on most `catapulsar.js` methods | JS-4 |
@@ -738,6 +737,12 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-13, resources on meloes** (decision 92): the apps' startup probe allows 5 minutes and every probe
+  has a 3 s timeout; Grafana may use 1 Gi with `GOMEMLIMIT`; the Pulsar Manager is limited to 1 Gi.
+- **2026-11-13, integration tests, step 3** (G-6 closed; decision 91): Catametricas' `ForcedCollectionIT` (a
+  known backlog read by a forced collection and served by the subscription and topic APIs) and Catapulsar's
+  `CatapulsarApiIT` (topic, subscription, produce and peek through the UI's API, clear a backlog, an alert
+  threshold saved in MongoDB and published on the settings topic). Every app now has integration tests.
 - **2026-11-12, integration tests, step 2** (decision 91): Catavigia's `ServiceDownAlertIT` (a fake app's
   readiness opens and closes `service.down`, through the task topic and MongoDB) and Cataudit's `AuditTrailIT`
   (an event stored and served, a duplicate stored once, a message that is not a CloudEvent sent to the DLQ);
@@ -823,7 +828,7 @@ Closed on 2026-10-30:
 
 1. **UI conventions** — G-17, G-18, G-20: frontend lint tooling, JSDoc, semantic and accessible markup,
    inline styles moved to CSS.
-2. **Tests** — G-6, G-11: Testcontainers integration tests (MongoDB, Pulsar), Playwright smoke test.
+2. **Tests** — G-11: Playwright smoke test. G-6 done: Testcontainers integration tests in every app (decision 91).
 3. **Delivery** — done: MicroShift manifests (decisions 81–87) and CI (decision 88). The frontend linters of
    G-17 join the CI once `mvn verify` runs them.
 
@@ -1213,5 +1218,18 @@ Integration tests (2026-11-12, first step of G-6):
     `spring.data.mongodb.uri` at them. The critical flows first: Cataponte's bridge relaying messages with keys
     and properties (`BridgeForwardingIT`), then Catavigia opening and closing an alert (`ServiceDownAlertIT`,
     against a fake app on a JDK `HttpServer`, no extra dependency) and Cataudit storing an event
-    (`AuditTrailIT`); the other apps afterwards. The CI runs them (GitHub's runners have Docker); locally they need Docker
-    or Podman.
+    (`AuditTrailIT`); then Catametricas' forced collection (`ForcedCollectionIT`) and Catapulsar's API for topics,
+    messages and settings (`CatapulsarApiIT`). The CI runs them (GitHub's runners have Docker); locally they need
+    Docker or Podman.
+
+Resources after the reboot of 2026-11-12 (2026-11-13):
+
+92. **Probes and memory limits on meloes.** After meloes rebooted, every pod started at once on 4 CPUs and the
+    apps were killed by their startup probe (3 minutes, exit 143) before they were ready; they recovered on the
+    second start. The apps' startup probe now allows **5 minutes** (60 × 5 s) and all their probes have a
+    **3 s timeout** (was 1 s). **Grafana** stopped answering near its 512 Mi limit and was killed (exit 137): it
+    now asks for 256 Mi, may use **1 Gi**, and `GOMEMLIMIT=800MiB` makes Go's garbage collector stop below the
+    limit. The **Pulsar Manager**, little used, had no limit and reached 1.6 GiB (its one Java 8 JVM took ¼ of the
+    node): it asks for 10m CPU and 384 Mi, may use **1 Gi**, and `JAVA_TOOL_OPTIONS` keeps its heap at 50 % with
+    exit on `OutOfMemoryError`, as for the apps (decision 89). Requests are always written out: with limits
+    only, Kubernetes copies them into the requests and the node's CPU, 97 % requested, would run out.

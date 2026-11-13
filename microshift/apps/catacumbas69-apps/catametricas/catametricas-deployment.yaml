@@ -59,18 +59,21 @@ spec:
               path: /actuator/health/liveness
               port: http
             periodSeconds: 5
-            failureThreshold: 36   # up to 3 minutes to start on a busy node
+            timeoutSeconds: 3
+            failureThreshold: 60   # up to 5 minutes: after meloes reboots, every pod starts at once on 4 CPUs
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
               port: http
             periodSeconds: 10
+            timeoutSeconds: 3
             failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
               port: http
             periodSeconds: 10
+            timeoutSeconds: 3
             failureThreshold: 3
           securityContext:
             allowPrivilegeEscalation: false

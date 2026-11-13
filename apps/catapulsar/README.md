@@ -132,7 +132,13 @@ Deploying to MicroShift (registry, ArgoCD, MongoDB Secret): [`microshift/apps/ca
 
 Run `CatapulsarApplication` from IntelliJ (or `mvn -pl catapulsar spring-boot:run` after an install).
 
-Unit tests need no Docker, MongoDB, Pulsar or Cataponte. Open <http://localhost:8081>.
+Open <http://localhost:8081>.
+
+Unit tests need no Docker, MongoDB, Pulsar or Cataponte. The integration tests (`*IT`, run by failsafe in
+`mvn verify`) start a real Pulsar and MongoDB with Testcontainers: `CatapulsarApiIT` creates a topic and a
+subscription through the API, produces a message and peeks it with its key and properties, clears a backlog, and
+changes an alert threshold, which must be saved in MongoDB and published on the settings topic. Locally they
+need Docker or Podman: see [catacommons' README](../catacommons/README.md#integration-tests-catacumbascontainers).
 
 Static files are versioned (`catapulsar.js?v=N`, `catapulsar.css?v=N`); bump `N` in `index.html` whenever you
 change them (UI-2). The server sends `Cache-Control: no-cache`.

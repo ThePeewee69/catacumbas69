@@ -36,6 +36,17 @@ spec:
             # O standalone não expõe o HTTP do bookie: a página Bookies não funciona, o resto sim
             - name: DEFAULT_ENVIRONMENT_BOOKIE_URL
               value: http://pulsar.pulsar.svc.cluster.local:8000
+            # Uma só JVM (Java 8, com o HerdDB embebido). Sem limite chegava a 1.6 GiB (¼ dos 15 GiB do nó);
+            # com o limite de 1Gi o heap fica em 50 % (512 MiB) e um OutOfMemoryError reinicia o pod
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=50.0 -XX:+ExitOnOutOfMemoryError"
+          # Pedidos explícitos: só com limites, o Kubernetes copiava-os para os pedidos e esgotava a CPU do nó
+          resources:
+            requests:
+              cpu: 10m
+              memory: 384Mi
+            limits:
+              memory: 1Gi
           volumeMounts:
             # HerdDB: jdbc:herddb:server:localhost:7000?server.base.dir=dbdata, relativo a /pulsar-manager/pulsar-manager
             - name: data
