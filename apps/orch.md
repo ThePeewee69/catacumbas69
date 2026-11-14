@@ -219,14 +219,18 @@ Standard: **WHATWG HTML Living Standard**, **WCAG 2.2 level AA** for accessibili
 - **HTML-4 [MUST]** No inline `style=""` except for one-off values computed by Alpine bindings; styling
   goes in `catapulsar.css` classes. No inline `<script>` blocks.
 - **HTML-5 [MUST]** Enforced with **html-validate** (`html-validate:recommended` +
-  `html-validate:a11y`), configured to allow Alpine attributes (`x-*`, `@*`, `:*`).
+  `html-validate:a11y`, plus `input-missing-label` for HTML-2), with a small plugin
+  (`apps/catapulsar/html-validate-alpine.mjs`) that tells it what Alpine adds: `:attr` is the attribute `attr`
+  and `x-text` gives the element text. Void elements self-close and the doctype is lowercase, as Prettier
+  writes them. `role="button"` is accepted on the picker items (decision 94).
 
 ### 3.4 JavaScript
 
 Standard: **ECMAScript 2022**, idioms from **MDN** and the **Airbnb JavaScript Style Guide** (naming and
 structure), formatted by **Prettier** defaults (2 spaces, single quotes, semicolons, trailing commas).
 
-- **JS-1 [MUST]** `const` by default, `let` when reassigned, never `var`. Strict equality (`===`) only.
+- **JS-1 [MUST]** `const` by default, `let` when reassigned, never `var`. Strict equality (`===`) only,
+  except `x == null` / `x != null` for "null or undefined".
 - **JS-2 [MUST]** `lowerCamelCase` functions/variables, `UPPER_SNAKE_CASE` module constants,
   verbs for methods (`loadBridges`, `toggleDestination`), `is/has` for booleans.
 - **JS-3 [MUST]** `async`/`await` with `try/catch/finally` for every network call; no unhandled promise.
@@ -235,8 +239,8 @@ structure), formatted by **Prettier** defaults (2 spaces, single quotes, semicol
   `@param` and `@returns` where applicable.
 - **JS-5 [MUST]** No DOM manipulation by hand (`document.querySelector`) inside the Alpine component —
   state drives the DOM.
-- **JS-6 [MUST]** Enforced with **ESLint** (`eslint:recommended`, `browser` env, `Alpine` global) and
-  **Prettier --check**.
+- **JS-6 [MUST]** Enforced with **ESLint** (`eslint:recommended`, `browser` env, `Alpine` global, JS-1, and
+  **eslint-plugin-jsdoc** for JS-4) and **Prettier --check**.
 
 ### 3.5 CSS
 
@@ -250,7 +254,9 @@ Standard: **W3C CSS** specs, **stylelint-config-standard**, Prettier formatting.
 - **CSS-3 [MUST]** One rule per line block, properties in a consistent order (layout → box → typography →
   visual → motion). No `!important`.
 - **CSS-4 [MUST]** File is organised in commented sections matching the UI (`/* ── Bridges panel ── */`),
-  in the same order as `index.html`.
+  in the same order as `index.html`. One exception: every rule for table cells (`td`, `th`) is in the
+  **Table** section, in order of specificity, so that no later rule has a lower one (Stylelint
+  `no-descending-specificity`).
 - **CSS-5 [MUST]** Visible keyboard focus (`:focus-visible`) on every interactive element; text contrast
   ≥ 4.5:1 (WCAG AA).
 - **CSS-6 [MUST]** Enforced with **Stylelint** (`stylelint-config-standard`).
@@ -278,9 +284,12 @@ Standard: **W3C CSS** specs, **stylelint-config-standard**, Prettier formatting.
 | JS | Prettier | ESLint | `npm run lint` in `apps/catapulsar` |
 | CSS | Prettier | Stylelint | `npm run lint` in `apps/catapulsar` |
 
-The frontend lint tools are dev-only (`apps/catapulsar/package.json`, `devDependencies`); they never ship
-in the jar. `mvn verify` in Catapulsar runs `npm run lint` through `frontend-maven-plugin` so one command
-checks everything.
+The frontend lint tools are dev-only (`apps/catapulsar/package.json`, `devDependencies`, exact versions,
+`package-lock.json` committed); they never ship in the jar. Prettier uses width 120 and single quotes
+(`.prettierrc.json`). `mvn verify` in Catapulsar runs `npm ci` and `npm run lint` through
+`frontend-maven-plugin`, with **Node 26** downloaded into `apps/catapulsar/node/` (git-ignored, kept across
+`mvn clean`), so one command checks everything, in the CI too. `npm run format` rewrites the three files
+(decision 94).
 
 ---
 
@@ -481,6 +490,13 @@ Stack: plain HTML + Alpine.js 3 (from cdnjs, pinned version), one `index.html`, 
   entry (backlog peek). It refreshes in place (no spinner, no toast), skips while the browser tab is
   hidden, and lists are replaced only when they changed. The on/off switch is per browser; the interval
   is shared (settings topic, 2–300 s, audited).
+- **UI-11 [MUST]** The UI works on phones. Below **768 px** (decision 95): the sidebar is a **drawer** opened by
+  ☰ (it closes when a tenant, namespace or topic is chosen, on a tap outside, or with Esc); the views (Overview,
+  Bridges, Alerts, Audit, Consumers) are **tabs at the bottom**; the top bar keeps ☰, the connection dot, Auto,
+  ↻ and ⚙ without their text; **data tables become one card per row** (each `<td>` of a main row carries the
+  `data-label` of its column; a row's detail opens inside its card); dialogs fill the screen with their buttons
+  always visible; touch targets are at least **44 px** and fields use 16 px text. Every phone rule is in the last
+  CSS section, inside `@media (width < 768px)`, so a computer's layout does not change.
 
 ---
 
@@ -588,7 +604,8 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 - **TEST-4 [SHOULD]** A Playwright smoke test for the UI with the API mocked: load page, open a topic,
   open Bridges, create a bridge, go back to a topic, and fail on any console error. It is Catapulsar's
   `CatapulsarUiIT` (decision 93), run by failsafe in `mvn verify`; its fixtures are in
-  `src/test/resources/ui-smoke/`. Elements it uses carry a `data-testid` (kebab-case, by zone: `tree-topic`,
+  `src/test/resources/ui-smoke/`; it runs once on a computer-sized screen and once on a phone (UI-11). Elements
+  it uses carry a `data-testid` (kebab-case, by zone: `tree-topic`,
   `bridge-form-save`…): keep them when the markup changes.
 - **TEST-5 [MUST]** `mvn verify` passes before a change is considered done. The developer runs it on
   `necromancer`, and GitHub Actions runs it again on every push to `main` and every pull request that changes
@@ -719,9 +736,7 @@ The code does not yet follow every rule. Agents fixing a gap remove it here in t
 
 | ID | Service | Gap | Rule |
 |---|---|---|---|
-| G-17 | Catapulsar | No ESLint, Stylelint, html-validate or Prettier for the static UI | HTML-5, JS-6, CSS-6 |
-| G-18 | Catapulsar | JSDoc missing on most `catapulsar.js` methods | JS-4 |
-| G-20 | Catapulsar | Clickable `<div>`s in the sidebar tree and pickers; many inline `style=""`; modals without `role="dialog"`; decorative SVGs without `aria-hidden` | HTML-1, HTML-2, HTML-4 |
+| — | — | None open (G-17, G-18 and G-20 closed on 2026-11-14, decision 94) | — |
 
 Closed on 2026-10-30:
 
@@ -739,6 +754,15 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-14, phones** (UI-11, decision 95): below 768 px the sidebar is a ☰ drawer, the views are tabs at the
+  bottom, tables are cards, dialogs fill the screen and touch targets are 44 px; `CatapulsarUiIT` also runs the
+  smoke flow on a phone. A computer's screenshots and computed styles are unchanged.
+- **2026-11-14, UI conventions** (G-17, G-18, G-20 closed; decision 94): ESLint, Stylelint, html-validate and
+  Prettier in `apps/catapulsar` (`npm run lint`, run by `mvn verify`); the three files formatted; JSDoc on every
+  method; the 132 inline styles moved to one class each; `type="button"`, labels for every control,
+  `role="dialog"` with `aria-modal` on every dialog, keyboard on every clickable element; the breadcrumb on a row
+  of its own; assets at `?v=29`. Screenshots of 20 views and the computed style of every element were compared
+  before and after: only the tree and the breadcrumb changed.
 - **2026-11-13, UI started once**: `index.html` no longer has `x-init="init()"` on `<body>`. Alpine already calls
   the component's `init()`, so it ran twice: every first request went out twice and the alert badge had two timers.
 - **2026-11-13, UI smoke test** (G-11 closed; decision 93): Catapulsar's `CatapulsarUiIT` opens the UI in a
@@ -839,12 +863,12 @@ Closed on 2026-10-30:
 
 ### Remediation plan
 
-1. **UI conventions** — G-17, G-18, G-20: frontend lint tooling, JSDoc, semantic and accessible markup,
-   inline styles moved to CSS.
+1. **UI conventions** — done: frontend lint tooling in `mvn verify`, JSDoc, semantic and accessible markup,
+   inline styles moved to CSS (G-17, G-18, G-20, decision 94).
 2. **Tests** — done: Testcontainers integration tests in every app (G-6, decision 91) and the Playwright smoke
    test of the UI (G-11, decision 93).
-3. **Delivery** — done: MicroShift manifests (decisions 81–87) and CI (decision 88). The frontend linters of
-   G-17 join the CI once `mvn verify` runs them.
+3. **Delivery** — done: MicroShift manifests (decisions 81–87) and CI (decision 88), which runs the frontend
+   linters with `mvn verify` (decision 94).
 
 ---
 
@@ -1278,3 +1302,42 @@ UI smoke test (2026-11-13, G-11):
     page asks for depends only on the steps. Elements are found by **`data-testid`** (kebab-case, by zone), so a
     label can change without breaking the test. On failure it keeps a **Playwright trace**, a screenshot and the
     list of problems in `target/ui-smoke/`; the CI keeps them with the reports.
+
+UI conventions (2026-11-14, G-17, G-18, G-20):
+
+94. **Linters for the static UI** in `apps/catapulsar`, dev-only (`package.json`, exact versions, lock file):
+    **ESLint 10** (`recommended`, browser globals, `Alpine`, JS-1 with `== null` allowed, and
+    **eslint-plugin-jsdoc**: every function and component method has a summary, `@param` and `@returns`),
+    **Stylelint 18** with `stylelint-config-standard` as it is (modern colour notation; every table-cell rule
+    in the Table section, by specificity), **html-validate 11** (`recommended` + `a11y` +
+    `input-missing-label`, with the local Alpine plugin) and **Prettier 3** (width 120, single quotes) on
+    `index.html`, `catapulsar.js` and `catapulsar.css`. `mvn verify` runs them through **frontend-maven-plugin
+    2.0** with **Node 26** (Active LTS) in `apps/catapulsar/node/`, so they run in the CI too. The markup now
+    follows HTML-1, -2 and -4: **one class per element** for every former `style=""` (component-prefixed, in
+    the section of its component); every `<button>` has a `type`; every form control a label; every dialog
+    `role="dialog"`, `aria-modal` and a title; decorative icons `aria-hidden`. Clickable elements: the
+    **sidebar tree's name is a `<button>`** (the topic's ✕ stays beside it, never inside), the **topic pickers'
+    items** keep their `<div>` with `role="button"`, `tabindex` and Enter/Space (`aria-pressed` shows the
+    choice), the **expandable table rows** keep their row role with `tabindex`, Enter/Space and
+    `aria-expanded`; the overview rows already open through the name's button. The **breadcrumb** has a row of
+    its own under the top bar (at 1280 px the top bar left it 82 px). The change was checked by comparing, before
+    and after, screenshots of 20 views and the computed style of every element (templates expanded): only the
+    tree rows' inner structure and the breadcrumb moved.
+
+Phones (2026-11-14):
+
+95. **Catapulsar on phones** (UI-11), below **768 px**; above, phones in landscape and tablets get the computer's
+    layout. The sidebar becomes a **drawer** (☰ in the top bar, `drawerOpen` in the component) that closes when a
+    tenant, namespace or topic is chosen (opening or closing a tree node keeps it open), on a tap outside or with
+    Esc. The top bar's view buttons move to a **bottom tab bar** (Overview, Bridges, Alerts with its badge, Audit,
+    Consumers), with the safe-area insets of phones with a notch; the connection pill, Auto and Refresh keep only
+    their dot or arrow. The eight data tables (overview, subscriptions and their consumers, alerts open and
+    archived, audit, consumers' replicas, peeked messages) get `class="card-table"` and a `data-label` per cell:
+    on a phone each row is a card of "label: value" lines, the first cell its title, and an expanded detail
+    (alert, audit entry, a subscription's consumers or history) opens inside the same card; the small key/value
+    tables inside details stay tables. Dialogs fill the screen, with Save/Cancel always visible at the bottom.
+    Buttons, tree rows, picker items, tabs and fields are at least 44 px tall (WCAG 2.5.5), and fields use 16 px
+    text so that phones do not zoom in. Every rule is in one CSS section at the end of `catapulsar.css`, inside
+    `@media (width < 768px)` (plus `display: none` for the drawer's backdrop, ☰ and the tab bar on a computer);
+    the computer's screenshots and computed styles were compared before and after and do not change.
+    `CatapulsarUiIT` runs its flow a second time at 390 × 844 with touch, through the drawer and the bottom tabs.

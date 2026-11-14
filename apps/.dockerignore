@@ -9,6 +9,8 @@
 !cataudit/
 !catavigia/
 **/target/
+**/node/
+**/node_modules/
 **/.idea/
 **/*.iml
 **/.DS_Store

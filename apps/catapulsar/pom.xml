@@ -31,6 +31,9 @@
         <playwright.version>1.63.0</playwright.version>
         <!-- Same Alpine as the cdnjs URL in index.html: CatapulsarUiIT fails, naming both, when they differ -->
         <alpinejs.version>3.14.8</alpinejs.version>
+        <!-- §3.7: the static UI's linters run in mvn verify with this Node, kept in node/ (orch.md decision 94) -->
+        <frontend-maven-plugin.version>2.0.2</frontend-maven-plugin.version>
+        <node.version>v26.13.1</node.version>
     </properties>
 
     <dependencies>
@@ -139,6 +142,46 @@
                             <goal>integration-test</goal>
                             <goal>verify</goal>
                         </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- HTML-5, JS-6, CSS-6: ESLint, Stylelint, html-validate and Prettier on src/main/resources/static
+                 (package.json, npm run lint); dev-only, nothing of it goes into the jar (orch.md decision 94) -->
+            <plugin>
+                <groupId>com.github.eirslett</groupId>
+                <artifactId>frontend-maven-plugin</artifactId>
+                <version>${frontend-maven-plugin.version}</version>
+                <configuration>
+                    <nodeVersion>${node.version}</nodeVersion>
+                    <installDirectory>${project.basedir}</installDirectory>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>install-node-and-npm</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>install-node-and-npm</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>npm-ci</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>npm</goal>
+                        </goals>
+                        <configuration>
+                            <arguments>ci --no-audit --no-fund</arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>npm-run-lint</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>npm</goal>
+                        </goals>
+                        <configuration>
+                            <arguments>run lint</arguments>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

@@ -1,6 +1,10 @@
 # Build
 target/
 
+# Frontend tools (orch.md decision 94): Node installed by Maven, npm packages
+node/
+node_modules/
+
 # IntelliJ IDEA
 .idea/
 *.iml

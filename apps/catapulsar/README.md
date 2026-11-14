@@ -145,8 +145,9 @@ need Docker or Podman: see [catacommons' README](../catacommons/README.md#integr
 `CatapulsarUiIT` (TEST-4, [orch.md decision 93](../orch.md)) opens the UI in the installed Google Chrome, headless,
 with [Playwright for Java](https://playwright.dev/java/): it loads the page, opens the topic `orders` from the tree,
 opens Bridges, creates a bridge from `orders` to `orders-eu`, checks what was sent to `POST /api/v1/bridges`, and
-goes back to the topic, where the new bridge's subscription is shown. It needs no Docker and no server: Playwright's
-`route()` answers every request of the page.
+goes back to the topic, where the new bridge's subscription is shown. It runs this flow twice: on a computer-sized
+screen, and on a phone (390 × 844, touch), where it opens the ☰ drawer for the tree and uses the bottom tabs. It
+needs no Docker and no server: Playwright's `route()` answers every request of the page.
 
 | Request | Answered with |
 |---|---|
@@ -176,6 +177,60 @@ problems, and a Playwright trace: open it with
 
 Static files are versioned (`catapulsar.js?v=N`, `catapulsar.css?v=N`); bump `N` in `index.html` whenever you
 change them (UI-2). The server sends `Cache-Control: no-cache`.
+
+### Static UI: lint and format
+
+`index.html`, `catapulsar.js` and `catapulsar.css` are checked by four tools, dev-only, declared in `package.json`
+here (exact versions, `package-lock.json` committed; [orch.md §3.7 and decision 94](../orch.md)):
+
+| Tool | Checks | Config |
+|---|---|---|
+| ESLint 10 + eslint-plugin-jsdoc | `catapulsar.js`: `eslint:recommended`, JS-1 (`===`, but `x == null` allowed), JSDoc on every method (JS-4) | `eslint.config.mjs` |
+| Stylelint 18 | `catapulsar.css`: `stylelint-config-standard` | `.stylelintrc.json` |
+| html-validate 11 | `index.html`: `recommended` + `a11y` + labels on every control; Alpine-aware | `.htmlvalidate.json`, `html-validate-alpine.mjs` |
+| Prettier 3 | the three files: width 120, single quotes | `.prettierrc.json` |
+
+`mvn verify` runs them (`frontend-maven-plugin`: it installs Node 26 into `node/`, then `npm ci` and
+`npm run lint`), so the build and the CI fail on any finding. By hand, from `apps/catapulsar`:
+
+```bash
+export PATH="$PWD/node:$PATH"        # the Node and npm that Maven installed (or any Node 26)
+npm ci                                # once, or after package.json changes
+npm run lint                          # everything mvn verify checks
+npm run format                        # rewrite the three files in Prettier's style
+```
+
+`node/` and `node_modules/` are git-ignored; in IntelliJ mark them *Excluded* so they are not indexed. IntelliJ's
+own ESLint, Stylelint and Prettier integrations pick up these configs (Settings → Languages & Frameworks →
+JavaScript → Code Quality Tools, and → Prettier, *automatic*).
+
+Conventions the tools rely on:
+
+- **No `style=""`** (HTML-4): each element that needs its own style gets one class, named after its component
+  (`.bridge-form-actions`, `.alerts-refresh-btn`), in the CSS section of that component.
+- **Every rule for table cells** (`td`, `th`) lives in the CSS *Table* section, ordered by specificity
+  (CSS-4's one exception).
+- **Clickable elements are buttons**: real `<button type="button">`, or, on the topic pickers, `role="button"`
+  with `tabindex="0"` and Enter/Space; table rows that expand keep `tabindex="0"`, Enter/Space and
+  `aria-expanded`.
+- **Text set by Alpine counts as text**: `x-text` and `:aria-label` satisfy html-validate's text and label rules.
+
+### On a phone
+
+Below 768 px wide the UI changes layout (UI-11, [orch.md decision 95](../orch.md)); above, it is the computer's.
+
+| On a computer | On a phone |
+|---|---|
+| Sidebar with the tree | Drawer, opened by ☰; closes when you choose a tenant, namespace or topic |
+| Bridges, Audit, Consumers, Alerts in the top bar | Tabs at the bottom: Overview, Bridges, Alerts, Audit, Consumers |
+| Connection, Auto, Refresh with text | Only the dot or the arrow (the text stays in the tooltip and `aria-label`) |
+| Tables | One card per row; a row's detail opens inside its card |
+| Dialogs in the middle | Full screen, Save/Cancel always visible |
+
+All of it is CSS in the last section of `catapulsar.css`, inside `@media (width < 768px)`. A new data table gets
+`class="card-table"` and a `data-label` on each cell of its main row (the column's header text, or
+`:data-label` when the header is dynamic). To look at it on a computer: Chrome's DevTools, device toolbar
+(Cmd+Shift+M), a phone such as iPhone 12 Pro.
 
 ## API
 

@@ -31,14 +31,14 @@ import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.AfterTestExecutionCallback;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
 /**
  * Smoke test of the static UI in the installed Google Chrome, headless, with the API mocked (TEST-4, orch.md
- * decision 93).
+ * decision 93). The same flow runs twice: on a computer-sized screen, and on a phone (390 × 844, touch), where the
+ * tree is in the ☰ drawer and the views are tabs at the bottom of the screen (decision 95).
  *
  * <p>Chrome is the one installed on the machine ({@code channel=chrome}): Playwright no longer ships a Chromium for
  * macOS 13, and Google's Chrome still runs there, as on GitHub's runners. Nothing is downloaded.
@@ -91,10 +91,15 @@ class CatapulsarUiIT {
 
     private BrowserContext context;
     private Page page;
+    /** Whether the test runs on a phone-sized screen (taps, drawer, bottom tabs). */
+    private boolean phone;
 
     /** Keeps the trace and a screenshot of a failed test, before {@link #closeContext()} closes the page. */
     @RegisterExtension
     final AfterTestExecutionCallback keepTraceOnFailure = extension -> {
+        if (context == null) {
+            return;
+        }
         String name = extension.getRequiredTestMethod().getName();
         if (extension.getExecutionException().isPresent()) {
             Files.createDirectories(ARTIFACTS);
@@ -137,9 +142,13 @@ class CatapulsarUiIT {
         }
     }
 
-    @BeforeEach
-    void openPage() {
-        context = browser.newContext(new Browser.NewContextOptions().setViewportSize(1280, 800));
+    /**
+     * Opens a new browser context and page with the routes, the listeners and the mocked API.
+     *
+     * @param options size of the screen, and whether it is a phone
+     */
+    private void openPage(Browser.NewContextOptions options) {
+        context = browser.newContext(options);
         context.setDefaultTimeout(10_000);
         // No automatic refresh during the test: what the page asks for depends only on the steps.
         context.addInitScript("localStorage.setItem('autoRefresh', 'off');");
@@ -167,36 +176,56 @@ class CatapulsarUiIT {
     }
 
     @Test
-    void smoke_opensTopic_createsBridge_andShowsItsSubscriptionOnTheTopic() throws Exception {
+    void smoke_onAComputer_opensTopic_createsBridge_andShowsItsSubscriptionOnTheTopic() throws Exception {
+        openPage(new Browser.NewContextOptions().setViewportSize(1280, 800));
+        smoke(false);
+    }
+
+    /** The same on a phone (< 768 px): the tree is in the ☰ drawer and the views are tabs at the bottom. */
+    @Test
+    void smoke_onAPhone_opensTopic_createsBridge_andShowsItsSubscriptionOnTheTopic() throws Exception {
+        openPage(new Browser.NewContextOptions().setViewportSize(390, 844).setDeviceScaleFactor(3)
+                .setIsMobile(true).setHasTouch(true));
+        smoke(true);
+    }
+
+    /**
+     * Load, open a topic, open Bridges, create a bridge, go back to the topic (TEST-4).
+     *
+     * @param phone true on a phone: taps, the drawer for the tree and the bottom tabs for Bridges
+     * @throws Exception if the body sent to the API is not JSON
+     */
+    private void smoke(boolean phone) throws Exception {
+        this.phone = phone;
         // Load: the cluster overview and the sidebar tree.
         page.navigate(ORIGIN + "/");
         assertThat(page.getByTestId("overview-title")).hasText("Cluster");
 
         // Open a topic from the tree: its subscriptions, one of them already used by a bridge.
-        item("tree-tenant", "public").click();
-        item("tree-namespace", "default").click();
-        item("tree-topic", "orders").click();
+        tree("tree-tenant", "public");
+        tree("tree-namespace", "default");
+        tree("tree-topic", "orders");
         assertThat(page.getByTestId("sub-row")).hasCount(2);
         assertThat(subRow("cataponte-orders-archive").getByTestId("sub-bridge")).containsText("orders-archive");
 
         // Open Bridges, on the tab of bridges without an area.
-        page.getByTestId("bridges-open").click();
-        item("bridge-tab", "Bridges").click();
+        press(page.getByTestId(phone ? "nav-bridges" : "bridges-open"));
+        press(item("bridge-tab", "Bridges"));
         assertThat(page.getByTestId("bridge-card")).hasCount(1);
 
         // Create a bridge from orders to orders-eu.
-        page.getByTestId("bridge-new").click();
+        press(page.getByTestId("bridge-new"));
         Locator form = page.getByTestId("bridge-form");
         assertThat(form).isVisible();
         page.getByTestId("bridge-form-name").fill("orders-to-eu");
-        item("bridge-form-source-topic", SOURCE).click();
-        item("bridge-form-dest-topic", DESTINATION).click();
+        press(item("bridge-form-source-topic", SOURCE));
+        press(item("bridge-form-dest-topic", DESTINATION));
         // What the API answers once the bridge exists.
         mock("GET /api/v1/bridges", "bridges-after-create.json");
         mock("GET /api/v1/topics/public/default/orders/stats", "topic-stats-orders-after-create.json");
         mock("GET /api/v1/topics/public/default/orders/subscriptions",
                 "topic-subscriptions-orders-after-create.json");
-        page.getByTestId("bridge-form-save").click();
+        press(page.getByTestId("bridge-form-save"));
 
         assertThat(page.getByTestId("toast")).containsText("Bridge created");
         assertThat(form).isHidden();
@@ -212,8 +241,11 @@ class CatapulsarUiIT {
         Assertions.assertThat(bridge.path("destinations").findValuesAsText("topic")).containsExactly(DESTINATION);
 
         // Back to the topic: Bridges closes (UI-8) and the new bridge's subscription is linked to it.
-        item("tree-topic", "orders").click();
+        tree("tree-topic", "orders");
         assertThat(page.getByTestId("bridge-card")).hasCount(0);
+        if (phone) {
+            assertThat(page.getByTestId("nav-overview")).hasAttribute("aria-current", "page");
+        }
         assertThat(page.getByTestId("sub-row")).hasCount(3);
         assertThat(subRow("cataponte-orders-to-eu").getByTestId("sub-bridge")).containsText("orders-to-eu");
 
@@ -231,6 +263,23 @@ class CatapulsarUiIT {
      */
     private Locator item(String testId, String text) {
         return page.getByTestId(testId).getByText(text, new Locator.GetByTextOptions().setExact(true));
+    }
+
+    /** Clicks, or taps on a phone. */
+    private void press(Locator target) {
+        if (phone) {
+            target.tap();
+        } else {
+            target.click();
+        }
+    }
+
+    /** Chooses an item of the sidebar tree; on a phone, opens the ☰ drawer first (a choice closes it). */
+    private void tree(String testId, String text) {
+        if (phone) {
+            press(page.getByTestId("drawer-open"));
+        }
+        press(item(testId, text));
     }
 
     private Locator subRow(String subscription) {
