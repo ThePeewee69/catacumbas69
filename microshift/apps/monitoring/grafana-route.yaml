@@ -1,10 +1,13 @@
-# Plain HTTP like the other Routes on meloes (orch.md decisions 82, 90)
+# HTTPS with the router's wildcard (orch.md decision 97); login through Dex (decision 98)
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: grafana
 spec:
   host: grafana.microshift.catacumbas69.com
+  tls:
+    termination: edge   # the router's wildcard certificate (orch.md decision 97)
+    insecureEdgeTerminationPolicy: Redirect
   to:
     kind: Service
     name: prometheus-grafana

@@ -65,6 +65,17 @@ class AlertControllerTest {
     }
 
     @Test
+    void seen_isRecordedWithTheUserNamedByCatapulsar() throws Exception {
+        when(alerts.markSeen(eq(ID), eq("peewee69"))).thenReturn(alert());
+
+        mvc.perform(post("/api/v1/alerts/" + ID + "/seen").header("X-Catacumbas69-User", "peewee69")
+                        .header("X-Forwarded-For", "10.0.0.5"))
+                .andExpect(status().isOk());
+
+        verify(alerts).markSeen(ID, "peewee69");
+    }
+
+    @Test
     void seen_ofAnUnknownAlert_is404() throws Exception {
         when(alerts.markSeen(eq(ID), eq("127.0.0.1")))
                 .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "No open alert"));

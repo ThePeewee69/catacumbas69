@@ -27,6 +27,7 @@ Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs
 | **Alerts** | 🔔 **Alerts** button: the number of open alerts not marked as seen, red if one is critical, orange otherwise, nothing when none; grey `?` when Catavigia does not answer. It asks Catavigia every 30 s while the browser tab is visible, whatever the auto-refresh. The **Alerts** panel (ADR 0015) has two tabs. **Open**: one row per alert (severity, type, subject, open for, last seen, seen by), click for its details; **Mark seen** per alert and **Mark all seen** (confirmed); the action button takes you where it is fixed, already selected: `poison` → the DLQ in Consumers → Dead letters, `bridge.*` → the bridge in Bridges, `backlog` → the topic view with the subscription's history open, `consumer.paused` → Consumers, `collection.stale` → Settings → Refresh, the rest → Settings → Connections. **Archived**: closed alerts, newest first, with how long they were open; filters type, subject (starts with), closed in (24 h, 7 d, 30 d, everything), 50 per page. Marking as seen and changing a limit are audited twice: by Catapulsar (`alert.seen-requested`, `limit.change-requested`, with Catavigia's status) and by Catavigia (`alert.seen`, `limit.changed`) |
 | **Consumers** | ⚙ Consumers panel (ADR 0015), tab **Consumers**: every consumer of Cataudit (`audit`), Catametricas (`collect-tasks`) and Catavigia (`check-tasks`), per replica: state (*running*, *paused (auto)* with why, *paused by hand* with who, *gone* when not reported for 30 s), since when, the last MongoDB and Pulsar check, and **Pause** (confirmed), **Resume** and **Check** per replica or for all of them. Read from each app's `consumers` topic, so it works while MongoDB is down; commands go on its `consumer-commands` topic and apply within seconds. A pause by hand is never resumed automatically |
 | **Dead letters** | Tab **Dead letters** of the Consumers panel: every DLQ (`<topic>-<subscription>-DLQ`) of the apps' consumers and of the bridges, with its backlog on `dlq` (or *not created yet*), and a count on the tab. Clicking one peeks up to 50 messages (audited): id, time, original topic, reason, key, payload. Per message **Send back** (to the original topic, same key and event time, without the DLQ properties) or **Discard**; **Send all back** and **Discard all**. Each is confirmed and audited (`dead-letter.sent-back`, `dead-letter.discarded`); a message without an original topic can only be discarded |
+| **Login** | Through Dex at `https://auth.catacumbas69.com` (SEC-2, orch.md decision 100): the top bar shows who is signed in and **Sign out** (on a phone, at the foot of the ☰ drawer), which ends Dex's session too. Every change is recorded with that user as its actor |
 | **Audit** | 🛡 Audit panel: the audit trail of every app, from Cataudit (ADR 0009). Filters by app, entity, action, subject prefix, actor and period. Each row expands into before/after and details; clicking a subject filters by it; refreshed automatically |
 
 ## Architecture
@@ -90,8 +91,34 @@ All settings have in-cluster defaults in `application.properties`; override them
 | `CATAMETRICAS_COLLECT_INTERVAL_SECONDS` | `60` (same as Catametricas) | `60` |
 | `SPRING_DATA_MONGODB_URI` | in-cluster ReplicaSet URI (Secret) | NodePort `32017` + `authSource=admin&directConnection=true` |
 | `LOGGING_STRUCTURED_FORMAT_CONSOLE` | `ecs` (JSON logs for Loki) | *(unset)* |
+| `CATAPULSAR_AUTH_ISSUER` | `https://auth.catacumbas69.com` | *(not used)* |
+| `CATAPULSAR_AUTH_CLIENT_ID` | `catapulsar` | *(not used)* |
+| `CATAPULSAR_AUTH_CLIENT_SECRET` | Secret `catapulsar-oidc`, key `client-secret` (`microshift/apps/dex/dex-secret.sh`) | *(not used)* |
+| `SPRING_PROFILES_ACTIVE` | *(unset: login on)* | `no-auth` |
 
 Timeouts, producer cache size and the peek limit are under `catapulsar.*` in `application.properties`.
+
+### Login (SEC-2)
+
+`SecurityConfig` signs in through Dex with OpenID Connect (orch.md decision 100). Dex's endpoints are written out
+from `CATAPULSAR_AUTH_ISSUER` (`/auth`, `/token`, `/keys`, `/userinfo`, `/logout`), not discovered, so Catapulsar
+starts even when Dex is down; it refuses to start without `CATAPULSAR_AUTH_CLIENT_SECRET`.
+
+- **Open without login**: `/actuator/health/**`, `/actuator/prometheus`, `/swagger-ui.html`, `/v3/api-docs`.
+- **Pages** redirect to Dex; **`/api/**`** answers `401`, and the page then reloads (and goes through Dex, which
+  lets you straight back in while its own session lasts).
+- **CSRF**: the token is in the readable cookie `XSRF-TOKEN`; `api()` in `catapulsar.js` sends it back in
+  `X-XSRF-TOKEN` on every change, and Sign out posts it as `_csrf`. A change without it is `403`.
+- **Session**: in memory, 24 h without use (`server.servlet.session.timeout`); a restart only means a trip
+  through Dex. Behind the router, `server.forward-headers-strategy=native` makes the redirect URI `https`.
+- **Actor**: the user's `preferred_username` (`RequestActor`), recorded in Catapulsar's events and sent to
+  Cataponte, Catametricas and Catavigia in `X-Catacumbas69-User`. A `X-Catacumbas69-User` sent by the browser is
+  ignored.
+- **Dex's certificate**: the JVM trusts our CA through `truststore.p12` from the ConfigMap `catacumbas69-ca`
+  (`JAVA_TOOL_OPTIONS` in the Deployment).
+- **Profile `no-auth`** (`application-no-auth.properties`): no login at all, the actor is the browser's address.
+  For IntelliJ and for the tests (`src/test/resources/config/application.properties`); `SecurityConfigTests`
+  runs with the login on.
 
 `CATAPONTE_URL` is only the default: the Cataponte URL can be changed in ⚙️ Settings → Connections. The new
 URL is stored in `catapulsar_settings`, published on the settings topic (every replica follows it within
@@ -107,10 +134,11 @@ Catametricas the panel offers a link to it. And `CATAVIGIA_URL`, the default of 
 ## Run locally (IntelliJ on necromancer)
 
 Run `CatapulsarApplication` (port **8081**). Paste this line into the run configuration's *Environment
-variables* and replace `<user>` and `<password>`; `.idea/` stays out of Git (CFG-2):
+variables* and replace `<user>` and `<password>`; `.idea/` stays out of Git (CFG-2). `SPRING_PROFILES_ACTIVE=no-auth`
+turns the login off (SEC-2); without it Catapulsar refuses to start for lack of a client secret:
 
 ```
-PULSAR_SERVICE_URL=http://192.168.86.35:31080;PULSAR_BROKER_URL=pulsar://192.168.86.35:31650;PULSAR_LISTENER_NAME=external;SPRING_DATA_MONGODB_URI=mongodb://<user>:<password>@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true;CATAPONTE_URL=http://localhost:8082;CATAUDIT_URL=http://localhost:8084;CATAMETRICAS_URL=http://localhost:8083;CATAVIGIA_URL=http://localhost:8085
+SPRING_PROFILES_ACTIVE=no-auth;PULSAR_SERVICE_URL=http://192.168.86.35:31080;PULSAR_BROKER_URL=pulsar://192.168.86.35:31650;PULSAR_LISTENER_NAME=external;SPRING_DATA_MONGODB_URI=mongodb://<user>:<password>@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true;CATAPONTE_URL=http://localhost:8082;CATAUDIT_URL=http://localhost:8084;CATAMETRICAS_URL=http://localhost:8083;CATAVIGIA_URL=http://localhost:8085
 ```
 
 Start it **last**: Cataponte → Cataudit → Catametricas → Catapulsar. Catapulsar calls the other three, so its
@@ -144,8 +172,9 @@ need Docker or Podman: see [catacommons' README](../catacommons/README.md#integr
 
 `CatapulsarUiIT` (TEST-4, [orch.md decision 93](../orch.md)) opens the UI in the installed Google Chrome, headless,
 with [Playwright for Java](https://playwright.dev/java/): it loads the page, opens the topic `orders` from the tree,
-opens Bridges, creates a bridge from `orders` to `orders-eu`, checks what was sent to `POST /api/v1/bridges`, and
-goes back to the topic, where the new bridge's subscription is shown. It runs this flow twice: on a computer-sized
+checks the signed-in user and Sign out, opens Bridges, creates a bridge from `orders` to `orders-eu`, checks what
+was sent to `POST /api/v1/bridges` (body and CSRF header, from a `XSRF-TOKEN` cookie set as Spring Security would),
+and goes back to the topic, where the new bridge's subscription is shown. It runs this flow twice: on a computer-sized
 screen, and on a phone (390 × 844, touch), where it opens the ☰ drawer for the tree and uses the bottom tabs. It
 needs no Docker and no server: Playwright's `route()` answers every request of the page.
 
@@ -238,6 +267,7 @@ Full contract: <http://localhost:8081/swagger-ui.html>. Errors are RFC 9457 Prob
 
 | Method | Path | Description |
 |---|---|---|
+| `GET` | `/api/v1/session` | Who is signed in: `{user, login}` (`login` is `false` with the profile `no-auth`) |
 | `GET` | `/api/v1/tenants` | List tenants |
 | `GET` | `/api/v1/namespaces/{tenant}` | List namespaces |
 | `GET` | `/api/v1/topics/{tenant}/{ns}` | List topics |
@@ -272,13 +302,15 @@ Full contract: <http://localhost:8081/swagger-ui.html>. Errors are RFC 9457 Prob
 | `GET` | `/api/v1/overview?period=` | Cluster overview, one row per tenant (`period` = `1h`, `24h`, `7d`, `30d`; `503` if Catametricas is down) |
 | `GET` | `/api/v1/overview/{tenant}?period=` | Tenant overview, one row per namespace |
 | `GET` | `/api/v1/overview/{tenant}/{namespace}?period=` | Namespace overview, one row per topic (partitions summed) |
-| `POST` | `/api/v1/overview/collect?tenant=&namespace=` | Forced collection of the scope by Catametricas (`POST /api/v1/collect`, browser address as `X-Forwarded-For`); `503` if Catametricas is down |
+| `POST` | `/api/v1/overview/collect?tenant=&namespace=` | Forced collection of the scope by Catametricas (`POST /api/v1/collect`, the user in `X-Catacumbas69-User`); `503` if Catametricas is down |
 | `GET` | `/api/v1/audit?app=&entity=&action=&subject=&actor=&from=&to=&page=0&size=50` | Audit trail from Cataudit, newest first, with `total` (`503` if Cataudit is down) |
 | `GET` | `/api/v1/audit/facets` | Apps, entities and actions in use (filter lists) |
 | `GET` | `/api/v1/audit/{id}` | One audit entry |
 
 | Status | Meaning |
 |---|---|
+| `401` | No session (SEC-2): sign in through Dex; the page reloads on its own |
+| `403` | A change without the CSRF token (`X-XSRF-TOKEN`) |
 | `400` | Invalid name, count or body — `errors` lists each field. Names start with a letter, a digit or `_`. Also returned when creating, deleting, skipping or clearing a Pulsar system subscription (`__*`) |
 | `404` / `409` | Pulsar says the resource is missing / already exists |
 | `409` *Partitioned topic exists* | Creating a topic whose name is taken by a partitioned topic that has no partitions yet, so it is not listed; the detail gives the `pulsar-admin` commands to delete it or create its partitions |

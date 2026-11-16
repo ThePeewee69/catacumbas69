@@ -107,7 +107,7 @@ public class ConsumerStatusService implements ApplicationListener<ApplicationRea
      * @param instance a replica or {@code *}
      * @param consumer a consumer or {@code *}
      * @param action {@code pause}, {@code resume} or {@code check}
-     * @param user client IP address
+     * @param user who made the change (the signed-in user)
      * @throws ResponseStatusException {@code 400} for an unknown app or action, {@code 503} if Pulsar refuses
      */
     public void send(String app, String instance, String consumer, String action, String user) {

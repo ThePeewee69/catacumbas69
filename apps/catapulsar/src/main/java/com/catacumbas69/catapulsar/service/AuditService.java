@@ -35,7 +35,7 @@ public class AuditService {
     /**
      * Records an action without blocking the caller.
      *
-     * @param user client IP address
+     * @param user who made the change (the signed-in user)
      * @param action what happened
      * @param topic topic involved, or {@code null}
      * @param details extra details, or {@code null}
@@ -47,7 +47,7 @@ public class AuditService {
     /**
      * Records an action that involves a message payload, without blocking the caller.
      *
-     * @param user client IP address
+     * @param user who made the change (the signed-in user)
      * @param action what happened
      * @param topic topic involved
      * @param payload message payload, or {@code null}

@@ -2,7 +2,7 @@
 
 The five catacumbas69 apps (Cataponte, Cataudit, Catametricas, Catavigia, Catapulsar) run in MicroShift on
 **meloes**, in the namespace `catacumbas69-apps`, synced by ArgoCD. Rules and decisions:
-[`apps/orch.md`](../../../apps/orch.md) OPS-1..6 and decisions 81–87.
+[`apps/orch.md`](../../../apps/orch.md) OPS-1..6, SEC-2, SEC-8 and decisions 81–87, 96–100.
 
 ```
 necromancer (Mac)                                meloes (MicroShift)
@@ -17,21 +17,21 @@ git commit + push ──▶ GitHub ──▶ ArgoCD (manual Sync) ──▶ ns c
 
 | Folder | Content |
 |---|---|
-| `microshift/apps/registry/` | The image registry: `registry:2.8.3`, 20 Gi PVC (`topolvm-provisioner`), Route `registry.catacumbas69.com`, HTTP without authentication (home network only) |
+| `microshift/apps/registry/` | The image registry: `registry:2.8.3`, 20 Gi PVC (`topolvm-provisioner`), Route `registry.catacumbas69.com`, HTTPS and HTTP without authentication (home network only) |
 | `microshift/apps/catacumbas69-apps/<app>/` | Per app: ConfigMap, Deployment, Service, Route and a `kustomization.yaml` holding the image tag |
 | `microshift/apps/mongodb/mongodb-cluster.yaml` | The MongoDB ReplicaSet, with the user `catacumbas69-apps` (read and write on `catacumbas69` only) |
-| `microshift/argocd/` | Applied by the root Application `microshift`: a new or changed file there reaches the cluster with a push, and deleting a file deletes its Application (not what it deployed). One ArgoCD Application per app and one for the registry and the monitoring, with no automated sync: Sync by hand in the UI. Also `pulsar`, `mongodb` (the operator's chart) and `mongodb-cluster`, which sync **on their own** (prune, selfHeal): change those folders in git, then Refresh; an `oc apply` by hand is undone |
+| `microshift/argocd/` | Applied by the root Application `microshift`: a new or changed file there reaches the cluster with a push, and deleting a file deletes its Application (not what it deployed). One ArgoCD Application per app and one for the registry and the monitoring, with no automated sync: Sync by hand in the UI. Also `pulsar`, `mongodb` (the operator's chart), `mongodb-cluster`, `cert-manager`, `trust-manager`, `tls`, `dex` and `argocd-config` (orch.md decisions 97–99), which sync **on their own** (prune, selfHeal): change those folders in git, then Refresh; an `oc apply` by hand is undone |
 | `microshift/bootstrap/microshift.yaml` | The root Application (app of apps): it reads `microshift/argocd/` with automated sync, prune and selfHeal. Applied once by hand; it does not manage itself |
 | `apps/build/push.sh` | Builds an image with Podman (linux/amd64), pushes it and writes its tag into the app's `kustomization.yaml` |
 | `apps/build/mongo-secret.sh` | Creates the apps' MongoDB password and copies their connection string into `catacumbas69-apps` |
 
 | App | Replicas | Port | Route |
 |---|---|---|---|
-| Cataponte | 2 | 8082 | `http://cataponte.catacumbas69.com` |
-| Cataudit | 2 | 8084 | `http://cataudit.catacumbas69.com` |
-| Catametricas | 2 | 8083 | `http://catametricas.catacumbas69.com` |
-| Catavigia | 2 | 8085 | `http://catavigia.catacumbas69.com` |
-| Catapulsar | 1 | 8081 | `http://catapulsar.catacumbas69.com` |
+| Cataponte | 2 | 8082 | `https://cataponte.catacumbas69.com` |
+| Cataudit | 2 | 8084 | `https://cataudit.catacumbas69.com` |
+| Catametricas | 2 | 8083 | `https://catametricas.catacumbas69.com` |
+| Catavigia | 2 | 8085 | `https://catavigia.catacumbas69.com` |
+| Catapulsar | 1 | 8081 | `https://catapulsar.catacumbas69.com` (login through Dex) |
 
 Every container asks for 25m CPU and 384 Mi and may use up to 1 CPU and 768 Mi (meloes has 4 CPUs, most of
 them already requested by MongoDB and Pulsar). The JVM options are in each Deployment's `JAVA_TOOL_OPTIONS`
@@ -45,13 +45,18 @@ MongoDB through the URI in the Secret `catacumbas69-apps-mongodb` (key `uri`), w
 
 **Names, never IPs** (orch.md decision 87): the registry and the Routes are reached as `*.catacumbas69.com`, and
 Pulsar's external listener (used from IntelliJ) is advertised as `meloes:31650`. When the network changes
-(192.168.86.x → 192.168.69.x), only the DNS records change. Like the other Routes, they are plain HTTP.
+(192.168.86.x → 192.168.69.x), only the DNS records change. Every Route is HTTPS with the router's wildcard
+certificate from our own CA, and `http://` is redirected (orch.md decision 97,
+[`microshift/apps/tls/README.md`](../tls/README.md)); the registry also accepts plain HTTP.
 
 Metrics and dashboards: Prometheus and Grafana on meloes collect every replica's `/actuator/prometheus`; see
 [`microshift/apps/monitoring/README.md`](../monitoring/README.md) (orch.md decision 90).
 
-> **No authentication yet** (orch.md SEC-2): anyone who reaches a Route can use that app. Keep the Routes inside
-> the home network.
+> **Login** (orch.md SEC-2): Catapulsar asks for it, through Dex at `https://auth.catacumbas69.com`
+> ([`microshift/apps/dex/README.md`](../dex/README.md)); Catapulsar's Deployment needs the Secret
+> `catapulsar-oidc` and the ConfigMap `catacumbas69-ca`. The other four apps have no login: anyone who reaches
+> their Route can use them, and the user they record comes in `X-Catacumbas69-User` as sent. Keep the Routes
+> inside the home network.
 
 ## One-time setup
 
@@ -189,15 +194,16 @@ Applications stay manual, so nothing is deployed until you Sync them.
 In the ArgoCD UI, **Refresh** then **Sync**, one app at a time in the **start order**: Cataponte → Cataudit →
 Catametricas → Catavigia → Catapulsar, each one once the previous is Healthy. The nine pods end `Running`, `1/1`.
 
-**CPU on meloes is tight.** It has 4 CPUs, and MongoDB (3 members × 750m), its operator (500m) and Pulsar (500m)
-already request most of them, so each app container requests only **25m** (orch.md decision 85). A pod that stays
+**CPU on meloes is tight.** It has 4 CPUs, and MongoDB (3 members × 600m), its operator (250m) and Pulsar (400m)
+request a good part of them (trimmed a little in orch.md decision 96), so each app container requests only **25m**
+(decision 85). A pod that stays
 `Pending` with `Insufficient cpu` means the requests are full again; see them with
 `oc describe node meloes | grep -A 12 "Allocated resources"`.
 
 ### 7. Reset the URLs in Catapulsar
 
 Catapulsar's settings topic may still hold the `localhost` URLs saved from IntelliJ runs, and they win over the
-ConfigMap. Open `http://catapulsar.catacumbas69.com` → Settings → Connections and choose **use default** for
+ConfigMap. Open `https://catapulsar.catacumbas69.com` → Settings → Connections and choose **use default** for
 Cataponte, Catametricas, Cataudit and Catavigia (Catavigia also reads the first three from there).
 
 ## Every release (after changing code)

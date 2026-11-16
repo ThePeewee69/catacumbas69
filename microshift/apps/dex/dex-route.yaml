@@ -1,0 +1,17 @@
+# Dex's public address, which is also its issuer: the browser and the pods (Catapulsar, Grafana, ArgoCD) use it
+# (orch.md decisions 97, 98). HTTPS with the router's wildcard.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: dex
+spec:
+  host: auth.catacumbas69.com
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  to:
+    kind: Service
+    name: dex
+    weight: 100
+  port:
+    targetPort: http

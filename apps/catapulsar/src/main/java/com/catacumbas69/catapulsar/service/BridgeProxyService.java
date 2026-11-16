@@ -1,5 +1,6 @@
 package com.catacumbas69.catapulsar.service;
 
+import com.catacumbas69.catacommons.audit.Actor;
 import com.catacumbas69.catacommons.events.EventData;
 import com.catacumbas69.catacommons.events.EventPublisher;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -29,7 +30,7 @@ import org.springframework.web.util.UriComponentsBuilder;
  *
  * <p>Cataponte owns validation, the bridge model and the audit of bridge changes (its {@code bridge.*} events
  * carry before and after), so bodies are passed through unchanged, including Cataponte's Problem
- * Details on errors. The browser's address is sent as {@code X-Forwarded-For} so Cataponte can record who
+ * Details on errors. Who made the change is sent as {@code X-Catacumbas69-User} so Cataponte can record who
  * made the change. If Cataponte cannot be reached a {@link CataponteUnavailableException} is thrown, which
  * the API maps to {@code 503} (RES-12).
  *
@@ -41,8 +42,8 @@ import org.springframework.web.util.UriComponentsBuilder;
 @Service
 public class BridgeProxyService {
 
-    /** Header that carries the browser's address to Cataponte, for its audit log. */
-    public static final String FORWARDED_FOR = "X-Forwarded-For";
+    /** Header that names who made the change to the other apps, for their audit log (orch.md decision 100). */
+    public static final String USER_HEADER = Actor.HEADER;
 
     private static final Logger LOG = LoggerFactory.getLogger(BridgeProxyService.class);
     private static final String BRIDGES = "/api/v1/bridges";
@@ -140,7 +141,7 @@ public class BridgeProxyService {
      * Creates a bridge.
      *
      * @param body bridge definition as JSON
-     * @param user client IP address, recorded by Cataponte
+     * @param user who made the change (the signed-in user), recorded by Cataponte
      * @return Cataponte's response
      */
     public ResponseEntity<byte[]> create(String body, String user) {
@@ -153,7 +154,7 @@ public class BridgeProxyService {
      *
      * @param id bridge id
      * @param body bridge definition as JSON
-     * @param user client IP address, recorded by Cataponte
+     * @param user who made the change (the signed-in user), recorded by Cataponte
      * @return Cataponte's response
      */
     public ResponseEntity<byte[]> update(String id, String body, String user) {
@@ -165,7 +166,7 @@ public class BridgeProxyService {
      * Deletes a bridge.
      *
      * @param id bridge id
-     * @param user client IP address, recorded by Cataponte
+     * @param user who made the change (the signed-in user), recorded by Cataponte
      * @return Cataponte's response
      */
     public ResponseEntity<byte[]> delete(String id, String user) {
@@ -178,7 +179,7 @@ public class BridgeProxyService {
      *
      * @param id bridge id
      * @param enabled desired state
-     * @param user client IP address, recorded by Cataponte
+     * @param user who made the change (the signed-in user), recorded by Cataponte
      * @return Cataponte's response
      */
     public ResponseEntity<byte[]> setEnabled(String id, boolean enabled, String user) {
@@ -191,7 +192,7 @@ public class BridgeProxyService {
      *
      * @param id bridge id
      * @param body {@code {"messageId": "…"}}
-     * @param user client IP address, recorded by Cataponte
+     * @param user who made the change (the signed-in user), recorded by Cataponte
      * @return Cataponte's response
      */
     public ResponseEntity<byte[]> skip(String id, String body, String user) {
@@ -212,7 +213,7 @@ public class BridgeProxyService {
      * Creates an area.
      *
      * @param body area definition as JSON
-     * @param user client IP address, recorded by Cataponte
+     * @param user who made the change (the signed-in user), recorded by Cataponte
      * @return Cataponte's response
      */
     public ResponseEntity<byte[]> createArea(String body, String user) {
@@ -225,7 +226,7 @@ public class BridgeProxyService {
      *
      * @param id area id
      * @param body area definition as JSON
-     * @param user client IP address, recorded by Cataponte
+     * @param user who made the change (the signed-in user), recorded by Cataponte
      * @return Cataponte's response
      */
     public ResponseEntity<byte[]> updateArea(String id, String body, String user) {
@@ -239,7 +240,7 @@ public class BridgeProxyService {
      * @param id area id
      * @param bridges {@code delete} or {@code move} for an area that has bridges, else {@code null}
      * @param to area to move them to, or {@code null} for the general group
-     * @param user client IP address, recorded by Cataponte
+     * @param user who made the change (the signed-in user), recorded by Cataponte
      * @return Cataponte's response
      */
     public ResponseEntity<byte[]> deleteArea(String id, String bridges, String to, String user) {
@@ -307,7 +308,7 @@ public class BridgeProxyService {
             RestClient.RequestBodySpec request = cataponte.method(method).uri(endpoint.url() + path)
                     .accept(MediaType.APPLICATION_JSON, MediaType.APPLICATION_PROBLEM_JSON);
             if (user != null) {
-                request.header(FORWARDED_FOR, user);
+                request.header(USER_HEADER, user);
             }
             if (body != null) {
                 request.contentType(MediaType.APPLICATION_JSON).body(body);

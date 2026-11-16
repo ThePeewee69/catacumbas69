@@ -66,7 +66,7 @@ class CatametricasClientTest {
     void collect_postsTheScope_withTheBrowserAddress() {
         catametricas.expect(requestTo(URI.create("http://localhost:8083/api/v1/collect?tenant=home&namespace=media")))
                 .andExpect(method(HttpMethod.POST))
-                .andExpect(header("X-Forwarded-For", "10.0.0.1"))
+                .andExpect(header("X-Catacumbas69-User", "10.0.0.1"))
                 .andRespond(withSuccess("{\"scope\":\"home/media\",\"namespaces\":[\"home/media\"],\"collected\":1,"
                         + "\"coalesced\":0,\"failed\":[],\"finishedAt\":\"2026-11-04T09:00:07Z\",\"durationMillis\":180}",
                         MediaType.APPLICATION_JSON));

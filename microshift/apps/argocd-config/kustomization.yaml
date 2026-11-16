@@ -1,0 +1,10 @@
+# ArgoCD's own configuration on meloes (orch.md decision 99), applied by the ArgoCD Application argocd-config
+# (microshift/argocd/argocd-config.yaml). See microshift/apps/dex/README.md for the login.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+resources:
+  - argocd-cm.yaml
+  - argocd-rbac-cm.yaml
+  - argocd-cmd-params-cm.yaml
+  - argocd-route.yaml

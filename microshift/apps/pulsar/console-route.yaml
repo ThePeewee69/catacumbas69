@@ -5,6 +5,9 @@ metadata:
   namespace: pulsar
 spec:
   host: pulsar-console.catacumbas69.com
+  tls:
+    termination: edge   # the router's wildcard certificate (orch.md decision 97)
+    insecureEdgeTerminationPolicy: Redirect
   to:
     kind: Service
     name: pulsar-admin-console

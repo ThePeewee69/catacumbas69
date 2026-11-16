@@ -13,6 +13,7 @@ import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Request;
 import com.microsoft.playwright.Route;
 import com.microsoft.playwright.Tracing;
+import com.microsoft.playwright.options.Cookie;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -55,6 +56,9 @@ class CatapulsarUiIT {
 
     /** The page's origin; never resolved, every request to it is routed. */
     private static final String ORIGIN = "http://catapulsar.test";
+
+    /** The CSRF token the page finds in its cookie and must send back on every change (SEC-2, decision 100). */
+    private static final String CSRF_TOKEN = "ui-smoke-csrf-token";
 
     /** Where the trace and the screenshot of a failed test are kept. */
     private static final Path ARTIFACTS = Path.of("target", "ui-smoke");
@@ -152,6 +156,8 @@ class CatapulsarUiIT {
         context.setDefaultTimeout(10_000);
         // No automatic refresh during the test: what the page asks for depends only on the steps.
         context.addInitScript("localStorage.setItem('autoRefresh', 'off');");
+        // As Spring Security sets it after the login through Dex: readable by the page
+        context.addCookies(List.of(new Cookie("XSRF-TOKEN", CSRF_TOKEN).setUrl(ORIGIN)));
         context.tracing().start(new Tracing.StartOptions().setScreenshots(true).setSnapshots(true));
         context.route("**/*", this::answer);
 
@@ -201,6 +207,17 @@ class CatapulsarUiIT {
         page.navigate(ORIGIN + "/");
         assertThat(page.getByTestId("overview-title")).hasText("Cluster");
 
+        // The signed-in user and Sign out: in the top bar on a computer, at the foot of the drawer on a phone.
+        if (phone) {
+            assertThat(page.getByTestId("user-name")).isHidden();
+            press(page.getByTestId("drawer-open"));
+            assertThat(page.getByTestId("drawer-sign-out")).isVisible();
+            page.keyboard().press("Escape");
+        } else {
+            assertThat(page.getByTestId("user-name")).hasText("peewee69");
+            assertThat(page.getByTestId("sign-out")).isVisible();
+        }
+
         // Open a topic from the tree: its subscriptions, one of them already used by a bridge.
         tree("tree-tenant", "public");
         tree("tree-namespace", "default");
@@ -234,6 +251,7 @@ class CatapulsarUiIT {
                 .containsText(DESTINATION);
 
         Assertions.assertThat(writes).extracting(Write::request).containsExactly("POST /api/v1/bridges");
+        Assertions.assertThat(writes.get(0).csrf()).as("X-XSRF-TOKEN of the change").isEqualTo(CSRF_TOKEN);
         JsonNode bridge = json.readTree(writes.get(0).body());
         Assertions.assertThat(bridge.path("name").asText()).isEqualTo("orders-to-eu");
         Assertions.assertThat(bridge.path("source").path("topic").asText()).isEqualTo(SOURCE);
@@ -297,6 +315,7 @@ class CatapulsarUiIT {
 
     /** Every call the steps make, as the page makes it. */
     private void mockApi() {
+        mock("GET /api/v1/session", "session.json");
         mock("GET /api/v1/settings/refresh-interval", "refresh-interval.json");
         mock("GET /api/v1/alerts/summary", "alerts-summary.json");
         mock("GET /api/v1/tenants", "tenants.json");
@@ -347,7 +366,7 @@ class CatapulsarUiIT {
         String call = request.method() + " " + uri.getPath();
         String withQuery = uri.getRawQuery() == null ? call : call + "?" + uri.getRawQuery();
         if (!"GET".equals(request.method())) {
-            writes.add(new Write(call, request.postData()));
+            writes.add(new Write(call, request.postData(), request.headerValue("x-xsrf-token")));
         }
         Fixture fixture = api.getOrDefault(withQuery, api.get(call));
         if (fixture == null) {
@@ -386,7 +405,7 @@ class CatapulsarUiIT {
     private record Fixture(int status, String file) {
     }
 
-    /** A request that changes something: "METHOD /path" and its JSON body. */
-    private record Write(String request, String body) {
+    /** A request that changes something: "METHOD /path", its JSON body and the CSRF token it carried. */
+    private record Write(String request, String body, String csrf) {
     }
 }

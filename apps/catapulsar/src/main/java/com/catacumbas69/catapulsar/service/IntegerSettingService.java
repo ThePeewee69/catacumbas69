@@ -99,7 +99,7 @@ public abstract class IntegerSettingService {
      * Stores, applies, audits and publishes a new value. Storing the default removes the saved value.
      *
      * @param value new value
-     * @param user client IP address, for the audit log
+     * @param user who made the change (the signed-in user), for the audit log
      * @return the value now in use
      * @throws InvalidSettingException if {@code value} is out of range
      */
@@ -122,7 +122,7 @@ public abstract class IntegerSettingService {
     /**
      * Goes back to the configured default.
      *
-     * @param user client IP address, for the audit log
+     * @param user who made the change (the signed-in user), for the audit log
      * @return the value now in use
      */
     public int reset(String user) {

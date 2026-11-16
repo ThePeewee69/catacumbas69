@@ -77,7 +77,7 @@ public class LimitController {
     public BacklogLimitResponse set(@RequestParam @Pattern(regexp = TOPIC) String topic,
                                     @RequestParam @Pattern(regexp = SUBSCRIPTION) String subscription,
                                     @Valid @RequestBody BacklogLimitRequest body, HttpServletRequest request) {
-        return BacklogLimitResponse.of(limits.set(topic, subscription, body.limit(), ClientAddress.of(request)));
+        return BacklogLimitResponse.of(limits.set(topic, subscription, body.limit(), RequestActor.of(request)));
     }
 
     /**
@@ -93,7 +93,7 @@ public class LimitController {
     public ResponseEntity<Void> remove(@RequestParam @Pattern(regexp = TOPIC) String topic,
                                        @RequestParam @Pattern(regexp = SUBSCRIPTION) String subscription,
                                        HttpServletRequest request) {
-        if (!limits.remove(topic, subscription, ClientAddress.of(request))) {
+        if (!limits.remove(topic, subscription, RequestActor.of(request))) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No own limit for " + subscription + " on "
                     + topic);
         }

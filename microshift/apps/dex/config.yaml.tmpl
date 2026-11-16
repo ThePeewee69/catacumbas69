@@ -1,0 +1,54 @@
+# Dex's configuration on meloes (orch.md decision 98). TEMPLATE: dex-secret.sh replaces the @…@ markers with the
+# values it keeps in the Secret dex/dex-values and writes the result into the Secret dex/dex-config (key
+# config.yaml), then restarts Dex. Nothing secret or personal is in this file; after changing it, run
+#   bash microshift/apps/dex/dex-secret.sh config
+issuer: https://auth.catacumbas69.com
+
+# State (signing keys, sessions, auth codes) as custom resources in the cluster: no database and no volume
+storage:
+  type: kubernetes
+  config:
+    inCluster: true
+
+frontend:
+  issuer: catacumbas69
+
+oauth2:
+  skipApprovalScreen: true   # our own apps: no "allow access?" page
+
+# One login for every client (Auth Sessions, needs DEX_SESSIONS_ENABLED=true, set in microshift/argocd/dex.yaml).
+# 30 days at most, 7 days without use; "remember me" checked, so the session outlives the browser.
+sessions:
+  absoluteLifetime: 720h
+  validIfNotUsedFor: 168h
+  rememberMeCheckedByDefault: true
+  cookieEncryptionKey: "@COOKIE_KEY@"
+  ssoSharedWithDefault: all
+
+staticClients:
+  - id: catapulsar
+    name: Catapulsar
+    secret: "@CATAPULSAR_SECRET@"
+    redirectURIs:
+      - https://catapulsar.catacumbas69.com/login/oauth2/code/dex
+    postLogoutRedirectURIs:
+      - https://catapulsar.catacumbas69.com/
+  - id: grafana
+    name: Grafana
+    secret: "@GRAFANA_SECRET@"
+    redirectURIs:
+      - https://grafana.microshift.catacumbas69.com/login/generic_oauth
+  - id: argocd
+    name: ArgoCD
+    secret: "@ARGOCD_SECRET@"
+    redirectURIs:
+      - https://argocd.catacumbas69.com/auth/callback
+
+# Local users only, no upstream identity provider. One user, the admin of every app (decision 98)
+enablePasswordDB: true
+staticPasswords:
+  - email: "@ADMIN_EMAIL@"
+    hash: "@ADMIN_HASH@"
+    username: peewee69
+    preferredUsername: peewee69   # the claim Grafana and ArgoCD map to admin, and Catapulsar's actor
+    userID: fce757bd-8c32-4618-8bf1-daf0f436e872

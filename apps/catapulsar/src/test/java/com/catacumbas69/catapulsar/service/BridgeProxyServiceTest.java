@@ -50,7 +50,7 @@ class BridgeProxyServiceTest {
     void create_forwardsBody_andClientAddress() {
         cataponte.expect(requestTo("http://cataponte/api/v1/bridges"))
                 .andExpect(method(HttpMethod.POST))
-                .andExpect(header(BridgeProxyService.FORWARDED_FOR, "10.0.0.1"))
+                .andExpect(header(BridgeProxyService.USER_HEADER, "10.0.0.1"))
                 .andExpect(content().json("{\"name\":\"fanout\"}"))
                 .andRespond(withStatus(HttpStatus.CREATED).contentType(MediaType.APPLICATION_JSON).body(BRIDGE_JSON));
 
@@ -82,7 +82,7 @@ class BridgeProxyServiceTest {
     void enable_callsEnableEndpoint() {
         cataponte.expect(requestTo("http://cataponte/api/v1/bridges/b1/enable"))
                 .andExpect(method(HttpMethod.POST))
-                .andExpect(header(BridgeProxyService.FORWARDED_FOR, "10.0.0.1"))
+                .andExpect(header(BridgeProxyService.USER_HEADER, "10.0.0.1"))
                 .andRespond(withSuccess(BRIDGE_JSON, MediaType.APPLICATION_JSON));
 
         service.setEnabled("b1", true, "10.0.0.1");
@@ -93,7 +93,7 @@ class BridgeProxyServiceTest {
     @Test
     void list_sendsNoClientAddress() {
         cataponte.expect(requestTo("http://cataponte/api/v1/bridges"))
-                .andExpect(headerDoesNotExist(BridgeProxyService.FORWARDED_FOR))
+                .andExpect(headerDoesNotExist(BridgeProxyService.USER_HEADER))
                 .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
 
         service.list();
@@ -156,7 +156,7 @@ class BridgeProxyServiceTest {
     void deleteArea_forwardsTheChoiceForItsBridges_andPublishesTheRequest() {
         cataponte.expect(requestTo("http://cataponte/api/v1/areas/a1?bridges=move&to=a2"))
                 .andExpect(method(HttpMethod.DELETE))
-                .andExpect(header(BridgeProxyService.FORWARDED_FOR, "10.0.0.1"))
+                .andExpect(header(BridgeProxyService.USER_HEADER, "10.0.0.1"))
                 .andRespond(withStatus(HttpStatus.NO_CONTENT));
 
         ResponseEntity<byte[]> response = service.deleteArea("a1", "move", "a2", "10.0.0.1");

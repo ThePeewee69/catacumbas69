@@ -75,8 +75,9 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 - **ARCH-2 [MUST]** The browser talks only to Catapulsar. Catapulsar exposes the bridge API to its UI as a
   **backend-for-frontend (BFF)** proxy (`/api/v1/bridges/**` → Cataponte). Cataponte is not exposed outside
   the cluster except for local development.
-  *Why:* one origin (no CORS) and Cataponte stays internal. Catapulsar forwards the browser's address as
-  `X-Forwarded-For` so Cataponte's audit events name the user. The audit view works the same way: the
+  *Why:* one origin (no CORS) and Cataponte stays internal. Catapulsar names who made the change in
+  `X-Catacumbas69-User` (the user signed in through Dex, decision 100) so Cataponte's audit events name the user.
+  The audit view works the same way: the
   browser calls Catapulsar's `/api/v1/audit/**`, which forwards to Cataudit (ADR 0009).
 - **ARCH-3 [MUST]** Cataponte is the only component that consumes or produces on behalf of a bridge.
   Catapulsar MUST NOT implement relay logic.
@@ -116,6 +117,9 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 | `CATAPULSAR_URL` | Catavigia (`service.down` of Catapulsar, decision 78) | `http://catapulsar:8081` | `http://localhost:8081` |
 | `CATAVIGIA_EXPECTED_BROKERS` (optional) | Catavigia (`pulsar.broker.down` below this) | `1` | `1` |
 | `CATAPULSAR_REFRESH_INTERVAL_SECONDS` | Catapulsar | `10` | `10` |
+| `CATAPULSAR_AUTH_ISSUER`, `CATAPULSAR_AUTH_CLIENT_ID` | Catapulsar (login through Dex, SEC-2) | `https://auth.catacumbas69.com`, `catapulsar` | *(not used: profile `no-auth`)* |
+| `CATAPULSAR_AUTH_CLIENT_SECRET` | Catapulsar | Secret `catapulsar-oidc` (key `client-secret`, `dex-secret.sh`) | *(not used)* |
+| `SPRING_PROFILES_ACTIVE` | Catapulsar | *(not set: login on)* | `no-auth` (no login; actor = the browser's address) |
 | `CATAMETRICAS_COLLECT_INTERVAL_SECONDS` | Catapulsar, Catametricas (same value) | `60` | `60` |
 | `CATACOMMONS_*` (optional) | all | see `CatacommonsProperties`: retries `1s,2s,4s`, retention `7d`/`2GB`, backlog quota `1GB` (must be below the retention) | same |
 | `CATAPONTE_STATUS_WRITEINTERVAL`, `CATAPONTE_STATUS_STALEAFTER` (optional) | Cataponte (status of each replica, ADR 0012) | `PT5S`, `PT30S` | same |
@@ -389,8 +393,10 @@ Every package has a `package-info.java` (DOC-2). Dependencies point downwards on
   the old one until every consumer has moved.
 - **EVT-3 [MUST]** `data` is `{actor, before, after, details}` with text values only: build it with
   `EventData.action(...)` or `EventData.change(...)`, which flatten nested values (`source.topic`) and join
-  lists with commas. `actor` is the client IP address (ADR 0008) or the app name for changes the app makes
-  on its own.
+  lists with commas. `actor` is the user signed in to Catapulsar through Dex (`preferred_username`, SEC-2), which
+  Catapulsar names to the other apps in `X-Catacumbas69-User` (`catacommons` `Actor`); without that header (a
+  direct call) or without login (profile `no-auth`) it is the client IP address (ADR 0008). Changes an app makes
+  on its own have the app name.
 - **EVT-4 [MUST]** The audit trail **is** the events: every audited action publishes an event and nothing
   else (no app writes an audit collection). Each app registers its `audit-<app>` system bridge at start-up
   through catacommons (`AuditBridgeRegistrar`, `PUT /api/v1/bridges/system/{name}` on Cataponte,
@@ -658,8 +664,16 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 
 - **SEC-1 [MUST]** Secrets (Mongo user/password, any tokens) come from Kubernetes Secrets mounted as env
   vars. Locally they live only in the IntelliJ run configuration, which is git-ignored.
-- **SEC-2 [MUST]** Cataponte's Service is `ClusterIP` (ARCH-2). Catapulsar is exposed through a Route behind
-  authentication (e.g. an OAuth proxy) — the UI can delete topics and skip backlog.
+- **SEC-2 [MUST]** Catapulsar needs a login: every page and API call goes through **Dex**
+  (`https://auth.catacumbas69.com`, OpenID Connect) — the UI can delete topics and skip backlog. Only the health
+  probes, the Prometheus scrape and the API docs are open. The API answers `401` without a session (the page then
+  reloads through Dex), every change needs the CSRF token (cookie `XSRF-TOKEN`, header `X-XSRF-TOKEN`) and
+  signing out ends Dex's session too. The profile `no-auth` turns the login off, for IntelliJ and the tests only.
+  The other apps keep their Routes without login (home network only), so the `X-Catacumbas69-User` they receive
+  is trusted as it comes (decisions 98, 100).
+- **SEC-8 [MUST]** Every Route on meloes is HTTPS (`termination: edge`, HTTP redirected; the registry also
+  accepts HTTP) with the router's wildcard certificate, issued by our own CA through cert-manager. Pods that call
+  an HTTPS address trust the CA from the ConfigMap `catacumbas69-ca` that trust-manager writes (decision 97).
 - **SEC-3 [MUST]** Mongo users have least privilege: `readWrite` on `catacumbas69` only.
 - **SEC-4 [MUST]** Validate and bound all user input (topic names, counts, payload sizes); never build
   Pulsar admin paths from unvalidated strings. Names start with a letter, a digit or `_` (Pulsar's own names,
@@ -672,7 +686,7 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 
 - **SEC-6 [MUST]** Settings that make the server call a URL (the Cataponte URL) accept only absolute
   `http`/`https` URLs without credentials, query or fragment, and every change is audited. Anyone who can
-  open Catapulsar can point it at another host, which is one more reason for SEC-2's authentication.
+  open Catapulsar could point it at another host, which is one more reason for SEC-2's login.
 ---
 
 ## 12. Build and deploy
@@ -754,6 +768,11 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-15, login, HTTPS and requests** (SEC-2 done; decisions 96–100): every Route on meloes is HTTPS with a
+  wildcard from our own CA (cert-manager, trust-manager); Dex at `auth.catacumbas69.com` signs in to Catapulsar,
+  Grafana and ArgoCD with one session; Catapulsar needs the login (CSRF, `401` on the API, Sign out), and the
+  audit's actor is the user, passed to the other apps in `X-Catacumbas69-User`; ArgoCD's own configuration is in
+  git; the CPU requests of MongoDB and Pulsar were trimmed a little to make room.
 - **2026-11-14, phones** (UI-11, decision 95): below 768 px the sidebar is a ☰ drawer, the views are tabs at the
   bottom, tables are cards, dialogs fill the screen and touch targets are 44 px; `CatapulsarUiIT` also runs the
   smoke flow on a phone. A computer's screenshots and computed styles are unchanged.
@@ -928,7 +947,8 @@ Each phase ends with `mvn verify` green in every app, the docs updated and the a
 2. Envelope, publisher, topic names and settings reader live in a shared library, **`catacommons`**.
 3. *(Superseded by 40.)* Existing collections are **renamed to their owner's prefix** with a one-off, idempotent migration per
    owner (ADR 0010).
-4. Until an authentication proxy exists, the event `actor` is the **client IP address**.
+4. Until an authentication proxy exists, the event `actor` is the **client IP address**. *(Superseded by 100: the
+   user signed in through Dex.)*
 5. The apps become a **Maven multi-module build**: `apps/pom.xml` aggregates `catacommons` and every app;
    `mvn clean install` at `apps/` builds everything, and each Dockerfile builds from `apps/` with
    `mvn -pl <app> -am`.
@@ -1179,7 +1199,7 @@ MicroShift deployment (2026-11-09, closes G-16):
     **Podman 5.8** installed by Podman Desktop (Homebrew has no bottles for macOS 13 and Podman 6 dropped Intel
     Macs; 5.8 is supported until June 2027). Docker still works for local images.
 82. The **registry** runs in MicroShift (`registry:2.8.3`, namespace `registry`, 20 Gi PVC) behind the Route
-    `registry.catacumbas69.com`, in plain HTTP like the other Routes and without authentication, since it is
+    `registry.catacumbas69.com`, in plain HTTP like the other Routes (HTTPS too since decision 97) and without authentication, since it is
     reachable only from the home network (the Route waits up to 5 min for a layer). CRI-O on meloes lists it as an
     insecure registry; Podman pushes with `--tls-verify=false`.
 83. **Tags** are `<version>-<short sha>`. `push.sh` refuses to build with uncommitted changes under `apps/`
@@ -1341,3 +1361,55 @@ Phones (2026-11-14):
     `@media (width < 768px)` (plus `display: none` for the drawer's backdrop, ☰ and the tab bar on a computer);
     the computer's screenshots and computed styles were compared before and after and do not change.
     `CatapulsarUiIT` runs its flow a second time at 390 × 844 with touch, through the drawer and the bottom tabs.
+
+Login, HTTPS and requests (2026-11-15, SEC-2; [ADR 0016](docs/adr/0016-login-and-https.md)):
+
+96. **CPU requests trimmed a little** on meloes, whose requests were at 3.9 of its 4 CPUs while the pods used about
+    0.2: the MongoDB members' `mongod` 250m → 200m and `mongodb-agent` 500m → 400m (set in `mongodb-cluster.yaml`,
+    with the agent's other values as the operator's defaults), the MongoDB operator 500m → 250m (chart values in
+    `microshift/argocd/mongodb.yaml`) and Pulsar 500m → 400m. Limits and memory are unchanged. The new pods
+    (cert-manager ×3, trust-manager, Dex) ask 10m CPU and 32–64 Mi each.
+97. **HTTPS on every Route** of meloes (SEC-8). **cert-manager** (Application `cert-manager`, chart `*`, automated)
+    keeps our own **CA** (`catacumbas69 CA`, ECDSA P-256, 10 years, its key never rotated) in the Secret
+    `cert-manager/catacumbas69-ca`, and from it a **wildcard** for `*.catacumbas69.com` and
+    `*.microshift.catacumbas69.com` (90 days, renewed 30 days before) in `openshift-ingress/router-certs-custom`
+    (Application `tls`, `microshift/apps/tls`). MicroShift serves it as the router's **default certificate**
+    (`/etc/microshift/config.d/10-ingress.yaml`: `ingress.certificateSecret: router-certs-custom`, set once by hand
+    on meloes), and the router reloads it on its own when cert-manager renews it. Each Route only has
+    `termination: edge` and `insecureEdgeTerminationPolicy: Redirect`; the **registry** keeps `Allow`, so Podman
+    and CRI-O go on pushing and pulling over HTTP. **trust-manager** (Application `trust-manager`) writes the CA,
+    with the public CAs, into the ConfigMap `catacumbas69-ca` (`ca.crt` and a Java `truststore.p12`) in
+    `catacumbas69-apps` and `monitoring`. The CA's certificate is installed on the Mac and the iPhone;
+    `microshift/apps/tls/ca.sh` fetches it and keeps a backup of the CA (with its key) on the Mac. Chosen over Let's
+    Encrypt (the names resolve only at home) and over one certificate per Route (four more controllers and
+    `ignoreDifferences`).
+98. **Dex** (`auth.catacumbas69.com`, Application `dex`, chart `*`, automated) is the login of **Catapulsar,
+    Grafana and ArgoCD**, with **one session for all three** (Auth Sessions, Dex 2.46+: 30 days, 7 days without use,
+    "remember me" checked) and its state in custom resources (no database). One local user, **`peewee69`**, admin
+    of all three (Grafana `role_attribute_path`, ArgoCD `g, peewee69, role:admin`, both on `preferred_username`);
+    anyone else Dex knew would be refused. Its configuration holds the email, the password hash and the client
+    secrets, so it is **not in git**: `microshift/apps/dex/dex-secret.sh`, run on the Mac against meloes over ssh,
+    renders `config.yaml.tmpl` into the Secret `dex/dex-config` and writes the client secrets into each app's
+    namespace; the password is generated and shown once. Grafana keeps anonymous Viewer access and its local
+    `admin` (at `/login?disableAutoLogin=true`); its Sign in goes straight to Dex. Chosen over Keycloak or Authentik
+    (a database and about 1 GB on meloes) and over Authelia or Pocket ID (HTTPS-only, passkeys).
+99. **ArgoCD's own configuration in git** (`microshift/apps/argocd-config`, Application `argocd-config`, automated):
+    `argocd-cm` (the upstream keys as they were, plus `url`, the login through Dex, the local `admin` kept for
+    emergencies), `argocd-rbac-cm`, `argocd-cmd-params-cm` (`server.insecure: "true"`) and the Route, now `edge`
+    with the wildcard instead of `passthrough` to ArgoCD's self-signed certificate (the `argocd` CLI needs
+    `--grpc-web`). ArgoCD only takes a CA as text in its `oidc.config`, so it skips the check of Dex's certificate
+    (`oidc.tls.insecure.skip.verify`). ArgoCD itself stays installed by hand.
+100. **Login in Catapulsar** (SEC-2): Spring Security with the OpenID Connect client (`SecurityConfig`); Dex's
+     endpoints are written out instead of discovered, so Catapulsar starts with Dex down (RES-1), and the ID
+     token's issuer is still checked. Open without login: `/actuator/health/**`, `/actuator/prometheus`, the API
+     docs. `/api/**` answers `401` (the page reloads and goes through Dex); pages redirect to Dex. **CSRF**: the
+     token in the readable cookie `XSRF-TOKEN`, sent back by `api()` in `X-XSRF-TOKEN` (and by the Sign out form
+     as `_csrf`), checked as it is. The session is in memory (one replica), **24 h** without use. The top bar shows
+     the user and **Sign out** (on a phone, at the foot of the drawer); Sign out ends Dex's session too
+     (RP-initiated logout). `GET /api/v1/session` gives the user. The **actor** of Catapulsar's events is the user
+     (`preferred_username`), and every call to another app names them in **`X-Catacumbas69-User`**; Cataponte,
+     Catametricas and Catavigia take the actor from that header, else from `X-Forwarded-For`, else the caller's
+     address (`catacommons` `Actor`). The truststore for Dex's certificate comes from trust-manager's ConfigMap
+     (`JAVA_TOOL_OPTIONS`). The profile **`no-auth`** (`application-no-auth.properties`) turns all of it off: for
+     IntelliJ (`SPRING_PROFILES_ACTIVE=no-auth`) and for every Spring test (`src/test/resources/config/`), except
+     `SecurityConfigTests`, which runs with the login on.

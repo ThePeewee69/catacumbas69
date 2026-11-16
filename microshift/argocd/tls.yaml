@@ -1,0 +1,31 @@
+# ArgoCD Application of our own CA and certificates on meloes (orch.md decision 97): microshift/apps/tls.
+# It needs the CRDs of cert-manager and trust-manager (Applications cert-manager and trust-manager), so on a fresh
+# cluster the first syncs fail; SkipDryRunOnMissingResource and the retry wait for them.
+# AUTOMATED sync with prune and selfHeal.
+# Applied by the root Application microshift (microshift/bootstrap/microshift.yaml): commit and push.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tls
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ThePeewee69/catacumbas69.git
+    targetRevision: main
+    path: microshift/apps/tls
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

@@ -47,6 +47,6 @@ public class CollectController {
             @RequestParam(required = false) @Pattern(regexp = MetricsController.NAME) String tenant,
             @RequestParam(required = false) @Pattern(regexp = MetricsController.NAME) String namespace,
             HttpServletRequest request) throws PulsarAdminException {
-        return forced.collect(tenant, namespace, ClientAddress.of(request));
+        return forced.collect(tenant, namespace, RequestActor.of(request));
     }
 }

@@ -6,8 +6,8 @@ They are separate from the kube-prometheus-stack of the K3s cluster (`apps/monit
 
 | | |
 |---|---|
-| Grafana | `http://grafana.microshift.catacumbas69.com`: anyone can look (Viewer); log in as `admin` to change things |
-| Prometheus | `http://prometheus.microshift.catacumbas69.com`: no authentication, home network only |
+| Grafana | `https://grafana.microshift.catacumbas69.com`: anyone can look (Viewer); **Sign in** goes through Dex and you are Admin (orch.md decision 98); the local `admin` stays for emergencies |
+| Prometheus | `https://prometheus.microshift.catacumbas69.com`: no authentication, home network only |
 | Chart | kube-prometheus-stack **93.2.2**, release `prometheus`; values in `kube-prometheus-stack-values.yaml` |
 | ArgoCD | Application `monitoring` (`microshift/argocd/monitoring.yaml`): the chart, its values and this folder |
 | History | 30 days, at most 17 GB, on a 20 Gi PVC (`topolvm-provisioner`) |
@@ -71,9 +71,18 @@ The `oc` commands run on meloes, in the clone of the repository (`git pull` firs
    Every pod `Running`: the operator, `prometheus-prometheus-kube-prometheus-prometheus-0`, Grafana,
    kube-state-metrics and the node-exporter. Then, in Prometheus, **Status → Targets**: every target `UP`.
 
+## Login through Dex
+
+Anyone can look at the dashboards without logging in. To change things, **Sign in** (top right): Grafana goes
+straight to Dex (`auto_login`), and the user `peewee69` is Admin (`role_attribute_path` in the values; anyone else
+Dex knew would be refused). **Sign out** ends Dex's session too. The client secret is in the Secret
+`monitoring/grafana-oidc` and Dex's CA in the ConfigMap `catacumbas69-ca` (trust-manager); both must exist before
+the Sync that brings the login: see [`microshift/apps/dex/README.md`](../dex/README.md).
+
 ## The admin password
 
-Anyone can look at the dashboards without logging in. To change things, **Sign in** (top right) as `admin`.
+The local `admin` is for emergencies (Dex down): open
+`https://grafana.microshift.catacumbas69.com/login?disableAutoLogin=true` to get the login form.
 On meloes, in the clone:
 
 | Command | What it does |
@@ -106,8 +115,10 @@ You can also change it in Grafana (**Profile → Change password**), but then th
 | Symptom | Look at |
 |---|---|
 | A pod stays in `CreateContainerConfigError` or is never created | `oc -n monitoring get events --sort-by=.lastTimestamp`: an SCC refusal names the field it refuses |
-| Grafana `CreateContainerConfigError` | The Secret `grafana-admin` is missing: setup step 3 |
-| A target `DOWN` in Prometheus | Its error is on the Targets page; for an app, `curl http://<app>.catacumbas69.com/actuator/prometheus` |
+| Grafana `CreateContainerConfigError` | The Secret `grafana-admin` is missing: setup step 3; or `grafana-oidc` (`dex-secret.sh create`) |
+| Grafana `ContainerCreating` | The ConfigMap `catacumbas69-ca` is missing in `monitoring`: trust-manager, [`microshift/apps/tls/README.md`](../tls/README.md) |
+| Sign in fails with a certificate error | `tls_client_ca` in the values and the ConfigMap above |
+| A target `DOWN` in Prometheus | Its error is on the Targets page; for an app, `curl https://<app>.catacumbas69.com/actuator/prometheus` |
 | The pressure panels are empty | `cat /proc/pressure/cpu`: no file means `psi=1` is missing |
 | Prometheus restarts with `OOMKilled` | Raise `prometheus.prometheusSpec.resources.limits.memory` in the values |
 | Grafana stops answering and restarts with exit 137 | Memory near its limit: compare with `grafana.resources.limits.memory`; raise it and `grafana.env.GOMEMLIMIT` (about 80 % of the limit) together |

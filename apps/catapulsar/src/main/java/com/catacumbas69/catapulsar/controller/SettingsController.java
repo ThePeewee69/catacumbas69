@@ -104,7 +104,7 @@ public class SettingsController {
                                                        @Valid @RequestBody CountSettingRequest request,
                                                        HttpServletRequest http) {
         IntegerSettingService setting = threshold(name);
-        return AlertThresholdResponse.of(name, setting, setting.change(request.value(), ClientAddress.of(http)));
+        return AlertThresholdResponse.of(name, setting, setting.change(request.value(), RequestActor.of(http)));
     }
 
     /**
@@ -118,7 +118,7 @@ public class SettingsController {
     @DeleteMapping("/alerts/{name}")
     public AlertThresholdResponse resetAlertThreshold(@PathVariable String name, HttpServletRequest http) {
         IntegerSettingService setting = threshold(name);
-        return AlertThresholdResponse.of(name, setting, setting.reset(ClientAddress.of(http)));
+        return AlertThresholdResponse.of(name, setting, setting.reset(RequestActor.of(http)));
     }
 
     /**
@@ -143,7 +143,7 @@ public class SettingsController {
     @PutMapping("/catavigia")
     public UrlSettingResponse changeCatavigia(@Valid @RequestBody UrlSettingRequest request,
                                               HttpServletRequest http) {
-        catavigia.change(request.url(), ClientAddress.of(http));
+        catavigia.change(request.url(), RequestActor.of(http));
         return UrlSettingResponse.of(catavigia);
     }
 
@@ -156,7 +156,7 @@ public class SettingsController {
     @Operation(summary = "Reset the Catavigia URL to its configured default")
     @DeleteMapping("/catavigia")
     public UrlSettingResponse resetCatavigia(HttpServletRequest http) {
-        catavigia.reset(ClientAddress.of(http));
+        catavigia.reset(RequestActor.of(http));
         return UrlSettingResponse.of(catavigia);
     }
 
@@ -187,7 +187,7 @@ public class SettingsController {
     @PutMapping("/dead-letters")
     public CountSettingResponse changeDeadLetters(@Valid @RequestBody CountSettingRequest request,
                                                   HttpServletRequest http) {
-        return CountSettingResponse.of(deliveries, deliveries.change(request.value(), ClientAddress.of(http)));
+        return CountSettingResponse.of(deliveries, deliveries.change(request.value(), RequestActor.of(http)));
     }
 
     /**
@@ -199,7 +199,7 @@ public class SettingsController {
     @Operation(summary = "Reset the deliveries before a dead-letter topic")
     @DeleteMapping("/dead-letters")
     public CountSettingResponse resetDeadLetters(HttpServletRequest http) {
-        return CountSettingResponse.of(deliveries, deliveries.reset(ClientAddress.of(http)));
+        return CountSettingResponse.of(deliveries, deliveries.reset(RequestActor.of(http)));
     }
 
     /**
@@ -224,7 +224,7 @@ public class SettingsController {
     @PutMapping("/refresh-interval")
     public IntervalSettingResponse changeRefreshInterval(@Valid @RequestBody IntervalSettingRequest request,
                                                          HttpServletRequest http) {
-        return IntervalSettingResponse.of(refresh, refresh.change(request.seconds(), ClientAddress.of(http)));
+        return IntervalSettingResponse.of(refresh, refresh.change(request.seconds(), RequestActor.of(http)));
     }
 
     /**
@@ -236,7 +236,7 @@ public class SettingsController {
     @Operation(summary = "Reset the UI auto-refresh interval to its configured default")
     @DeleteMapping("/refresh-interval")
     public IntervalSettingResponse resetRefreshInterval(HttpServletRequest http) {
-        return IntervalSettingResponse.of(refresh, refresh.reset(ClientAddress.of(http)));
+        return IntervalSettingResponse.of(refresh, refresh.reset(RequestActor.of(http)));
     }
 
     /**
@@ -261,7 +261,7 @@ public class SettingsController {
     @PutMapping("/collect-interval")
     public IntervalSettingResponse changeCollectInterval(@Valid @RequestBody IntervalSettingRequest request,
                                                          HttpServletRequest http) {
-        return IntervalSettingResponse.of(collect, collect.change(request.seconds(), ClientAddress.of(http)));
+        return IntervalSettingResponse.of(collect, collect.change(request.seconds(), RequestActor.of(http)));
     }
 
     /**
@@ -273,7 +273,7 @@ public class SettingsController {
     @Operation(summary = "Reset the Catametricas collection interval to its configured default")
     @DeleteMapping("/collect-interval")
     public IntervalSettingResponse resetCollectInterval(HttpServletRequest http) {
-        return IntervalSettingResponse.of(collect, collect.reset(ClientAddress.of(http)));
+        return IntervalSettingResponse.of(collect, collect.reset(RequestActor.of(http)));
     }
 
     /**
@@ -298,7 +298,7 @@ public class SettingsController {
     @PutMapping("/cataponte")
     public UrlSettingResponse changeCataponte(@Valid @RequestBody UrlSettingRequest request,
                                               HttpServletRequest http) {
-        cataponte.change(request.url(), ClientAddress.of(http));
+        cataponte.change(request.url(), RequestActor.of(http));
         return UrlSettingResponse.of(cataponte);
     }
 
@@ -311,7 +311,7 @@ public class SettingsController {
     @Operation(summary = "Reset the Cataponte URL to its configured default")
     @DeleteMapping("/cataponte")
     public UrlSettingResponse resetCataponte(HttpServletRequest http) {
-        cataponte.reset(ClientAddress.of(http));
+        cataponte.reset(RequestActor.of(http));
         return UrlSettingResponse.of(cataponte);
     }
 
@@ -337,7 +337,7 @@ public class SettingsController {
     @PutMapping("/cataudit")
     public UrlSettingResponse changeCataudit(@Valid @RequestBody UrlSettingRequest request,
                                              HttpServletRequest http) {
-        cataudit.change(request.url(), ClientAddress.of(http));
+        cataudit.change(request.url(), RequestActor.of(http));
         return UrlSettingResponse.of(cataudit);
     }
 
@@ -350,7 +350,7 @@ public class SettingsController {
     @Operation(summary = "Reset the Cataudit URL to its configured default")
     @DeleteMapping("/cataudit")
     public UrlSettingResponse resetCataudit(HttpServletRequest http) {
-        cataudit.reset(ClientAddress.of(http));
+        cataudit.reset(RequestActor.of(http));
         return UrlSettingResponse.of(cataudit);
     }
 
@@ -376,7 +376,7 @@ public class SettingsController {
     @PutMapping("/catametricas")
     public UrlSettingResponse changeCatametricas(@Valid @RequestBody UrlSettingRequest request,
                                                  HttpServletRequest http) {
-        catametricas.change(request.url(), ClientAddress.of(http));
+        catametricas.change(request.url(), RequestActor.of(http));
         return UrlSettingResponse.of(catametricas);
     }
 
@@ -389,7 +389,7 @@ public class SettingsController {
     @Operation(summary = "Reset the Catametricas URL to its configured default")
     @DeleteMapping("/catametricas")
     public UrlSettingResponse resetCatametricas(HttpServletRequest http) {
-        catametricas.reset(ClientAddress.of(http));
+        catametricas.reset(RequestActor.of(http));
         return UrlSettingResponse.of(catametricas);
     }
 }

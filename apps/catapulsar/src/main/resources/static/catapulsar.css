@@ -3167,11 +3167,37 @@ td .mono.over-limit {
   padding: 4px 10px;
 }
 
+/* ── Signed-in user (SEC-2, orch.md decision 100): top bar on a computer, foot of the drawer on a phone ── */
+.topbar-user,
+.drawer-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.user-name {
+  color: var(--muted);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawer-user {
+  justify-content: space-between;
+  padding: 12px 16px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+}
+
 /* ── Phones (< 768 px): sidebar drawer, compact top bar, bottom tabs, tables as cards, full-screen dialogs ── */
 
 /* Only used on phones; on a computer the views are in the top bar and the sidebar is always there. */
 .drawer-toggle,
 .drawer-backdrop,
+.drawer-user,
 .mobile-tabs {
   display: none;
 }
@@ -3221,8 +3247,14 @@ td .mono.over-limit {
 
   .conn-label,
   .auto-label,
-  .topbar-panel-btn {
+  .topbar-panel-btn,
+  .topbar-user {
     display: none;
+  }
+
+  /* The user and Sign out move to the foot of the drawer */
+  .drawer-user {
+    display: flex;
   }
 
   /* "↺ Refresh" shows only its arrow (the button keeps aria-label="Refresh") */

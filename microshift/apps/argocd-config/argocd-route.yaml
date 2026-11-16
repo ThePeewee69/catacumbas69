@@ -1,0 +1,22 @@
+# ArgoCD's address (orch.md decisions 97, 99): edge TLS with the router's wildcard, plain HTTP to argocd-server
+# (server.insecure in argocd-cmd-params-cm). Was passthrough to ArgoCD's own self-signed certificate until then.
+# The argocd CLI needs --grpc-web through it.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: argocd
+  labels:
+    app.kubernetes.io/component: server
+    app.kubernetes.io/name: argocd-server
+    app.kubernetes.io/part-of: argocd
+spec:
+  host: argocd.catacumbas69.com
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  to:
+    kind: Service
+    name: argocd-server
+    weight: 100
+  port:
+    targetPort: http

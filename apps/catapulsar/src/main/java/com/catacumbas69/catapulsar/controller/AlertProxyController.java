@@ -98,13 +98,13 @@ public class AlertProxyController {
      * Marks an alert as seen.
      *
      * @param id alert id
-     * @param request current request; its client address is sent to Catavigia
+     * @param request current request; who made it (the signed-in user) is sent to Catavigia
      * @return Catavigia's response
      */
     @Operation(summary = "Mark an open alert as seen")
     @PostMapping("/api/v1/alerts/{id}/seen")
     public ResponseEntity<byte[]> seen(@PathVariable @Pattern(regexp = ID) String id, HttpServletRequest request) {
-        return alerts.seen(id, ClientAddress.of(request));
+        return alerts.seen(id, RequestActor.of(request));
     }
 
     /**
@@ -124,14 +124,14 @@ public class AlertProxyController {
      * @param topic topic without partition suffix
      * @param subscription subscription name
      * @param body {@code {"limit": n}}
-     * @param request current request; its client address is sent to Catavigia
+     * @param request current request; who made it (the signed-in user) is sent to Catavigia
      * @return Catavigia's response
      */
     @Operation(summary = "Set a subscription's own backlog limit")
     @PutMapping(path = "/api/v1/limits/backlog", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<byte[]> setLimit(@RequestParam String topic, @RequestParam String subscription,
                                            @RequestBody String body, HttpServletRequest request) {
-        return alerts.setLimit(topic, subscription, body, ClientAddress.of(request));
+        return alerts.setLimit(topic, subscription, body, RequestActor.of(request));
     }
 
     /**
@@ -139,13 +139,13 @@ public class AlertProxyController {
      *
      * @param topic topic without partition suffix
      * @param subscription subscription name
-     * @param request current request; its client address is sent to Catavigia
+     * @param request current request; who made it (the signed-in user) is sent to Catavigia
      * @return Catavigia's response
      */
     @Operation(summary = "Remove a subscription's own backlog limit")
     @DeleteMapping("/api/v1/limits/backlog")
     public ResponseEntity<byte[]> removeLimit(@RequestParam String topic, @RequestParam String subscription,
                                               HttpServletRequest request) {
-        return alerts.removeLimit(topic, subscription, ClientAddress.of(request));
+        return alerts.removeLimit(topic, subscription, RequestActor.of(request));
     }
 }

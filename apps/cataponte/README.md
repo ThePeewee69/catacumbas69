@@ -31,7 +31,7 @@ Engineering rules: [`../orch.md`](../orch.md). Architecture decisions: [`../docs
   `com.catacumbas69.cataponte.bridge.<created|updated|deleted|enabled|disabled>.v1` (and `subscription.deleted`,
   see *Subscriptions*) on
   `catacumbas69/cataponte/events`, keyed by bridge id. Each event carries the definition before and after
-  (flattened) and the actor: the client address from Catapulsar's `X-Forwarded-For`, the app name for system
+  (flattened) and the actor: the user Catapulsar names in `X-Catacumbas69-User` (else the client address from `X-Forwarded-For`; orch.md decision 100), the app name for system
   bridges, or `cataponte` for its own `audit-cataponte`. Cataudit owns the trail. The namespace and topic are created at start-up through the Pulsar admin API
   (`PULSAR_SERVICE_URL`).
 - **System bridges** (ADR 0009): each app registers its `audit-<app>` bridge

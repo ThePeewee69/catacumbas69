@@ -114,14 +114,14 @@ public class CatametricasClient {
      *
      * @param tenant tenant, or {@code null} for the whole cluster
      * @param namespace namespace inside the tenant, or {@code null}
-     * @param actor browser address, sent as {@code X-Forwarded-For} for the audit
+     * @param actor who asked (the signed-in user), sent as {@code X-Catacumbas69-User} for the audit
      * @return what was collected
      * @throws CatametricasUnavailableException if Catametricas cannot be reached or fails
      */
     public ForcedCollection collect(String tenant, String namespace, String actor) {
         URI uri = scope("/api/v1/collect", tenant, namespace).encode().build().toUri();
         try {
-            return catametricas.post().uri(uri).header(BridgeProxyService.FORWARDED_FOR, actor)
+            return catametricas.post().uri(uri).header(BridgeProxyService.USER_HEADER, actor)
                     .accept(MediaType.APPLICATION_JSON).retrieve().body(ForcedCollection.class);
         } catch (ResourceAccessException | HttpServerErrorException e) {
             throw new CatametricasUnavailableException(e);

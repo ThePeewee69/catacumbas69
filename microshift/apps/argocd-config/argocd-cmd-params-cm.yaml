@@ -1,0 +1,11 @@
+# argocd-server serves plain HTTP: the Route ends TLS with the router's wildcard (orch.md decisions 97, 99).
+# Read only at start-up: `oc -n argocd rollout restart deploy/argocd-server` after a change.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cmd-params-cm
+  labels:
+    app.kubernetes.io/name: argocd-cmd-params-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  server.insecure: "true"

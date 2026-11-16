@@ -115,13 +115,13 @@ public class BridgeProxyController {
      * Creates a bridge.
      *
      * @param body bridge definition (JSON)
-     * @param request current request; its client address is sent to Cataponte for the audit log
+     * @param request current request; who made it (the signed-in user) is sent to Cataponte for the audit log
      * @return Cataponte's response
      */
     @Operation(summary = "Create a bridge")
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<byte[]> create(@RequestBody String body, HttpServletRequest request) {
-        return bridges.create(body, ClientAddress.of(request));
+        return bridges.create(body, RequestActor.of(request));
     }
 
     /**
@@ -129,40 +129,40 @@ public class BridgeProxyController {
      *
      * @param id bridge id
      * @param body bridge definition (JSON)
-     * @param request current request; its client address is sent to Cataponte for the audit log
+     * @param request current request; who made it (the signed-in user) is sent to Cataponte for the audit log
      * @return Cataponte's response
      */
     @Operation(summary = "Update a bridge")
     @PutMapping(path = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<byte[]> update(@PathVariable @PulsarName String id, @RequestBody String body,
                                          HttpServletRequest request) {
-        return bridges.update(id, body, ClientAddress.of(request));
+        return bridges.update(id, body, RequestActor.of(request));
     }
 
     /**
      * Deletes a bridge.
      *
      * @param id bridge id
-     * @param request current request; its client address is sent to Cataponte for the audit log
+     * @param request current request; who made it (the signed-in user) is sent to Cataponte for the audit log
      * @return Cataponte's response
      */
     @Operation(summary = "Delete a bridge")
     @DeleteMapping("/{id}")
     public ResponseEntity<byte[]> delete(@PathVariable @PulsarName String id, HttpServletRequest request) {
-        return bridges.delete(id, ClientAddress.of(request));
+        return bridges.delete(id, RequestActor.of(request));
     }
 
     /**
      * Enables a bridge.
      *
      * @param id bridge id
-     * @param request current request; its client address is sent to Cataponte for the audit log
+     * @param request current request; who made it (the signed-in user) is sent to Cataponte for the audit log
      * @return Cataponte's response
      */
     @Operation(summary = "Enable a bridge")
     @PostMapping("/{id}/enable")
     public ResponseEntity<byte[]> enable(@PathVariable @PulsarName String id, HttpServletRequest request) {
-        return bridges.setEnabled(id, true, ClientAddress.of(request));
+        return bridges.setEnabled(id, true, RequestActor.of(request));
     }
 
     /**
@@ -170,26 +170,26 @@ public class BridgeProxyController {
      *
      * @param id bridge id
      * @param body {@code {"messageId": "…"}}
-     * @param request current request; its client address is sent to Cataponte for the audit log
+     * @param request current request; who made it (the signed-in user) is sent to Cataponte for the audit log
      * @return Cataponte's response
      */
     @Operation(summary = "Skip the message an ordered Failover bridge is stuck on")
     @PostMapping(path = "/{id}/skip", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<byte[]> skip(@PathVariable @PulsarName String id, @RequestBody String body,
                                        HttpServletRequest request) {
-        return bridges.skip(id, body, ClientAddress.of(request));
+        return bridges.skip(id, body, RequestActor.of(request));
     }
 
     /**
      * Disables a bridge.
      *
      * @param id bridge id
-     * @param request current request; its client address is sent to Cataponte for the audit log
+     * @param request current request; who made it (the signed-in user) is sent to Cataponte for the audit log
      * @return Cataponte's response
      */
     @Operation(summary = "Disable a bridge")
     @PostMapping("/{id}/disable")
     public ResponseEntity<byte[]> disable(@PathVariable @PulsarName String id, HttpServletRequest request) {
-        return bridges.setEnabled(id, false, ClientAddress.of(request));
+        return bridges.setEnabled(id, false, RequestActor.of(request));
     }
 }

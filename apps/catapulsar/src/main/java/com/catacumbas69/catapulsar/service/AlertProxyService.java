@@ -22,7 +22,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 /**
  * Backend-for-frontend of the alerts (ADR 0015): forwards {@code /api/v1/alerts/**} and {@code /api/v1/limits/**}
- * to Catavigia, with the browser's address as {@code X-Forwarded-For} so Catavigia records who did it. Marking an
+ * to Catavigia, with who made it as {@code X-Catacumbas69-User} so Catavigia records who did it. Marking an
  * alert as seen and changing a backlog limit are also published by Catapulsar as {@code alert.seen-requested} and
  * {@code limit.change-requested}, with Catavigia's HTTP status, as for the bridges.
  */
@@ -67,7 +67,7 @@ public class AlertProxyService {
      * Marks an alert as seen.
      *
      * @param id alert id
-     * @param user client address
+     * @param user who made the change (the signed-in user)
      * @return Catavigia's response
      */
     public ResponseEntity<byte[]> seen(String id, String user) {
@@ -81,7 +81,7 @@ public class AlertProxyService {
      * @param topic topic without partition suffix
      * @param subscription subscription name
      * @param body {@code {"limit": n}}
-     * @param user client address
+     * @param user who made the change (the signed-in user)
      * @return Catavigia's response
      */
     public ResponseEntity<byte[]> setLimit(String topic, String subscription, String body, String user) {
@@ -94,7 +94,7 @@ public class AlertProxyService {
      *
      * @param topic topic without partition suffix
      * @param subscription subscription name
-     * @param user client address
+     * @param user who made the change (the signed-in user)
      * @return Catavigia's response
      */
     public ResponseEntity<byte[]> removeLimit(String topic, String subscription, String user) {
@@ -146,7 +146,7 @@ public class AlertProxyService {
             RestClient.RequestBodySpec request = catavigia.method(method).uri(uri)
                     .accept(MediaType.APPLICATION_JSON, MediaType.APPLICATION_PROBLEM_JSON);
             if (user != null) {
-                request.header(BridgeProxyService.FORWARDED_FOR, user);
+                request.header(BridgeProxyService.USER_HEADER, user);
             }
             if (body != null) {
                 request.contentType(MediaType.APPLICATION_JSON).body(body);

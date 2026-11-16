@@ -75,7 +75,7 @@ spec:
           resources:
             requests:
               memory: 1Gi
-              cpu: 500m
+              cpu: 400m   # trimmed a little (orch.md decision 96); the limit of 2 CPUs stays
             limits:
               memory: 3Gi
               cpu: 2

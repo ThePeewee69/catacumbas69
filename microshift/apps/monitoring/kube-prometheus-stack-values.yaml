@@ -128,6 +128,19 @@ grafana:
   # killed. GOMEMLIMIT tells Go's garbage collector where to stop, below the container limit.
   env:
     GOMEMLIMIT: 800MiB
+  # Login through Dex (orch.md decision 98): the client secret comes from the Secret monitoring/grafana-oidc, made by
+  # microshift/apps/dex/dex-secret.sh
+  envValueFrom:
+    GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET:
+      secretKeyRef:
+        name: grafana-oidc
+        key: client-secret
+  # Our CA, to trust https://auth.catacumbas69.com (ConfigMap written by trust-manager, decision 97)
+  extraConfigmapMounts:
+    - name: catacumbas69-ca
+      configMap: catacumbas69-ca
+      mountPath: /etc/catacumbas69-ca
+      readOnly: true
   resources:
     requests:
       cpu: 25m
@@ -137,10 +150,33 @@ grafana:
   grafana.ini:
     server:
       domain: grafana.microshift.catacumbas69.com
-      root_url: http://grafana.microshift.catacumbas69.com
+      root_url: https://grafana.microshift.catacumbas69.com
+    security:
+      cookie_secure: true
+    # Dashboards stay visible without login; "Sign in" goes straight to Dex (auto_login). The local admin
+    # (grafana-admin, grafana-secret.sh) remains for emergencies at /login?disableAutoLogin=true
     auth.anonymous:
       enabled: true
       org_role: Viewer
+    auth.generic_oauth:
+      enabled: true
+      name: Dex
+      client_id: grafana
+      scopes: openid profile email
+      auth_url: https://auth.catacumbas69.com/auth
+      token_url: https://auth.catacumbas69.com/token
+      api_url: https://auth.catacumbas69.com/userinfo
+      # Sign out ends Dex's session too (Dex asks to confirm: it needs an id_token_hint to send you back, which
+      # Grafana does not pass), otherwise auto_login would log you straight back in
+      signout_redirect_url: https://auth.catacumbas69.com/logout
+      tls_client_ca: /etc/catacumbas69-ca/ca.crt
+      use_pkce: true
+      auto_login: true
+      allow_sign_up: true
+      login_attribute_path: preferred_username
+      # Only peewee69 is let in, as Admin (decision 98); anyone else Dex knew would be refused
+      role_attribute_path: "preferred_username == 'peewee69' && 'Admin' || ''"
+      role_attribute_strict: true
     analytics:
       reporting_enabled: false
       check_for_updates: false

@@ -215,6 +215,23 @@ function problemMessage(body, fallback) {
   return body?.detail ?? body?.title ?? body?.error ?? body?.message ?? fallback;
 }
 
+/** Name of the cookie with Spring Security's CSRF token (SEC-2, orch.md decision 100). */
+const CSRF_COOKIE = 'XSRF-TOKEN';
+/** Header that carries the token back on every change. */
+const CSRF_HEADER = 'X-XSRF-TOKEN';
+
+/**
+ * Reads the CSRF token from its cookie; empty without login (profile no-auth), where none is needed.
+ * @returns {string} the token, or ''
+ */
+function csrfToken() {
+  const cookie = document.cookie.split('; ').find((c) => c.startsWith(CSRF_COOKIE + '='));
+  return cookie ? decodeURIComponent(cookie.slice(CSRF_COOKIE.length + 1)) : '';
+}
+
+/** Whether the page is already reloading because the session ended, so that it reloads once. */
+let reloadingForLogin = false;
+
 /* exported app */
 /**
  * The Alpine component of the whole page (`<body x-data="app()">`): state and methods, grouped by feature.
@@ -226,6 +243,8 @@ function app() {
     tenants: [],
     /** Phones (< 768 px): whether the sidebar drawer is open. */
     drawerOpen: false,
+    /** Who is signed in through Dex (SEC-2); login is false without login (profile no-auth). */
+    session: { user: null, login: false },
     namespaces: [],
     topics: [],
     sel: { tenant: null, namespace: null, topic: null },
@@ -391,12 +410,40 @@ function app() {
      * Starts the page: alert badge, shared refresh interval and timer, tenants, the tree nodes left open and the overview. Alpine calls it once.
      */
     async init() {
+      this.loadSession();
       this.startAlertBadge();
       await this.loadRefreshInterval();
       this.scheduleRefresh();
       await this.loadTenants();
       this.loadOpenTreeNodes();
       await this.loadOverview();
+    },
+
+    // ── Session (SEC-2) ─────────────────────────────────────────────────────
+    /** Loads who is signed in, for the top bar; nothing shows if it cannot be read. */
+    async loadSession() {
+      try {
+        this.session = await this.api('/api/v1/session');
+      } catch {
+        /* keep the top bar without the user */
+      }
+    },
+
+    /**
+     * Signs out of Catapulsar and of Dex: a form POST to /logout with the CSRF token, so the browser follows
+     * the redirects to Dex and back to the page, which asks for the password again.
+     */
+    signOut() {
+      const form = document.createElement('form');
+      form.method = 'post';
+      form.action = '/logout';
+      const token = document.createElement('input');
+      token.type = 'hidden';
+      token.name = '_csrf';
+      token.value = csrfToken();
+      form.append(token);
+      document.body.append(form);
+      form.submit();
     },
 
     // ── Auto-refresh ───────────────────────────────────────────────────────
@@ -1293,15 +1340,26 @@ function app() {
     // ── API helper ─────────────────────────────────────────────────────────
     /**
      * Calls Catapulsar's API; the one helper for every request (UI-3). A Problem Details answer becomes an error with its message.
+     * Changes carry the CSRF token, and a 401 (session ended) reloads the page to sign in again (SEC-2).
      * @param {string} url path, e.g. /api/v1/tenants
      * @param {RequestInit} [options] fetch options
      * @returns {Promise<any>} the parsed JSON body, or the text of a non-JSON answer
      */
     async api(url, options = {}) {
-      const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json' },
-        ...options,
-      });
+      const headers = { 'Content-Type': 'application/json', ...options.headers };
+      const method = (options.method ?? 'GET').toUpperCase();
+      // Every change carries the CSRF token (SEC-2); reads do not need it
+      if (method !== 'GET' && method !== 'HEAD' && csrfToken()) headers[CSRF_HEADER] = csrfToken();
+      const res = await fetch(url, { ...options, headers });
+      // The session ended (a day without use, or Catapulsar restarted): reload, which goes through Dex and,
+      // while Dex's own session lasts, straight back to the page
+      if (res.status === 401) {
+        if (!reloadingForLogin) {
+          reloadingForLogin = true;
+          window.location.reload();
+        }
+        throw new Error('Session ended: signing in again');
+      }
       const ct = res.headers.get('content-type') ?? '';
       const body = ct.includes('json') ? await res.json() : await res.text();
       if (!res.ok) throw new Error(problemMessage(body, res.statusText));

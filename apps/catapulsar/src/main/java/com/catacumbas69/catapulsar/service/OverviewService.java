@@ -86,7 +86,7 @@ public class OverviewService {
      *
      * @param tenant tenant, or {@code null} for the cluster
      * @param namespace namespace inside the tenant, or {@code null}
-     * @param actor browser address, for Catametricas' audit
+     * @param actor who asked (the signed-in user), for Catametricas' audit
      * @return what was collected
      */
     public CatametricasClient.ForcedCollection collect(String tenant, String namespace, String actor) {

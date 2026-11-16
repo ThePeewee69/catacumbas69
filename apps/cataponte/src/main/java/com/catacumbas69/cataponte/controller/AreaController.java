@@ -85,7 +85,7 @@ public class AreaController {
     @PostMapping
     public ResponseEntity<AreaResponse> create(@Valid @RequestBody AreaRequest request,
                                                UriComponentsBuilder uriBuilder, HttpServletRequest http) {
-        AreaResponse created = respond(service.create(AreaResponse.toDocument(request), ClientAddress.of(http)));
+        AreaResponse created = respond(service.create(AreaResponse.toDocument(request), RequestActor.of(http)));
         URI location = uriBuilder.path("/api/v1/areas/{id}").buildAndExpand(created.id()).toUri();
         return ResponseEntity.created(location).body(created);
     }
@@ -104,7 +104,7 @@ public class AreaController {
     public AreaResponse update(@PathVariable String id, @Valid @RequestBody AreaRequest request,
                                HttpServletRequest http) {
         return respond(service.update(id, AreaResponse.toDocument(request), request.version(),
-                ClientAddress.of(http)));
+                RequestActor.of(http)));
     }
 
     /**
@@ -122,7 +122,7 @@ public class AreaController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable String id, @RequestParam(required = false) String bridges,
                        @RequestParam(required = false) String to, HttpServletRequest http) {
-        service.delete(id, onBridges(bridges), to, ClientAddress.of(http));
+        service.delete(id, onBridges(bridges), to, RequestActor.of(http));
     }
 
     private AreaResponse respond(AreaDocument area) {

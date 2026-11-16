@@ -61,7 +61,7 @@ public class DeadLetterService {
      *
      * @param deadLetterTopic the DLQ
      * @param messageId the message
-     * @param user client IP address
+     * @param user who made the change (the signed-in user)
      * @return the topic it was sent to
      * @throws PulsarClientException if Pulsar refuses
      */
@@ -85,7 +85,7 @@ public class DeadLetterService {
      *
      * @param deadLetterTopic the DLQ
      * @param messageId the message
-     * @param user client IP address
+     * @param user who made the change (the signed-in user)
      * @throws PulsarClientException if Pulsar refuses
      */
     public void discard(String deadLetterTopic, String messageId, String user) throws PulsarClientException {
@@ -103,7 +103,7 @@ public class DeadLetterService {
      * Sends every dead letter back to the topic it came from; one without an origin stays in the DLQ.
      *
      * @param deadLetterTopic the DLQ
-     * @param user client IP address
+     * @param user who made the change (the signed-in user)
      * @return how many were sent back ({@code sent}) and left ({@code left})
      * @throws PulsarClientException if Pulsar refuses
      */
@@ -143,7 +143,7 @@ public class DeadLetterService {
      * Removes every dead letter from the DLQ.
      *
      * @param deadLetterTopic the DLQ
-     * @param user client IP address
+     * @param user who made the change (the signed-in user)
      * @throws PulsarAdminException if Pulsar refuses
      */
     public void discardAll(String deadLetterTopic, String user) throws PulsarAdminException {

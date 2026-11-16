@@ -61,6 +61,18 @@ class AreaControllerTest {
     }
 
     @Test
+    void create_recordsTheUserNamedByCatapulsar() throws Exception {
+        when(service.create(any(), eq("peewee69"))).thenReturn(area("a1", "media"));
+
+        mvc.perform(post("/api/v1/areas").contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Catacumbas69-User", "peewee69").header("X-Forwarded-For", "10.0.0.9")
+                        .content("{\"name\":\"media\",\"patterns\":[\"home/media/*\"]}"))
+                .andExpect(status().isCreated());
+
+        verify(service).create(any(), eq("peewee69"));
+    }
+
+    @Test
     void create_refusesAnInvalidName() throws Exception {
         mvc.perform(post("/api/v1/areas").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"bad name\"}"))

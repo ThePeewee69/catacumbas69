@@ -1,0 +1,8 @@
+# Our own CA and the router's wildcard certificate on meloes (orch.md decision 97), applied by the ArgoCD
+# Application tls (microshift/argocd/tls.yaml). See README.md.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ca.yaml
+  - router-certificate.yaml
+  - ca-bundle.yaml

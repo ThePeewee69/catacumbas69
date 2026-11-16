@@ -1,4 +1,4 @@
-# Plain HTTP like the other Routes on meloes (orch.md decision 82). Image layers can take a while to upload, so the
+# HTTPS and plain HTTP (orch.md decisions 82, 97). Image layers can take a while to upload, so the
 # router waits up to 5 minutes instead of its default 30 s.
 apiVersion: route.openshift.io/v1
 kind: Route
@@ -8,6 +8,10 @@ metadata:
     haproxy.router.openshift.io/timeout: 5m
 spec:
   host: registry.catacumbas69.com
+  tls:
+    termination: edge   # the router's wildcard certificate (orch.md decision 97)
+    # HTTP still accepted: Podman pushes and CRI-O pulls over plain HTTP (decision 82)
+    insecureEdgeTerminationPolicy: Allow
   to:
     kind: Service
     name: registry

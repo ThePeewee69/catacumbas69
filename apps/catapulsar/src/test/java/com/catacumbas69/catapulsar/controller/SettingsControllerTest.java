@@ -194,6 +194,30 @@ class SettingsControllerTest {
     }
 
     @Test
+    void changeRefreshInterval_storesWithTheSignedInUser_notTheAddress() throws Exception {
+        when(refresh.change(eq(30), any())).thenReturn(30);
+
+        mvc.perform(put("/api/v1/settings/refresh-interval").header("X-Forwarded-For", "10.0.0.9")
+                        .header("X-Catacumbas69-User", "someone-else").principal(() -> "peewee69")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"seconds\":30}"))
+                .andExpect(status().isOk());
+
+        verify(refresh).change(30, "peewee69");
+    }
+
+    @Test
+    void changeRefreshInterval_withoutLogin_neverTrustsAUserHeaderFromTheBrowser() throws Exception {
+        when(refresh.change(eq(30), any())).thenReturn(30);
+
+        mvc.perform(put("/api/v1/settings/refresh-interval").header("X-Forwarded-For", "10.0.0.9")
+                        .header("X-Catacumbas69-User", "someone-else")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"seconds\":30}"))
+                .andExpect(status().isOk());
+
+        verify(refresh).change(30, "10.0.0.9");
+    }
+
+    @Test
     void changeRefreshInterval_returns400_withoutSeconds() throws Exception {
         mvc.perform(put("/api/v1/settings/refresh-interval")
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))

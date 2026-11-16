@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Catapulsar</title>
     <link rel="icon" type="image/svg+xml" href="/catapulsar-icon.svg" />
-    <link rel="stylesheet" href="/catapulsar.css?v=29" />
-    <script src="/catapulsar.js?v=29" defer></script>
+    <link rel="stylesheet" href="/catapulsar.css?v=30" />
+    <script src="/catapulsar.js?v=30" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.8/cdn.min.js" defer></script>
   </head>
   <body x-data="app()">
@@ -979,6 +979,16 @@
           <div class="empty"><p>No tenants available</p></div>
         </template>
       </div>
+
+      <!-- Phones only: who is signed in, and Sign out (SEC-2); on a computer they are in the top bar -->
+      <template x-if="session.login">
+        <div class="drawer-user">
+          <span class="user-name" x-text="session.user"></span>
+          <button type="button" class="btn btn-ghost btn-xs" data-testid="drawer-sign-out" @click="signOut()">
+            Sign out
+          </button>
+        </div>
+      </template>
     </div>
 
     <!-- ══ Main ════════════════════════════════════════════════════════════════ -->
@@ -1149,6 +1159,21 @@
         >
           ⚙️
         </button>
+
+        <!-- Who is signed in through Dex, and Sign out (SEC-2); nothing without login (profile no-auth) -->
+        <template x-if="session.login">
+          <div class="topbar-user">
+            <span
+              class="user-name"
+              data-testid="user-name"
+              x-text="session.user"
+              :title="'Signed in as ' + session.user"
+            ></span>
+            <button type="button" class="btn btn-ghost btn-xs" data-testid="sign-out" @click="signOut()">
+              Sign out
+            </button>
+          </div>
+        </template>
       </div>
 
       <!-- Where you are: on its own row, so it has the full width (G-20) -->

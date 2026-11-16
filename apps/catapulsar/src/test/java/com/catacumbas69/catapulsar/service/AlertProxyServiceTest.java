@@ -59,7 +59,7 @@ class AlertProxyServiceTest {
     void seen_forwardsTheBrowserAddress_andPublishesTheRequest() {
         catavigia.expect(requestTo("http://catavigia/api/v1/alerts/" + ID + "/seen"))
                 .andExpect(method(HttpMethod.POST))
-                .andExpect(header(BridgeProxyService.FORWARDED_FOR, "10.0.0.5"))
+                .andExpect(header(BridgeProxyService.USER_HEADER, "10.0.0.5"))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
         assertThat(service.seen(ID, "10.0.0.5").getStatusCode()).isEqualTo(HttpStatus.OK);

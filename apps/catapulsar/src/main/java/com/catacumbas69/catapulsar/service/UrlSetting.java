@@ -110,7 +110,7 @@ public abstract class UrlSetting {
      * Validates, stores and applies a new URL.
      *
      * @param newUrl absolute {@code http} or {@code https} URL
-     * @param user client IP address, for the audit log
+     * @param user who made the change (the signed-in user), for the audit log
      * @return the URL now in use
      * @throws InvalidSettingException if the URL is not valid
      */
@@ -135,7 +135,7 @@ public abstract class UrlSetting {
     /**
      * Forgets the saved URL and goes back to the configured one.
      *
-     * @param user client IP address, for the audit log
+     * @param user who made the change (the signed-in user), for the audit log
      * @return the URL now in use
      */
     public String reset(String user) {

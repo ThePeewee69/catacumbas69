@@ -1,0 +1,53 @@
+# ArgoCD Application of Dex on meloes (orch.md decision 98): the OpenID Connect provider behind the login of
+# Catapulsar, Grafana and ArgoCD, at https://auth.catacumbas69.com.
+# Two sources: the dex chart, and microshift/apps/dex (the Route). The configuration is NOT in git: it holds the
+# user's email, the password hash and the client secrets, so microshift/apps/dex/dex-secret.sh renders
+# config.yaml.tmpl into the Secret dex/dex-config.
+# AUTOMATED sync with prune and selfHeal, and targetRevision "*": it follows the newest chart on its own.
+# Applied by the root Application microshift (microshift/bootstrap/microshift.yaml): commit and push.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dex
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://charts.dexidp.io
+      chart: dex
+      targetRevision: "*"
+      helm:
+        values: |
+          configSecret:
+            create: false
+            name: dex-config   # made by microshift/apps/dex/dex-secret.sh
+          env:
+            DEX_SESSIONS_ENABLED: "true"   # SSO between the clients (Auth Sessions, Dex 2.46+)
+          podSecurityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+    - repoURL: https://github.com/ThePeewee69/catacumbas69.git
+      targetRevision: main
+      path: microshift/apps/dex
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dex
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

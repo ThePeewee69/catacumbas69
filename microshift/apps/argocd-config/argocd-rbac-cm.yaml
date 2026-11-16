@@ -1,0 +1,13 @@
+# Who may do what in ArgoCD (orch.md decision 99). The local admin keeps its built-in role:admin; through Dex only
+# the user peewee69 (claim preferred_username) is admin, and anyone else gets nothing (no policy.default).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  labels:
+    app.kubernetes.io/name: argocd-rbac-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  scopes: "[preferred_username]"
+  policy.csv: |
+    g, peewee69, role:admin

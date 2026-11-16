@@ -55,13 +55,13 @@ public class AreaProxyController {
      * Creates an area.
      *
      * @param body area definition (JSON)
-     * @param request current request; its client address is sent to Cataponte for the audit log
+     * @param request current request; who made it (the signed-in user) is sent to Cataponte for the audit log
      * @return Cataponte's response
      */
     @Operation(summary = "Create a bridge area")
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<byte[]> create(@RequestBody String body, HttpServletRequest request) {
-        return bridges.createArea(body, ClientAddress.of(request));
+        return bridges.createArea(body, RequestActor.of(request));
     }
 
     /**
@@ -69,14 +69,14 @@ public class AreaProxyController {
      *
      * @param id area id
      * @param body area definition (JSON)
-     * @param request current request; its client address is sent to Cataponte for the audit log
+     * @param request current request; who made it (the signed-in user) is sent to Cataponte for the audit log
      * @return Cataponte's response
      */
     @Operation(summary = "Update a bridge area")
     @PutMapping(path = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<byte[]> update(@PathVariable @PulsarName String id, @RequestBody String body,
                                          HttpServletRequest request) {
-        return bridges.updateArea(id, body, ClientAddress.of(request));
+        return bridges.updateArea(id, body, RequestActor.of(request));
     }
 
     /**
@@ -86,7 +86,7 @@ public class AreaProxyController {
      * @param id area id
      * @param bridgesChoice {@code delete} or {@code move}
      * @param to area to move the bridges to
-     * @param request current request; its client address is sent to Cataponte for the audit log
+     * @param request current request; who made it (the signed-in user) is sent to Cataponte for the audit log
      * @return Cataponte's response
      */
     @Operation(summary = "Delete a bridge area")
@@ -96,6 +96,6 @@ public class AreaProxyController {
                                          @Pattern(regexp = "^(delete|move)$") String bridgesChoice,
                                          @RequestParam(required = false) @Pattern(regexp = ID) String to,
                                          HttpServletRequest request) {
-        return bridges.deleteArea(id, bridgesChoice, to, ClientAddress.of(request));
+        return bridges.deleteArea(id, bridgesChoice, to, RequestActor.of(request));
     }
 }

@@ -40,6 +40,17 @@ class CollectControllerTest {
     }
 
     @Test
+    void collect_recordsTheUserNamedByCatapulsar() throws Exception {
+        when(forced.collect("home", "media", "peewee69")).thenReturn(new ForcedCollectionResponse("home/media",
+                List.of("home/media"), 1, 0, List.of(), Instant.parse("2026-11-04T09:00:07Z"), 180));
+
+        mvc.perform(post("/api/v1/collect").param("tenant", "home").param("namespace", "media")
+                        .header("X-Catacumbas69-User", "peewee69").header("X-Forwarded-For", "10.0.0.1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.collected").value(1));
+    }
+
+    @Test
     void collect_returns400_forANamespaceWithoutTenant() throws Exception {
         when(forced.collect(null, "media", "127.0.0.1")).thenThrow(new InvalidQueryException("namespace needs tenant"));
 

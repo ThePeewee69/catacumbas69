@@ -1,0 +1,54 @@
+# ArgoCD Application of trust-manager on meloes (orch.md decision 97): it copies our CA, together with the usual
+# public CAs, into a ConfigMap catacumbas69-ca (PEM and a Java PKCS#12 truststore) in the namespaces whose pods talk
+# to Dex over HTTPS (the Bundle is in microshift/apps/tls).
+# Same namespace as cert-manager, which it needs: its webhook certificate is issued by cert-manager, so the first
+# syncs fail until cert-manager is up; the retry takes care of it.
+# AUTOMATED sync with prune and selfHeal, and targetRevision "*", like cert-manager.
+# Applied by the root Application microshift (microshift/bootstrap/microshift.yaml): commit and push.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: trust-manager
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://charts.jetstack.io
+    chart: trust-manager
+    targetRevision: "*"
+    helm:
+      values: |
+        app:
+          trust:
+            namespace: cert-manager   # where it reads the CA's Secret from
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        defaultPackage:
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

@@ -88,7 +88,7 @@ The following events are published on `catacumbas69/catavigia/events` and reach 
 | `GET` | `/api/v1/alerts/summary` | Open alerts, and those not seen by severity, with the `worst` one (for Catapulsar's badge); `stored: false` while MongoDB is down |
 | `GET` | `/api/v1/alerts/archive?type=&subject=&from=&to=&page=0&size=50` | Closed alerts, newest closed first (`subject` = starts with; `from`/`to` on `closedAt`; at most 500 per page) |
 | `GET` | `/api/v1/alerts/{id}` | One alert, open or archived (`404`) |
-| `POST` | `/api/v1/alerts/{id}/seen` | Marks an open alert as seen (who = `X-Forwarded-For`), published as `alert.seen`. It stays open and leaves the badge count; `404` if not open, `409` for `mongodb.down` |
+| `POST` | `/api/v1/alerts/{id}/seen` | Marks an open alert as seen (who = `X-Catacumbas69-User`, else `X-Forwarded-For`; orch.md decision 100), published as `alert.seen`. It stays open and leaves the badge count; `404` if not open, `409` for `mongodb.down` |
 | `GET` | `/api/v1/limits/backlog` | The global default (`globalLimit`) and every subscription's own limit |
 | `PUT` | `/api/v1/limits/backlog?topic=&subscription=` | Sets a subscription's own limit `{limit}` (1–10⁹); `topic` is `persistent://tenant/namespace/topic`, without partition suffix |
 | `DELETE` | `/api/v1/limits/backlog?topic=&subscription=` | Back to the global default (`204`, `404` if it had none) |

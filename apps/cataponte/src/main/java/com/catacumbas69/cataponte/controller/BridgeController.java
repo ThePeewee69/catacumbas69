@@ -114,7 +114,7 @@ public class BridgeController {
     @PostMapping
     public ResponseEntity<BridgeResponse> create(@Valid @RequestBody BridgeRequest request,
                                                  UriComponentsBuilder uriBuilder, HttpServletRequest http) {
-        BridgeResponse created = respond(service.create(mapper.toDocument(request), ClientAddress.of(http)));
+        BridgeResponse created = respond(service.create(mapper.toDocument(request), RequestActor.of(http)));
         URI location = uriBuilder.path("/api/v1/bridges/{id}").buildAndExpand(created.id()).toUri();
         return ResponseEntity.created(location).body(created);
     }
@@ -132,7 +132,7 @@ public class BridgeController {
     public BridgeResponse update(@PathVariable String id, @Valid @RequestBody BridgeRequest request,
                                  HttpServletRequest http) {
         return respond(service.update(id, mapper.toDocument(request), request.version(),
-                ClientAddress.of(http)));
+                RequestActor.of(http)));
     }
 
     /**
@@ -153,7 +153,7 @@ public class BridgeController {
             throw new BridgeValidationException("name", "must match the name in the path");
         }
         String app = http.getHeader(APP_HEADER);
-        String actor = app != null && !app.isBlank() ? app.strip() : ClientAddress.of(http);
+        String actor = app != null && !app.isBlank() ? app.strip() : RequestActor.of(http);
         return respond(service.registerSystem(mapper.toDocument(request), actor));
     }
 
@@ -167,7 +167,7 @@ public class BridgeController {
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable String id, HttpServletRequest http) {
-        service.delete(id, ClientAddress.of(http));
+        service.delete(id, RequestActor.of(http));
     }
 
     /**
@@ -180,7 +180,7 @@ public class BridgeController {
     @Operation(summary = "Enable a bridge")
     @PostMapping("/{id}/enable")
     public BridgeResponse enable(@PathVariable String id, HttpServletRequest http) {
-        return respond(service.setEnabled(id, true, ClientAddress.of(http)));
+        return respond(service.setEnabled(id, true, RequestActor.of(http)));
     }
 
     /**
@@ -193,7 +193,7 @@ public class BridgeController {
     @Operation(summary = "Disable a bridge")
     @PostMapping("/{id}/disable")
     public BridgeResponse disable(@PathVariable String id, HttpServletRequest http) {
-        return respond(service.setEnabled(id, false, ClientAddress.of(http)));
+        return respond(service.setEnabled(id, false, RequestActor.of(http)));
     }
 
     /**
@@ -211,7 +211,7 @@ public class BridgeController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void skip(@PathVariable String id, @Valid @RequestBody SkipRequest request, HttpServletRequest http)
             throws PulsarAdminException {
-        service.skipStuckMessage(id, request.messageId(), ClientAddress.of(http));
+        service.skipStuckMessage(id, request.messageId(), RequestActor.of(http));
     }
 
     /**

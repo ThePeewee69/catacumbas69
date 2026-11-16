@@ -109,6 +109,6 @@ public class AlertController {
     @Operation(summary = "Mark an open alert as seen: it stays open and leaves the badge count")
     @PostMapping("/{id}/seen")
     public AlertResponse seen(@PathVariable @Pattern(regexp = ID) String id, HttpServletRequest request) {
-        return alerts.markSeen(id, ClientAddress.of(request));
+        return alerts.markSeen(id, RequestActor.of(request));
     }
 }

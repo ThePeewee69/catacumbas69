@@ -127,7 +127,7 @@ public class PulsarController {
             HttpServletRequest request) throws PulsarAdminException {
         String fullTopic = persistentTopic(tenant, namespace, topic);
         admin.createTopic(fullTopic);
-        audit.record(ClientAddress.of(request), AuditAction.CREATE_TOPIC, fullTopic, null);
+        audit.record(RequestActor.of(request), AuditAction.CREATE_TOPIC, fullTopic, null);
     }
 
     /**
@@ -149,7 +149,7 @@ public class PulsarController {
             HttpServletRequest request) throws PulsarAdminException {
         String fullTopic = persistentTopic(tenant, namespace, topic);
         admin.deleteTopic(fullTopic);
-        audit.record(ClientAddress.of(request), AuditAction.DELETE_TOPIC, fullTopic, null);
+        audit.record(RequestActor.of(request), AuditAction.DELETE_TOPIC, fullTopic, null);
     }
 
     /**
@@ -210,7 +210,7 @@ public class PulsarController {
         String fullTopic = persistentTopic(tenant, namespace, topic);
         refuseSystemSubscription(subscription);
         admin.createSubscription(fullTopic, subscription);
-        audit.record(ClientAddress.of(request), AuditAction.CREATE_SUBSCRIPTION, fullTopic,
+        audit.record(RequestActor.of(request), AuditAction.CREATE_SUBSCRIPTION, fullTopic,
                 Map.of("subscription", subscription));
     }
 
@@ -236,7 +236,7 @@ public class PulsarController {
         String fullTopic = persistentTopic(tenant, namespace, topic);
         refuseSystemSubscription(subscription);
         admin.deleteSubscription(fullTopic, subscription);
-        audit.record(ClientAddress.of(request), AuditAction.DELETE_SUBSCRIPTION, fullTopic,
+        audit.record(RequestActor.of(request), AuditAction.DELETE_SUBSCRIPTION, fullTopic,
                 Map.of("subscription", subscription));
     }
 
@@ -266,7 +266,7 @@ public class PulsarController {
         if (body.properties() != null && !body.properties().isEmpty()) {
             details.put("properties", body.properties());
         }
-        audit.recordMessage(ClientAddress.of(request), AuditAction.PRODUCE, fullTopic, body.payload(), body.key(),
+        audit.recordMessage(RequestActor.of(request), AuditAction.PRODUCE, fullTopic, body.payload(), body.key(),
                 details);
         return new ProduceResponse(messageId);
     }
@@ -294,7 +294,7 @@ public class PulsarController {
             HttpServletRequest request) throws PulsarAdminException {
         String fullTopic = persistentTopic(tenant, namespace, topic);
         List<MessageDTO> peeked = messages.peek(fullTopic, subscription, count);
-        audit.record(ClientAddress.of(request), AuditAction.PEEK_MESSAGES, fullTopic,
+        audit.record(RequestActor.of(request), AuditAction.PEEK_MESSAGES, fullTopic,
                 Map.of("subscription", subscription, "count", count));
         return peeked;
     }
@@ -323,7 +323,7 @@ public class PulsarController {
         String fullTopic = persistentTopic(tenant, namespace, topic);
         refuseSystemSubscription(subscription);
         messages.skip(fullTopic, subscription, count);
-        audit.record(ClientAddress.of(request), AuditAction.SKIP_MESSAGES, fullTopic,
+        audit.record(RequestActor.of(request), AuditAction.SKIP_MESSAGES, fullTopic,
                 Map.of("subscription", subscription, "count", count));
     }
 
@@ -349,7 +349,7 @@ public class PulsarController {
         String fullTopic = persistentTopic(tenant, namespace, topic);
         refuseSystemSubscription(subscription);
         messages.clearBacklog(fullTopic, subscription);
-        audit.record(ClientAddress.of(request), AuditAction.CLEAR_BACKLOG, fullTopic,
+        audit.record(RequestActor.of(request), AuditAction.CLEAR_BACKLOG, fullTopic,
                 Map.of("subscription", subscription));
     }
 

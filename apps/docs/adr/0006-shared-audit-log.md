@@ -28,4 +28,4 @@ were missing, and the entries held only the bridge id, not what changed.
 - One query over `audit_logs` shows every change, whichever client or service made it.
 - Both services depend on the entry shape; changing it needs both to change together (MONGO-2 applies).
 - Without authentication the "user" is a client IP address; once an OAuth proxy is in place (SEC-2) the
-  forwarded user name should replace it.
+  forwarded user name should replace it. *(Done in ADR 0016: the user signed in through Dex.)*

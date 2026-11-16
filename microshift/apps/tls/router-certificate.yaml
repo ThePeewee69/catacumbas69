@@ -1,0 +1,28 @@
+# The router's default certificate on meloes (orch.md decision 97): one wildcard for every Route. MicroShift serves
+# it because /etc/microshift/config.d/10-ingress.yaml names this Secret (ingress.certificateSecret, README.md);
+# a Route only needs `tls: termination: edge`, with no certificate of its own.
+# 90 days, renewed 30 days before the end; the router watches the mounted Secret and reloads on its own.
+# A wildcard covers one level only: a name like a.b.catacumbas69.com needs another entry here.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: router-certs-custom
+  namespace: openshift-ingress
+spec:
+  secretName: router-certs-custom
+  commonName: "*.catacumbas69.com"
+  dnsNames:
+    - "*.catacumbas69.com"
+    - "*.microshift.catacumbas69.com"
+  duration: 2160h      # 90 days
+  renewBefore: 720h    # 30 days
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  usages:
+    - server auth
+  issuerRef:
+    name: catacumbas69-ca
+    kind: ClusterIssuer
+    group: cert-manager.io

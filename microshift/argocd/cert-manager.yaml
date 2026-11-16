@@ -1,0 +1,62 @@
+# ArgoCD Application of cert-manager on meloes (orch.md decision 97): it issues the wildcard certificate the router
+# serves on every Route, from our own CA (microshift/apps/tls, Application tls).
+# AUTOMATED sync with prune and selfHeal, and targetRevision "*": it follows the newest chart on its own, like
+# mongodb. The CRDs come with the chart (crds.enabled) and stay if the chart is removed (crds.keep, the default).
+# Applied by the root Application microshift (microshift/bootstrap/microshift.yaml): commit and push.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://charts.jetstack.io
+    chart: cert-manager
+    targetRevision: "*"
+    helm:
+      values: |
+        crds:
+          enabled: true
+        # Small requests: meloes' CPU requests are nearly full (decisions 85, 96); limits leave room to work
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        webhook:
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+        cainjector:
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+        startupapicheck:
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true   # the CRDs are too big for a client-side apply

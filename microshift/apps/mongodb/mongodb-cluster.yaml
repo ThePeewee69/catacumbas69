@@ -42,11 +42,22 @@ spec:
       template:
         spec:
           containers:
+            # CPU requests trimmed a little (orch.md decision 96): meloes reserved 3.9 of its 4 CPUs while the pods used
+            # about 0.2; the limits stay, so a member still gets up to its limit when it needs it
             - name: mongod
               resources:
                 requests:
                   memory: 512Mi
-                  cpu: 250m
+                  cpu: 200m
                 limits:
                   memory: 1Gi
                   cpu: 500m
+            # The operator's agent: its own defaults (500m / 400M, limits 1 / 500M) with the CPU request trimmed
+            - name: mongodb-agent
+              resources:
+                requests:
+                  memory: 400M
+                  cpu: 400m
+                limits:
+                  memory: 500M
+                  cpu: "1"

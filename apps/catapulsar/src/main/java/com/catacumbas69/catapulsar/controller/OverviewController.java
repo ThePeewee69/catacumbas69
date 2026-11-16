@@ -120,6 +120,6 @@ public class OverviewController {
             @RequestParam(required = false) @Pattern(regexp = ValidationPatterns.NAME,
                     message = ValidationPatterns.NAME_MESSAGE) String namespace,
             HttpServletRequest request) {
-        return overview.collect(tenant, namespace, ClientAddress.of(request));
+        return overview.collect(tenant, namespace, RequestActor.of(request));
     }
 }

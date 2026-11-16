@@ -51,7 +51,8 @@ replaced on their own. We already run Pulsar, so it can carry events between our
 - The CloudEvents envelope, the publisher with retries, the topic names and the settings reader live in a
   small shared library, **`catacommons`**, used by every app. The apps become modules of one Maven
   build (`apps/pom.xml`), so the library needs no external repository.
-- Until an authentication proxy exists (SEC-2), `data.actor` is the client IP address.
+- Until an authentication proxy exists (SEC-2), `data.actor` is the client IP address. *(Since ADR 0016: the user
+  signed in through Dex.)*
 
 ## Implementation (phase 1, 2026-10-31)
 

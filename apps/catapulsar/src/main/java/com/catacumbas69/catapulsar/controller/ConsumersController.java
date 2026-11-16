@@ -67,7 +67,7 @@ public class ConsumersController {
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void command(@Valid @RequestBody ConsumerCommandRequest request, HttpServletRequest http) {
         consumers.send(request.app(), request.instance(), request.consumer(), request.action(),
-                ClientAddress.of(http));
+                RequestActor.of(http));
     }
 
     /**
@@ -82,7 +82,7 @@ public class ConsumersController {
     @PostMapping("/dead-letters/send-back")
     public Map<String, String> sendBack(@Valid @RequestBody DeadLetterRequest request, HttpServletRequest http)
             throws PulsarClientException {
-        return Map.of("to", deadLetters.sendBack(request.topic(), messageId(request), ClientAddress.of(http)));
+        return Map.of("to", deadLetters.sendBack(request.topic(), messageId(request), RequestActor.of(http)));
     }
 
     /**
@@ -97,7 +97,7 @@ public class ConsumersController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void discard(@Valid @RequestBody DeadLetterRequest request, HttpServletRequest http)
             throws PulsarClientException {
-        deadLetters.discard(request.topic(), messageId(request), ClientAddress.of(http));
+        deadLetters.discard(request.topic(), messageId(request), RequestActor.of(http));
     }
 
     /**
@@ -112,7 +112,7 @@ public class ConsumersController {
     @PostMapping("/dead-letters/send-back-all")
     public Map<String, Integer> sendBackAll(@Valid @RequestBody DeadLetterRequest request, HttpServletRequest http)
             throws PulsarClientException {
-        return deadLetters.sendBackAll(request.topic(), ClientAddress.of(http));
+        return deadLetters.sendBackAll(request.topic(), RequestActor.of(http));
     }
 
     /**
@@ -127,7 +127,7 @@ public class ConsumersController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void discardAll(@Valid @RequestBody DeadLetterRequest request, HttpServletRequest http)
             throws PulsarAdminException {
-        deadLetters.discardAll(request.topic(), ClientAddress.of(http));
+        deadLetters.discardAll(request.topic(), RequestActor.of(http));
     }
 
     private static String messageId(DeadLetterRequest request) {

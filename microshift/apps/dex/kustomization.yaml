@@ -1,0 +1,8 @@
+# Dex on meloes (orch.md decision 98): what goes with the dex chart in the ArgoCD Application dex
+# (microshift/argocd/dex.yaml). config.yaml.tmpl and dex-secret.sh are not applied: the script renders the
+# template into the Secret dex/dex-config. See README.md.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: dex
+resources:
+  - dex-route.yaml
