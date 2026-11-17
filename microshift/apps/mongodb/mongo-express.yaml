@@ -1,3 +1,7 @@
+# mongo-express: the web UI of MongoDB on meloes (orch.md decision 101), at https://mongo-express.catacumbas69.com.
+# Nothing secret here: it connects as peewee69 with the connection string the operator writes into
+# peewee69-connection, and its basic-auth login comes from mongo-express-auth (microshift/apps/mongodb/mongo-admin.sh).
+# Both are read at start-up: the script restarts it after a change.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,11 +24,20 @@ spec:
             - containerPort: 8081
           env:
             - name: ME_CONFIG_MONGODB_URL
-              value: "mongodb://peewee69:Pass123-456-789@catacumbas69-svc.mongodb.svc.cluster.local:27017/admin?replicaSet=catacumbas69"
+              valueFrom:
+                secretKeyRef:
+                  name: peewee69-connection
+                  key: connectionString.standard
             - name: ME_CONFIG_BASICAUTH_USERNAME
-              value: "peewee69"
+              valueFrom:
+                secretKeyRef:
+                  name: mongo-express-auth
+                  key: username
             - name: ME_CONFIG_BASICAUTH_PASSWORD
-              value: "Pass123-456-789"
+              valueFrom:
+                secretKeyRef:
+                  name: mongo-express-auth
+                  key: password
 ---
 apiVersion: v1
 kind: Service

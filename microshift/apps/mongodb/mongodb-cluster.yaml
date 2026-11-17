@@ -23,6 +23,9 @@ spec:
         - name: readWriteAnyDatabase
           db: admin
       scramCredentialsSecretName: peewee69-scram
+      # The operator writes this user's connection string here (keys connectionString.standard, username, password),
+      # read by mongo-express; the password itself is set with microshift/apps/mongodb/mongo-admin.sh (decision 101)
+      connectionStringSecretName: peewee69-connection
     # The catacumbas69 apps (orch.md decision 84): read and write on catacumbas69 only. Its password Secret is
     # created by apps/build/mongo-secret.sh password (never in git); the operator writes the connection string to
     # catacumbas69-apps-connection, which apps/build/mongo-secret.sh copy copies to the apps' namespace.

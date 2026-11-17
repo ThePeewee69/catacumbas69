@@ -768,6 +768,8 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-17, MongoDB admin** (decision 101): the password of `peewee69` rotated and out of git (mongo-express reads
+  the operator's connection string); DbGate, mongui and `pulsar-client` removed; `mongo-admin.sh`.
 - **2026-11-15, login, HTTPS and requests** (SEC-2 done; decisions 96–100): every Route on meloes is HTTPS with a
   wildcard from our own CA (cert-manager, trust-manager); Dex at `auth.catacumbas69.com` signs in to Catapulsar,
   Grafana and ArgoCD with one session; Catapulsar needs the login (CSRF, `401` on the API, Sign out), and the
@@ -1413,3 +1415,17 @@ Login, HTTPS and requests (2026-11-15, SEC-2; [ADR 0016](docs/adr/0016-login-and
      (`JAVA_TOOL_OPTIONS`). The profile **`no-auth`** (`application-no-auth.properties`) turns all of it off: for
      IntelliJ (`SPRING_PROFILES_ACTIVE=no-auth`) and for every Spring test (`src/test/resources/config/`), except
      `SecurityConfigTests`, which runs with the login on.
+
+MongoDB admin (2026-11-17):
+
+101. **The MongoDB admin `peewee69` without secrets in git.** Its password had been written in clear, in the
+     connection strings of three web UIs, in this public repository; it was **rotated**, and the old one is
+     cleaned from the history (one rewrite at the end, with the other exposed passwords). The password is chosen by
+     hand with `microshift/apps/mongodb/mongo-admin.sh peewee69` (run on the Mac over ssh, asked twice with
+     `read -s`, at least 16 characters, none of `: @ / ? # [ ] %` or spaces since it goes into a URI) into the
+     Secret `mongodb/mongodb-password`; the operator applies it and writes the user's connection string into
+     `mongodb/peewee69-connection` (`connectionStringSecretName`). Only **mongo-express** stays as the UI: it reads
+     that connection string, and its basic-auth login from `mongodb/mongo-express-auth` (`mongo-admin.sh express`).
+     **DbGate and mongui are removed** (the Application `mongodb-cluster` prunes them), and so is the unused
+     `microshift/apps/pulsar-client`.
+
