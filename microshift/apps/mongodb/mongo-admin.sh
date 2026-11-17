@@ -17,6 +17,13 @@ NS=mongodb
 
 on_meloes() { ssh -o BatchMode=yes "$MELOES" "$@"; }
 
+fail() {  # a refusal that cannot go unnoticed: red on a terminal, and NOTHING CHANGED on a line of its own
+  local red='' reset=''
+  if [[ -t 2 ]]; then red=$'\e[1;31m'; reset=$'\e[0m'; fi
+  printf '\n%s✘ %s%s\n%s✘ NOTHING CHANGED%s\n\n' "$red" "$1" "$reset" "$red" "$reset" >&2
+  exit 1
+}
+
 yaml_quote() {  # single-quoted YAML scalar
   printf "'%s'" "${1//\'/\'\'}"
 }
@@ -25,11 +32,10 @@ ask_password() {  # $1 what for, $2 minimum length, $3 forbidden-character patte
   local p1 p2
   read -r -s -p "New password for $1: " p1 </dev/tty; echo >&2
   read -r -s -p "Again: " p2 </dev/tty; echo >&2
-  [[ "$p1" == "$p2" ]] || { echo "The two do not match; nothing changed." >&2; exit 1; }
-  [[ ${#p1} -ge $2 ]] || { echo "At least $2 characters; nothing changed." >&2; exit 1; }
+  [[ "$p1" == "$p2" ]] || fail "The two passwords do not match."
+  [[ ${#p1} -ge $2 ]] || fail "Too short: ${#p1} characters, at least $2 needed."
   if [[ -n "$3" && "$p1" =~ $3 ]]; then
-    echo "It may not have : @ / ? # [ ] % or spaces; nothing changed." >&2
-    exit 1
+    fail "It may not have : @ / ? # [ ] % or spaces."
   fi
   printf '%s' "$p1"
 }
@@ -52,7 +58,7 @@ restart_express() {
   fi
 }
 
-on_meloes 'oc whoami' >/dev/null || { echo "ssh $MELOES 'oc whoami' failed: is the ssh key set up?" >&2; exit 1; }
+on_meloes 'oc whoami' >/dev/null || fail "ssh $MELOES 'oc whoami' failed: is the ssh key set up?"
 
 case "${1:-}" in
   peewee69)
@@ -65,7 +71,7 @@ case "${1:-}" in
     ;;
   express)
     read -r -p "User of mongo-express' login: " user </dev/tty
-    [[ -n "$user" && "$user" != *[[:space:]]* ]] || { echo "Empty or with spaces; nothing changed." >&2; exit 1; }
+    [[ -n "$user" && "$user" != *[[:space:]]* ]] || fail "The user is empty or has spaces."
     password="$(ask_password "$user (mongo-express)" 12 '')"
     apply_secret mongo-express-auth username "$user" password "$password"
     echo "Secret $NS/mongo-express-auth written."
