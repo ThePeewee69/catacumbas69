@@ -10,4 +10,4 @@ resources:
   - cataudit-route.yaml
 images:
   - name: registry.catacumbas69.com/cataudit
-    newTag: "0.1.0-SNAPSHOT-daffac6"
+    newTag: "0.1.0-SNAPSHOT-1a1a209"
