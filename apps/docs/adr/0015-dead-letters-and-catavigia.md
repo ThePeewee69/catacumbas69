@@ -128,7 +128,7 @@ closed. It only watches; it never changes anything.
   `catacumbas69/catavigia/events`. The
   `audit-catavigia` bridge is registered at start-up like every app's, so Cataudit stores them.
 - **Metrics:** `catavigia_alerts_open{type,severity}` on `/actuator/prometheus`, for Grafana once Prometheus runs.
-  External notifications (Telegram, e-mail) come later.
+  External notifications (Telegram, e-mail) are not planned (orch.md decision 103).
 - **API:** `GET /api/v1/alerts` (open), `GET /api/v1/alerts/archive?type=&subject=&from=&to=&page=&size=`,
   `GET /api/v1/alerts/{id}`, `GET /api/v1/alerts/summary` (open and not seen, by severity),
   `POST /api/v1/alerts/{id}/seen`, and the limits above. Catapulsar forwards `/api/v1/alerts/**`, as it does for the

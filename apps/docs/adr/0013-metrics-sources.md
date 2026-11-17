@@ -1,6 +1,7 @@
 # 13. Catametricas serves long-term history from MongoDB and, later, short-term from Prometheus
 
-Date: 2026-10-31 · Status: Accepted (MongoDB source implemented in phase 4, 2026-11-01; Prometheus source later)
+Date: 2026-10-31 · Status: Accepted (MongoDB source implemented in phase 4, 2026-11-01; Prometheus source
+dropped on 2026-11-17, orch.md decision 103)
 
 ## Context
 
@@ -18,7 +19,8 @@ one is planned together with OpenMetrics collection and Loki.
   Everything **aggregated or historical** (cluster, tenant and namespace overviews, series, all-time totals,
   topics that are gone, alerts) comes from Catametricas.
 - Today all ranges come from MongoDB.
-- When Prometheus is installed on MicroShift and scrapes the brokers, Catametricas gains a Prometheus source
+- *(Dropped on 2026-11-17, orch.md decision 103: every range stays on MongoDB.)* When Prometheus is installed on
+  MicroShift and scrapes the brokers, Catametricas gains a Prometheus source
   (configured by `CATAMETRICAS_PROMETHEUS_URL`): ranges up to 24 h are answered with PromQL over
   `pulsar_in_messages_total`, `pulsar_out_messages_total` and `pulsar_msg_backlog`; longer ranges and
   all-time totals still come from MongoDB. Without the variable, behaviour is unchanged.

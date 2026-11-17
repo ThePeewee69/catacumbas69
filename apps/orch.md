@@ -768,9 +768,11 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-17, scope** (decision 103): phase 6 (Catametricas' Prometheus source), Catavigia's external
+  notifications and the K3s side of decision 102 dropped.
 - **2026-11-17, exposed passwords** (decision 102): no history rewrite; the old password, reused across the UIs,
   is treated as burned and rotated on meloes (the Pulsar Manager's user replaced); K3s's Grafana and slskd still
-  to do.
+  use it.
 - **2026-11-17, MongoDB admin** (decision 101): the password of `peewee69` rotated and out of git (mongo-express reads
   the operator's connection string); DbGate, mongui and `pulsar-client` removed; `mongo-admin.sh`.
 - **2026-11-15, login, HTTPS and requests** (SEC-2 done; decisions 96–100): every Route on meloes is HTTPS with a
@@ -899,7 +901,7 @@ Closed on 2026-10-30:
 ## 15. Target architecture (proposed — ADR 0008–0013)
 
 Status: **phases 1–5 implemented** (2026-10-31 – 2026-11-01); phase **7 implemented** (7a 2026-11-06, 7b 2026-11-09)
-(decisions 42–49, 66–80); phase 6 later. Until a phase below is implemented, the
+(decisions 42–49, 66–80); phase 6 dropped (decision 103). Until a phase below is implemented, the
 rules in sections 1–14 stay in force. When a phase lands, the rules it changes are updated in the same change
 and its ADRs become "Accepted".
 
@@ -912,7 +914,7 @@ and its ADRs become "Accepted".
                  └── catapulsar/settings (compacted) ──▶ read by every      │   → cataudit/audit
                                                          service at start   ▼
  Cataponte (N) ── cataponte/events            Catametricas (N) ◀── catametricas/collect-tasks (Shared)
- Catametricas ─── catametricas/events                 │ MongoDB (history) [+ Prometheus later]
+ Catametricas ─── catametricas/events                 │ MongoDB (history)
                                                Cataudit (N) ◀── cataudit/audit (Shared) → cataudit_events
 ```
 
@@ -927,8 +929,8 @@ Principles:
   (ADR 0011).
 - **Every service runs N replicas, all working**: Pulsar subscriptions distribute bridge messages, collection
   tasks and audit events; writes are idempotent (deterministic ids, conditional updates, claims) (ADR 0012).
-- **Catametricas is the only metrics API**; MongoDB for history, Prometheus for short ranges once it exists
-  on MicroShift (ADR 0013). Exception: everything in Catapulsar's **view of one topic** is that topic's current
+- **Catametricas is the only metrics API**, and MongoDB its only source (ADR 0013; the Prometheus source was
+  dropped, decision 103). Exception: everything in Catapulsar's **view of one topic** is that topic's current
   state, read directly from Pulsar on every refresh (OBS-10).
 
 ### Phases
@@ -942,7 +944,7 @@ Each phase ends with `mvn verify` green in every app, the docs updated and the a
 | 3 | Settings topic | Catametricas and all Catapulsar replicas read the settings topic (`SharedSettings`, TableView); nobody reads settings from MongoDB; `pulsario_settings` → `catapulsar_settings` (copied, then dropped) | **Done** 2026-11-01 |
 | 4 | Catametricas API and tasks | Query API (`topics`, `series`, `collector`); Catapulsar overviews built from it (Catametricas URL editable); collection tasks on Pulsar with claims and conditional snapshot updates; lease removed; `contario_*` → `catametricas_*` (renamed) | **Done** 2026-11-01 |
 | 5 | Cataponte replicas | `Exclusive` rejected; N replicas, status merged over replicas (`cataponte_worker_status`); ADR 0002 superseded; collections `cataponte_*` | **Done** 2026-11-01 |
-| 6 | Prometheus source (later) | Once Prometheus/OpenMetrics/Loki run on MicroShift: short ranges from PromQL in Catametricas | Later |
+| 6 | Prometheus source | Once Prometheus/OpenMetrics/Loki run on MicroShift: short ranges from PromQL in Catametricas | **Dropped** 2026-11-17 (decision 103) |
 | 7 | Alerts and dead letters | Dead-letter topics for our Shared/Key_Shared consumers; new service **Catavigia** with alert history; alerts and actions panel in Catapulsar; Settings dialog in tabs (decisions 42–49 and 66–80; [ADR 0015](docs/adr/0015-dead-letters-and-catavigia.md); 7a: DLQs and consumer control, 7b: Catavigia and alerts) | **Done** 2026-11-09 (7a 2026-11-06) |
 
 ### Decisions taken on 2026-10-31
@@ -1131,7 +1133,7 @@ Phase 7 decisions (2026-11-04, [ADR 0015](docs/adr/0015-dead-letters-and-catavig
     configuration) on `catacumbas69/catavigia/events`, and registers its `audit-catavigia` bridge so Cataudit stores
     them.
 49. Catavigia exposes `alerts_open{type,severity}` on `/actuator/prometheus`, for Grafana once Prometheus runs on
-    MicroShift. External notifications (Telegram, email) are left for later.
+    MicroShift. External notifications (Telegram, email) are not planned (decision 103).
 
 Phase 7, after the review of ADR 0015 (2026-11-06):
 
@@ -1440,6 +1442,13 @@ Exposed passwords (2026-11-17):
      Grafana admin and slskd. Rewriting the history would only hide it from past commits, so it is **rotated
      wherever it still opens something** instead. On meloes that is done: MongoDB and mongo-express (decision 101),
      mongui removed, and the Pulsar Manager's user replaced by a new one (in v0.4.0 a user's password cannot be
-     changed: a new user is added at `/#/users`, a page the sidebar hides, and the old one deleted). **Still open
-     on K3s**: the Grafana admin and slskd still use it, and it is still in `main`.
+     changed: a new user is added at `/#/users`, a page the sidebar hides, and the old one deleted). **On K3s**
+     the Grafana admin and slskd still use it, and it is still in `main` (left as it is, decision 103).
+
+Scope (2026-11-17):
+
+103. **Dropped: phase 6, external notifications and the K3s passwords.** Catametricas gets no Prometheus source
+     (phase 6, ADR 0013): every range keeps coming from MongoDB. Catavigia sends no external notifications
+     (Telegram, email; decision 49, ADR 0015): its alerts stay in Catapulsar's alerts panel. The K3s side of
+     decision 102 (the Grafana admin and slskd) is left as it is.
 
