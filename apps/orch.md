@@ -768,6 +768,9 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-17, exposed passwords** (decision 102): no history rewrite; the old password, reused across the UIs,
+  is treated as burned and rotated on meloes (the Pulsar Manager's user replaced); K3s's Grafana and slskd still
+  to do.
 - **2026-11-17, MongoDB admin** (decision 101): the password of `peewee69` rotated and out of git (mongo-express reads
   the operator's connection string); DbGate, mongui and `pulsar-client` removed; `mongo-admin.sh`.
 - **2026-11-15, login, HTTPS and requests** (SEC-2 done; decisions 96–100): every Route on meloes is HTTPS with a
@@ -1419,8 +1422,8 @@ Login, HTTPS and requests (2026-11-15, SEC-2; [ADR 0016](docs/adr/0016-login-and
 MongoDB admin (2026-11-17):
 
 101. **The MongoDB admin `peewee69` without secrets in git.** Its password had been written in clear, in the
-     connection strings of three web UIs, in this public repository; it was **rotated**, and the old one is
-     cleaned from the history (one rewrite at the end, with the other exposed passwords). The password is chosen by
+     connection strings of three web UIs, in this public repository; it was **rotated**, and the old one stays in
+     the history (decision 102). The password is chosen by
      hand with `microshift/apps/mongodb/mongo-admin.sh peewee69` (run on the Mac over ssh, asked twice with
      `read -s`, at least 16 characters, none of `: @ / ? # [ ] %` or spaces since it goes into a URI) into the
      Secret `mongodb/mongodb-password`; the operator applies it and writes the user's connection string into
@@ -1428,4 +1431,15 @@ MongoDB admin (2026-11-17):
      that connection string, and its basic-auth login from `mongodb/mongo-express-auth` (`mongo-admin.sh express`).
      **DbGate and mongui are removed** (the Application `mongodb-cluster` prunes them), and so is the unused
      `microshift/apps/pulsar-client`.
+
+Exposed passwords (2026-11-17):
+
+102. **The git history is not rewritten; the exposed password is treated as burned.** One password, reused, was
+     written in clear in this public repository: the old one of MongoDB's `peewee69`, mongo-express's basic-auth,
+     mongui's `ADMIN_PASSWORD` (with mongui's `SESSION_SECRET`), the Pulsar Manager's superuser and, on K3s, the
+     Grafana admin and slskd. Rewriting the history would only hide it from past commits, so it is **rotated
+     wherever it still opens something** instead. On meloes that is done: MongoDB and mongo-express (decision 101),
+     mongui removed, and the Pulsar Manager's user replaced by a new one (in v0.4.0 a user's password cannot be
+     changed: a new user is added at `/#/users`, a page the sidebar hides, and the old one deleted). **Still open
+     on K3s**: the Grafana admin and slskd still use it, and it is still in `main`.
 
