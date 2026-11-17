@@ -31,7 +31,7 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
-            readOnlyRootFilesystem: true
+            # Not read-only: Dex writes its rendered configuration to /tmp when it starts
           resources:
             requests:
               cpu: 10m
