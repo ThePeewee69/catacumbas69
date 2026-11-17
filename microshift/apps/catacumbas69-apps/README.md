@@ -70,6 +70,17 @@ Where each thing runs:
   scripts are not executable, `chmod 755 apps/build/*.sh` (and `git add --chmod=+x` to keep it in git).
 - **In the ArgoCD UI**: every Sync, by hand. After a push, press **Refresh** first: ArgoCD may still have the
   previous commit and would deploy it.
+- **A change to a file in `microshift/argocd/`** (an Application itself: its chart values, its sync policy) reaches
+  the cluster through the root Application **`microshift`**, not through the Application the file describes.
+  Refreshing that Application only re-reads its own sources, with the values it already has. Refresh
+  **`microshift`** first, then the Application:
+  ```
+  oc -n argocd annotate applications.argoproj.io microshift argocd.argoproj.io/refresh=hard --overwrite
+  oc -n argocd annotate applications.argoproj.io <app> argocd.argoproj.io/refresh=hard --overwrite
+  ```
+  To check what the Application received: `oc -n argocd get applications.argoproj.io <app> -o yaml`. A value a
+  Helm chart has by default stays, even when the file stops setting it: set it explicitly (the `dex` chart's
+  `readOnlyRootFilesystem`, `microshift/argocd/dex.yaml`).
 
 To make the clone on meloes the first time:
 
@@ -253,6 +264,7 @@ The tag is `<version>-<short sha>`. `FORCE=1 apps/build/push.sh <app>` builds wi
 | Pod not Ready | `oc -n catacumbas69-apps logs deploy/<app>`; `/actuator/health/readiness` lists what is down (Pulsar, MongoDB) |
 | Restarts with `Error`, exit 143, a few minutes after meloes boots | The startup probe gave up (5 minutes): see `oc -n catacumbas69-apps get pods -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.containerStatuses[0].lastState.terminated.exitCode}{"\n"}{end}'`; they recover on their own, raise `failureThreshold` of the `startupProbe` if it keeps happening |
 | Catapulsar panels say an app does not answer | Step 7 |
+| A change to `microshift/argocd/<app>.yaml` does not reach the cluster, although the Application is `Synced` at the new commit | The root Application `microshift` has not applied the file yet: Refresh `microshift`, then `<app>` (*Where each thing runs*) |
 | `podman machine ssh` says `podman-machine-default … does not exist` | Name the machine: `podman machine ssh Catacumbas69` |
 | `podman push` fails with a timeout | The Route waits 5 min (`haproxy.router.openshift.io/timeout`); raise it in `registry-route.yaml` |
 | Registry full | Delete old tags through the registry API, then `registry garbage-collect /etc/docker/registry/config.yml` in its pod |

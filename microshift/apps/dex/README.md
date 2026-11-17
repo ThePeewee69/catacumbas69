@@ -67,4 +67,6 @@ The values the template needs are kept in the Secret `dex/dex-values` (the passw
 | "Invalid client" or "Unregistered redirect_uri" in Dex | The client and its redirect URI in `config.yaml.tmpl`; after a change, `dex-secret.sh config` |
 | Logged in to Grafana or ArgoCD without admin | The user is `peewee69` (`preferred_username`): Grafana `role_attribute_path`, ArgoCD `argocd-rbac-cm` |
 | Each app asks for the password again | `DEX_SESSIONS_ENABLED=true` in `microshift/argocd/dex.yaml`; Dex's logs (`oc -n dex logs deploy/dex`) |
+| Dex `CrashLoopBackOff`, `cannot create temp file … read-only file system` | Dex writes its configuration to `/tmp` when it starts: `readOnlyRootFilesystem: false` in `microshift/argocd/dex.yaml` (the chart's default is `true`) |
+| A change to `microshift/argocd/dex.yaml` does not reach the Deployment | Refresh the root Application `microshift` first, then `dex` ([`catacumbas69-apps/README.md`](../catacumbas69-apps/README.md), *Where each thing runs*) |
 | ArgoCD "too many redirects" after the change | `argocd-server` not restarted after `server.insecure`: `oc -n argocd rollout restart deploy/argocd-server` |
