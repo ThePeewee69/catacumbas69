@@ -662,8 +662,9 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
   or dependency in the apps. The agent traces HTTP, MongoDB and Pulsar (a message carries its trace from one app
   to the next), sends traces only (`OTEL_METRICS_EXPORTER` and `OTEL_LOGS_EXPORTER` are `none`: metrics stay on
   `/actuator/prometheus`, logs on stdout) to Alloy, and puts `trace_id` and `span_id` in the MDC, which the ECS
-  log lines carry. `OTEL_SERVICE_NAME` is the app's name, the same as the Loki label `app`. Locally and in the
-  tests there is no agent.
+  log lines carry. `OTEL_SERVICE_NAME` is the app's name, the same as the Loki label `app`. Only the
+  instrumentations the apps use are on (decision 105): a new library to trace needs its
+  `OTEL_INSTRUMENTATION_<NAME>_ENABLED` in every Deployment. Locally and in the tests there is no agent.
 
 ---
 
@@ -775,6 +776,9 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-18, lighter agent** (decision 105): the OpenTelemetry agent only turns on the instrumentations the apps
+  use, because with all of them the nine JVMs starting together did not fit the startup probe; Loki loses the label
+  `filename`.
 - **2026-11-17, logs and traces** (decision 104, OBS-11): Loki (30 days) gets every pod's log and meloes' journal
   through Alloy; the five apps run the OpenTelemetry Java agent, and their traces go through Alloy to Tempo
   (14 days); Grafana links a log line to its trace and a span to its logs.
@@ -1477,4 +1481,14 @@ Logs and traces (2026-11-17):
      a span opens its app's logs. Loki and Tempo have Routes (`loki.` and `tempo.microshift.catacumbas69.com`),
      without authentication, home network only. Memory: each app container asks for 64 Mi more and may use 128 Mi
      more (448 Mi / 896 Mi) for the agent; Loki and Tempo 256 Mi / 1 Gi, Alloy 128 Mi / 512 Mi.
+
+105. **Only the instrumentations the apps use** (OBS-11). The first rollout of decision 104 restarted the nine app
+     pods together: with the agent's 100+ instrumentations each JVM needed about 330 s on meloes' 4 CPUs (load 37),
+     more than the startup probe's 300 s, so they were killed and restarted in a loop until the apps with two
+     replicas were scaled down to one. `OTEL_INSTRUMENTATION_COMMON_DEFAULT_ENABLED=false` turns them all off, and each Deployment
+     turns on only `tomcat`, `servlet`, `spring-webmvc` (server), `http-url-connection`, `java-http-client`
+     (RestClient), `async-http-client` (Pulsar admin), `mongo`, `pulsar`, `executors` (the trace across our
+     executors and `CompletableFuture`s) and `logback-mdc` (`trace_id` and `span_id` in the log line). The startup
+     probe stays at 5 minutes. Alloy also drops the label `filename`, which changes with each restart of a
+     container.
 

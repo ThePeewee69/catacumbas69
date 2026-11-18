@@ -22,7 +22,7 @@ meloes' journal ──▶ /run/log/journal ─┼─▶ Alloy (DaemonSet) ──
 
 | Stream | Labels | Also |
 |---|---|---|
-| Every container of every namespace | `namespace`, `pod`, `container`, `app` (the pod's `app.kubernetes.io/name`, else its `app`) | Our five apps (namespace `catacumbas69-apps`) log ECS JSON (OBS-3): their `level` is a label too, and `trace_id` and `span_id` are structured metadata |
+| Every container of every namespace | `namespace`, `pod`, `container`, `app` (the pod's `app.kubernetes.io/name`, else its `app`); Loki adds `service_name` and `stream` (`stdout`/`stderr`) | Our five apps (namespace `catacumbas69-apps`) log ECS JSON (OBS-3): their `level` is a label too, and `trace_id` and `span_id` are structured metadata |
 | meloes' journal: MicroShift, CRI-O, sshd, the kernel, every systemd unit | `job="journal"`, `host="meloes"`, `unit` (e.g. `microshift.service`; empty for the kernel), `identifier` (the program), `level` (the priority: `err`, `warning`, `info`, …) | The journal is **volatile** on meloes (`/run/log/journal`, lost at each reboot): Loki is the copy that stays. On its first start Alloy reads the last 12 h |
 
 Examples in Grafana → **Explore** → Loki:
@@ -76,4 +76,6 @@ an app, the **Trace** link next to `trace_id` opens the trace.
 | Loki answers `429` to Alloy | Ingestion limits (`limits_config` in `microshift/argocd/loki.yaml`); a burst after a long stop can hit them |
 | No traces | The app's log starts with `[otel.javaagent …] opentelemetry-javaagent - version: …`; if not, `JAVA_TOOL_OPTIONS` or the init container. Then Alloy's `otelcol.exporter.otlp.tempo` in its UI |
 | An app `OOMKilled` | The agent's memory: raise the Deployment's limit (orch.md decision 104) |
+| Apps restart in a loop after starting together (`failed startup probe`, load far above 4) | The agent's start-up work: scale the apps with 2 replicas down to 1 (`oc -n catacumbas69-apps scale deploy/… --replicas=1`), wait for `1/1`, then back to 2 one at a time; keep the instrumentations to the ones used (orch.md decision 105) |
+| Old lines refused (`timestamp too old`, `entry too far behind`) | Only on Alloy's first start, when it reads the existing log files from the start: Loki refuses what is older than 7 days. Harmless |
 | A chart change does not arrive | Refresh the root Application `microshift` first, then the Application ([`catacumbas69-apps/README.md`](../catacumbas69-apps/README.md), *Where each thing runs*) |

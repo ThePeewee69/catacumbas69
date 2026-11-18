@@ -62,7 +62,10 @@ the newest 2.x) into an `emptyDir`; `JAVA_TOOL_OPTIONS` starts it with `-javaage
 every HTTP request, MongoDB command and Pulsar message (the trace follows a message from one app to the next),
 sends the traces to Alloy (`OTEL_EXPORTER_OTLP_ENDPOINT`), which forwards them to Tempo, and puts `trace_id` and
 `span_id` in each log line. The `OTEL_*` variables are in the Deployment; the agent exports no metrics and no logs
-(Prometheus and stdout keep those). To turn it off for one app, remove `-javaagent:…` from `JAVA_TOOL_OPTIONS`
+(Prometheus and stdout keep those), and only the instrumentations the apps use are on
+(`OTEL_INSTRUMENTATION_<NAME>_ENABLED`, orch.md decision 105): with all of them, nine JVMs starting together took
+longer than the startup probe allows. Tracing a new library means turning its instrumentation on in every
+Deployment. To turn it off for one app, remove `-javaagent:…` from `JAVA_TOOL_OPTIONS`
 and Sync. Pods need `ghcr.io` reachable to start, since the image is pulled again on every start.
 
 > **Login** (orch.md SEC-2): Catapulsar asks for it, through Dex at `https://auth.catacumbas69.com`

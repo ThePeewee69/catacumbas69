@@ -79,8 +79,32 @@ spec:
               value: none
             - name: OTEL_LOGS_EXPORTER
               value: none
-            - name: OTEL_INSTRUMENTATION_MICROMETER_ENABLED
+            # Only what the apps use (orch.md decision 105): with the agent's 100+ instrumentations on, starting 9 JVMs
+            # together on meloes' 4 CPUs took longer than the startup probe allows. Server: Tomcat, servlet, Spring MVC;
+            # clients: RestClient (HttpURLConnection, JDK HttpClient), Pulsar admin (async-http-client); MongoDB, Pulsar;
+            # the trace across our executors and CompletableFutures; trace_id and span_id in the MDC
+            - name: OTEL_INSTRUMENTATION_COMMON_DEFAULT_ENABLED
               value: "false"
+            - name: OTEL_INSTRUMENTATION_TOMCAT_ENABLED
+              value: "true"
+            - name: OTEL_INSTRUMENTATION_SERVLET_ENABLED
+              value: "true"
+            - name: OTEL_INSTRUMENTATION_SPRING_WEBMVC_ENABLED
+              value: "true"
+            - name: OTEL_INSTRUMENTATION_HTTP_URL_CONNECTION_ENABLED
+              value: "true"
+            - name: OTEL_INSTRUMENTATION_JAVA_HTTP_CLIENT_ENABLED
+              value: "true"
+            - name: OTEL_INSTRUMENTATION_ASYNC_HTTP_CLIENT_ENABLED
+              value: "true"
+            - name: OTEL_INSTRUMENTATION_MONGO_ENABLED
+              value: "true"
+            - name: OTEL_INSTRUMENTATION_PULSAR_ENABLED
+              value: "true"
+            - name: OTEL_INSTRUMENTATION_EXECUTORS_ENABLED
+              value: "true"
+            - name: OTEL_INSTRUMENTATION_LOGBACK_MDC_ENABLED
+              value: "true"
             - name: POD_NAME
               valueFrom:
                 fieldRef:

@@ -61,6 +61,12 @@ loki.process "pods" {
   // CRI-O's line format: time, stream, partial flag, then the line itself
   stage.cri {}
 
+  // loki.source.file adds the file's path; it changes with each restart of a container and pod and container
+  // already say where the line comes from
+  stage.label_drop {
+    values = ["filename"]
+  }
+
   // Our apps log ECS JSON (OBS-3): the level becomes a label; the trace and span the OpenTelemetry agent puts in
   // the MDC become structured metadata, so Grafana links each line to its trace in Tempo.
   stage.match {
