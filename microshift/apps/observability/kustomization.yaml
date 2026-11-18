@@ -1,0 +1,15 @@
+# Loki, Tempo and Alloy on meloes (orch.md decision 104): what goes with their charts (microshift/argocd/loki.yaml,
+# tempo.yaml and alloy.yaml), synced by the Application observability.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: observability
+resources:
+  - observability-scc.yaml
+  - loki-route.yaml
+  - tempo-route.yaml
+generatorOptions:
+  disableNameSuffixHash: true   # the Alloy chart names the ConfigMap; its reloader picks up every change
+configMapGenerator:
+  - name: alloy-config
+    files:
+      - config.alloy

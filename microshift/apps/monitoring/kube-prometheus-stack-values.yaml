@@ -192,3 +192,38 @@ grafana:
       provider:
         foldersFromFilesStructure: true
   # Every other dashboard, the JVM ones from grafana.com included, is a JSON file in dashboards/ (kustomization.yaml)
+  # Loki and Tempo (orch.md decision 104), in the namespace observability, next to the chart's Prometheus (uid
+  # prometheus). Each links to the other: a log line's trace_id opens its trace in Tempo, and a span opens the logs
+  # of its app around that time, filtered by the trace's ID. `$$` keeps `${...}` from Grafana's own interpolation.
+  additionalDataSources:
+    - name: Loki
+      uid: loki
+      type: loki
+      access: proxy
+      url: http://loki.observability.svc.cluster.local:3100
+      jsonData:
+        derivedFields:
+          - name: trace_id
+            matcherType: label   # the structured metadata trace_id that Alloy extracts from the ECS lines
+            matcherRegex: trace_id
+            datasourceUid: tempo
+            url: "$${__value.raw}"
+            urlDisplayLabel: Trace
+    - name: Tempo
+      uid: tempo
+      type: tempo
+      access: proxy
+      url: http://tempo.observability.svc.cluster.local:3200
+      jsonData:
+        tracesToLogsV2:
+          datasourceUid: loki
+          spanStartTimeShift: -5m
+          spanEndTimeShift: 5m
+          filterByTraceID: true
+          tags:
+            - key: service.name   # OTEL_SERVICE_NAME, the same name as the Loki label app
+              value: app
+        lokiSearch:
+          datasourceUid: loki
+        nodeGraph:
+          enabled: true

@@ -1,0 +1,46 @@
+# ArgoCD Application of Tempo on meloes (orch.md decision 104): the traces of the five apps (OpenTelemetry Java
+# agent → Alloy → Tempo) for 14 days, read in Grafana. One pod storing on its own PVC. The chart lives in
+# grafana-community/helm-charts.
+# AUTOMATED sync with prune and selfHeal, and targetRevision "*": it follows the newest chart on its own.
+# Applied by the root Application microshift (microshift/bootstrap/microshift.yaml): commit and push.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tempo
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://grafana-community.github.io/helm-charts
+    chart: tempo
+    targetRevision: "*"
+    helm:
+      releaseName: tempo
+      values: |
+        tempo:
+          retention: 336h          # 14 days
+          reportingEnabled: false
+          # Small CPU request: meloes' CPU requests are nearly full (decision 85); memory is what counts
+          resources:
+            requests:
+              cpu: 25m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          extraEnv:
+            - name: GOMEMLIMIT   # Go's garbage collector works harder before reaching the limit
+              value: 800MiB
+        persistence:
+          enabled: true
+          size: 20Gi
+          storageClassName: topolvm-provisioner
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

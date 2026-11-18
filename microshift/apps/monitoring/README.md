@@ -25,6 +25,11 @@ They are separate from the kube-prometheus-stack of the K3s cluster (`apps/monit
 | meloes | node-exporter (DaemonSet on the host) | CPU, memory, disk, network, temperature (`thermal_zone`, `hwmon`), pressure (PSI) |
 | Kubernetes API | The chart's apiserver ServiceMonitor | Requests and latencies of the API server |
 
+Logs and traces are not here: Loki and Tempo run in the namespace `observability`
+([`microshift/apps/observability/README.md`](../observability/README.md), orch.md decision 104), and Grafana reads
+them through the datasources **Loki** and **Tempo** (`additionalDataSources` in the values: a log line's
+`trace_id` opens its trace, a span opens its logs). Sync `monitoring` after changing them.
+
 Not collected, because MicroShift runs them inside its own process and does not expose them: the controller
 manager, the scheduler, etcd and kube-proxy (disabled in the values, with their rules). There is no
 Alertmanager: Catavigia raises the alerts (ADR 0015). Prometheus still evaluates the chart's rules, so its

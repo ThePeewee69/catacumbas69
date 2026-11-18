@@ -2,7 +2,7 @@
 
 The five catacumbas69 apps (Cataponte, Cataudit, Catametricas, Catavigia, Catapulsar) run in MicroShift on
 **meloes**, in the namespace `catacumbas69-apps`, synced by ArgoCD. Rules and decisions:
-[`apps/orch.md`](../../../apps/orch.md) OPS-1..6, SEC-2, SEC-8 and decisions 81–87, 96–100.
+[`apps/orch.md`](../../../apps/orch.md) OPS-1..6, SEC-2, SEC-8 and decisions 81–87, 96–100, 104.
 
 ```
 necromancer (Mac)                                meloes (MicroShift)
@@ -22,7 +22,7 @@ git commit + push ──▶ GitHub ──▶ ArgoCD (manual Sync) ──▶ ns c
 | `microshift/apps/mongodb/mongodb-cluster.yaml` | The MongoDB ReplicaSet, with the user `catacumbas69-apps` (read and write on `catacumbas69` only) and the admin `peewee69` |
 | `microshift/apps/mongodb/mongo-express.yaml` | The one web UI of MongoDB, `https://mongo-express.catacumbas69.com`: connects as `peewee69` with the operator's `peewee69-connection`, basic-auth from `mongo-express-auth` (orch.md decision 101) |
 | `microshift/apps/mongodb/mongo-admin.sh` | Runs on the Mac over ssh: `peewee69` sets the admin's password, `express` the mongo-express login (asked twice, not shown, never in git) |
-| `microshift/argocd/` | Applied by the root Application `microshift`: a new or changed file there reaches the cluster with a push, and deleting a file deletes its Application (not what it deployed). One ArgoCD Application per app and one for the registry and the monitoring, with no automated sync: Sync by hand in the UI. Also `pulsar`, `mongodb` (the operator's chart), `mongodb-cluster`, `cert-manager`, `trust-manager`, `tls`, `dex` and `argocd-config` (orch.md decisions 97–99), which sync **on their own** (prune, selfHeal): change those folders in git, then Refresh; an `oc apply` by hand is undone |
+| `microshift/argocd/` | Applied by the root Application `microshift`: a new or changed file there reaches the cluster with a push, and deleting a file deletes its Application (not what it deployed). One ArgoCD Application per app and one for the registry and the monitoring, with no automated sync: Sync by hand in the UI. Also `pulsar`, `mongodb` (the operator's chart), `mongodb-cluster`, `cert-manager`, `trust-manager`, `tls`, `dex` and `argocd-config` (orch.md decisions 97–99), and `loki`, `tempo`, `alloy` and `observability` (decision 104), which sync **on their own** (prune, selfHeal): change those folders in git, then Refresh; an `oc apply` by hand is undone |
 | `microshift/bootstrap/microshift.yaml` | The root Application (app of apps): it reads `microshift/argocd/` with automated sync, prune and selfHeal. Applied once by hand; it does not manage itself |
 | `apps/build/push.sh` | Builds an image with Podman (linux/amd64), pushes it and writes its tag into the app's `kustomization.yaml` |
 | `apps/build/mongo-secret.sh` | Creates the apps' MongoDB password and copies their connection string into `catacumbas69-apps` |
@@ -35,8 +35,9 @@ git commit + push ──▶ GitHub ──▶ ArgoCD (manual Sync) ──▶ ns c
 | Catavigia | 2 | 8085 | `https://catavigia.catacumbas69.com` |
 | Catapulsar | 1 | 8081 | `https://catapulsar.catacumbas69.com` (login through Dex) |
 
-Every container asks for 25m CPU and 384 Mi and may use up to 1 CPU and 768 Mi (meloes has 4 CPUs, most of
-them already requested by MongoDB and Pulsar). The JVM options are in each Deployment's `JAVA_TOOL_OPTIONS`
+Every container asks for 25m CPU and 448 Mi and may use up to 1 CPU and 896 Mi (meloes has 4 CPUs, most of
+them already requested by MongoDB and Pulsar; 64 Mi and 128 Mi of that are for the OpenTelemetry agent, orch.md
+decision 104). The JVM options are in each Deployment's `JAVA_TOOL_OPTIONS`
 (heap up to 50 % of the limit, exit on `OutOfMemoryError`; orch.md decision 89): change them there and Sync, no
 new image needed. The log starts with `Picked up JAVA_TOOL_OPTIONS: …`, which is the JVM confirming them. Probes are on Actuator
 (startup and liveness on `/actuator/health/liveness`, readiness on `/actuator/health/readiness`), each with a 3 s
@@ -53,6 +54,16 @@ certificate from our own CA, and `http://` is redirected (orch.md decision 97,
 
 Metrics and dashboards: Prometheus and Grafana on meloes collect every replica's `/actuator/prometheus`; see
 [`microshift/apps/monitoring/README.md`](../monitoring/README.md) (orch.md decision 90).
+
+Logs and traces (orch.md decision 104, [`microshift/apps/observability/README.md`](../observability/README.md)):
+Alloy ships every pod's log to Loki. Each Deployment has an init container, `otel-agent`, that copies the
+**OpenTelemetry Java agent** (image `ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2`,
+the newest 2.x) into an `emptyDir`; `JAVA_TOOL_OPTIONS` starts it with `-javaagent:/otel/javaagent.jar`. It traces
+every HTTP request, MongoDB command and Pulsar message (the trace follows a message from one app to the next),
+sends the traces to Alloy (`OTEL_EXPORTER_OTLP_ENDPOINT`), which forwards them to Tempo, and puts `trace_id` and
+`span_id` in each log line. The `OTEL_*` variables are in the Deployment; the agent exports no metrics and no logs
+(Prometheus and stdout keep those). To turn it off for one app, remove `-javaagent:…` from `JAVA_TOOL_OPTIONS`
+and Sync. Pods need `ghcr.io` reachable to start, since the image is pulled again on every start.
 
 > **Login** (orch.md SEC-2): Catapulsar asks for it, through Dex at `https://auth.catacumbas69.com`
 > ([`microshift/apps/dex/README.md`](../dex/README.md)); Catapulsar's Deployment needs the Secret

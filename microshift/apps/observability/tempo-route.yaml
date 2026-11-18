@@ -1,0 +1,17 @@
+# Tempo's HTTP API (orch.md decision 104), HTTPS with the router's wildcard (decision 97). No authentication: home
+# network only, like Prometheus. Grafana reaches Tempo inside the cluster, not through here.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: tempo
+spec:
+  host: tempo.microshift.catacumbas69.com
+  tls:
+    termination: edge   # the router's wildcard certificate (orch.md decision 97)
+    insecureEdgeTerminationPolicy: Redirect
+  to:
+    kind: Service
+    name: tempo
+    weight: 100
+  port:
+    targetPort: tempo-prom-metrics

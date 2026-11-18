@@ -1,0 +1,30 @@
+# Security context constraints for the observability namespace (orch.md decision 104), declared here instead of
+# with `oc adm policy`, as in microshift/apps/monitoring:
+# - nonroot-v2 for every service account: Loki and Tempo run with the fixed non-root UID 10001, which the default
+#   restricted-v2 refuses;
+# - privileged only for Alloy's: it reads the host's root-owned logs (/var/log/pods, /run/log/journal).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: scc-nonroot-v2
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:nonroot-v2
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: system:serviceaccounts:observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: scc-privileged-alloy
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:privileged
+subjects:
+  - kind: ServiceAccount
+    name: alloy
+    namespace: observability

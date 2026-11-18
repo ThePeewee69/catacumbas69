@@ -1,0 +1,115 @@
+# ArgoCD Application of Loki on meloes (orch.md decision 104): every log of meloes (all pods and the host's journal,
+# shipped by Alloy) for 30 days, read in Grafana. One pod (deploymentMode Monolithic) storing on its own PVC.
+# The chart lives in grafana-community/helm-charts since 2026-03-16. Only the Loki pod: no gateway, canary,
+# memcached caches, ruler or Helm test (meloes counts every pod).
+# AUTOMATED sync with prune and selfHeal, and targetRevision "*": it follows the newest chart on its own.
+# Applied by the root Application microshift (microshift/bootstrap/microshift.yaml): commit and push.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://grafana-community.github.io/helm-charts
+    chart: loki
+    targetRevision: "*"
+    helm:
+      releaseName: loki
+      values: |
+        deploymentMode: Monolithic
+        loki:
+          auth_enabled: false   # one tenant; the Route is home network only, like Prometheus
+          commonConfig:
+            replication_factor: 1
+          storage:
+            type: filesystem    # on the PVC: no object storage on meloes
+          schemaConfig:
+            configs:
+              - from: "2026-11-17"
+                store: tsdb
+                object_store: filesystem
+                schema: v13
+                index:
+                  prefix: loki_index_
+                  period: 24h
+          limits_config:
+            retention_period: 720h          # 30 days, like Prometheus
+            reject_old_samples: true
+            reject_old_samples_max_age: 168h
+            max_cache_freshness_per_query: 10m
+            split_queries_by_interval: 15m
+            query_timeout: 300s
+            volume_enabled: true
+          compactor:
+            retention_enabled: true         # the compactor deletes what is older than retention_period
+            delete_request_store: filesystem
+          analytics:
+            reporting_enabled: false
+        singleBinary:
+          replicas: 1
+          persistence:
+            enabled: true
+            size: 20Gi
+            storageClass: topolvm-provisioner
+          # Small CPU request: meloes' CPU requests are nearly full (decision 85); memory is what counts
+          resources:
+            requests:
+              cpu: 25m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          extraEnv:
+            - name: GOMEMLIMIT   # Go's garbage collector works harder before reaching the limit
+              value: 800MiB
+        gateway:
+          enabled: false
+        lokiCanary:
+          enabled: false
+        test:
+          enabled: false
+        chunksCache:
+          enabled: false
+        resultsCache:
+          enabled: false
+        memcached:
+          enabled: false
+        ruler:
+          enabled: false
+        sidecar:
+          rules:
+            enabled: false
+        # Zero the other deployment modes' targets (the chart's monolithic example does the same)
+        backend:
+          replicas: 0
+        read:
+          replicas: 0
+        write:
+          replicas: 0
+        ingester:
+          replicas: 0
+        querier:
+          replicas: 0
+        queryFrontend:
+          replicas: 0
+        queryScheduler:
+          replicas: 0
+        distributor:
+          replicas: 0
+        compactor:
+          replicas: 0
+        indexGateway:
+          replicas: 0
+        bloomGateway:
+          replicas: 0
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,86 @@
+# ArgoCD Application of Grafana Alloy on meloes (orch.md decision 104): one pod on the node (DaemonSet) that
+#   - tails every container's log under /var/log/pods and the host's journal (/run/log/journal: volatile on
+#     meloes) and pushes them to Loki;
+#   - receives the five apps' traces over OTLP (the OpenTelemetry Java agent, ports 4317 gRPC and 4318 HTTP) and
+#     forwards them to Tempo.
+# Its configuration is microshift/apps/observability/config.alloy, in the ConfigMap alloy-config that the
+# Application observability makes; the chart's config reloader picks up changes without a restart.
+# Privileged (SCC in microshift/apps/observability): it reads root-owned files of the host, as the node-exporter.
+# AUTOMATED sync with prune and selfHeal, and targetRevision "*": it follows the newest chart on its own.
+# Applied by the root Application microshift (microshift/bootstrap/microshift.yaml): commit and push.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alloy
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: alloy
+    targetRevision: "*"
+    helm:
+      releaseName: alloy
+      values: |
+        alloy:
+          configMap:
+            create: false
+            name: alloy-config     # microshift/apps/observability (configMapGenerator from config.alloy)
+            key: config.alloy
+          storagePath: /var/lib/alloy   # positions of the files and the journal: kept on the host across restarts
+          enableReporting: false
+          mounts:
+            varlog: true             # /var/log/pods
+            extra:
+              - name: journal
+                mountPath: /run/log/journal
+                readOnly: true
+              - name: machine-id
+                mountPath: /etc/machine-id
+                readOnly: true
+              - name: storage
+                mountPath: /var/lib/alloy
+          extraPorts:
+            - name: otlp-grpc
+              port: 4317
+              targetPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              port: 4318
+              targetPort: 4318
+              protocol: TCP
+          securityContext:
+            privileged: true         # root-owned logs and SELinux labels of the host
+            runAsUser: 0
+          # Small CPU request: meloes' CPU requests are nearly full (decision 85); memory is what counts
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+        controller:
+          type: daemonset
+          volumes:
+            extra:
+              - name: journal
+                hostPath:
+                  path: /run/log/journal
+              - name: machine-id
+                hostPath:
+                  path: /etc/machine-id
+                  type: File
+              - name: storage
+                hostPath:
+                  path: /var/lib/alloy
+                  type: DirectoryOrCreate
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

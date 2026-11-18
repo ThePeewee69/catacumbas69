@@ -27,6 +27,27 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        # The OpenTelemetry Java agent (orch.md decision 104), copied into a shared volume so the app's image stays as
+        # built. Tag 2: the newest 2.x, pulled again on every start
+        - name: otel-agent
+          image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2
+          imagePullPolicy: Always
+          command: ["cp", "/javaagent.jar", "/otel/javaagent.jar"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+          volumeMounts:
+            - name: otel-agent
+              mountPath: /otel
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
       containers:
         - name: catavigia
           image: registry.catacumbas69.com/catavigia
@@ -38,22 +59,41 @@ spec:
             - configMapRef:
                 name: catavigia-config
           env:
-            # Heap up to 50 % of the memory limit (~384 Mi), leaving room for metaspace, code cache, Netty buffers and
+            # Heap up to 50 % of the memory limit (~448 Mi), leaving room for metaspace, code cache, Netty buffers and
             # thread stacks; exit on OutOfMemoryError so the pod restarts (orch.md decision 89)
             - name: JAVA_TOOL_OPTIONS
-              value: "-XX:MaxRAMPercentage=50.0 -XX:+ExitOnOutOfMemoryError"
+              value: "-javaagent:/otel/javaagent.jar -XX:MaxRAMPercentage=50.0 -XX:+ExitOnOutOfMemoryError"
             - name: SPRING_DATA_MONGODB_URI
               valueFrom:
                 secretKeyRef:
                   name: catacumbas69-apps-mongodb
                   key: uri
+            # Traces (orch.md decision 104): the agent sends them over OTLP to Alloy, which forwards them to Tempo.
+            # Metrics stay with Prometheus (/actuator/prometheus) and logs on stdout (OBS-3), so the agent exports
+            # neither; it puts trace_id and span_id in the MDC, which the ECS log lines carry
+            - name: OTEL_SERVICE_NAME
+              value: catavigia
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://alloy.observability.svc.cluster.local:4318
+            - name: OTEL_METRICS_EXPORTER
+              value: none
+            - name: OTEL_LOGS_EXPORTER
+              value: none
+            - name: OTEL_INSTRUMENTATION_MICROMETER_ENABLED
+              value: "false"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.namespace=catacumbas69,k8s.namespace.name=catacumbas69-apps,k8s.pod.name=$(POD_NAME)
           resources:
             requests:
               cpu: 25m   # meloes has 4 CPUs and its requests were full (orch.md decision 85); the limit still allows 1 CPU
-              memory: 384Mi
+              memory: 448Mi   # +64 Mi and +128 Mi for the OpenTelemetry agent (orch.md decision 104)
             limits:
               cpu: "1"
-              memory: 768Mi
+              memory: 896Mi
           startupProbe:
             httpGet:
               path: /actuator/health/liveness
@@ -75,7 +115,15 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3
+          volumeMounts:
+            - name: otel-agent
+              mountPath: /otel
+              readOnly: true
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
+      volumes:
+        - name: otel-agent   # the OpenTelemetry agent, copied by the init container
+          emptyDir:
+            sizeLimit: 64Mi

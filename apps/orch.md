@@ -627,8 +627,9 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 - **OBS-2 [MUST]** Readiness includes MongoDB and a Pulsar health indicator (client connected / admin
   reachable). Liveness does **not** include external dependencies.
 - **OBS-3 [MUST]** Logs are JSON on stdout in the cluster (structured logging, ECS format) and
-  human-readable locally. Alloy ships them to Loki; Kubernetes labels `app`, `namespace` come from Alloy,
-  not from the app.
+  human-readable locally. Alloy ships them to Loki (decision 104); Kubernetes labels `app`, `namespace` come from
+  Alloy, not from the app, and so do the label `level` and the structured metadata `trace_id` and `span_id`, read
+  from the JSON.
 - **OBS-9 [MUST]** A failure the code handles (retried or ignored) is logged once, in one line, by our code.
   Library loggers that repeat it at WARN with a stack trace are lowered to ERROR in `application.properties`
   (Pulsar client: `BinaryProtoLookupService`, `PulsarClientImpl`, admin `BaseResource`).
@@ -657,6 +658,12 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
   latest sample (`503` when Catametricas is down). Catametricas exposes `catametricas_tasks_total{outcome}` and
   `catametricas_collect_duration` (per namespace), and a `collector` health component (always UP; details
   show whether this instance consumes tasks and its last task).
+- **OBS-11 [MUST]** In the cluster every app runs the **OpenTelemetry Java agent** (decision 104): no tracing code
+  or dependency in the apps. The agent traces HTTP, MongoDB and Pulsar (a message carries its trace from one app
+  to the next), sends traces only (`OTEL_METRICS_EXPORTER` and `OTEL_LOGS_EXPORTER` are `none`: metrics stay on
+  `/actuator/prometheus`, logs on stdout) to Alloy, and puts `trace_id` and `span_id` in the MDC, which the ECS
+  log lines carry. `OTEL_SERVICE_NAME` is the app's name, the same as the Loki label `app`. Locally and in the
+  tests there is no agent.
 
 ---
 
@@ -768,6 +775,9 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-17, logs and traces** (decision 104, OBS-11): Loki (30 days) gets every pod's log and meloes' journal
+  through Alloy; the five apps run the OpenTelemetry Java agent, and their traces go through Alloy to Tempo
+  (14 days); Grafana links a log line to its trace and a span to its logs.
 - **2026-11-17, scope** (decision 103): phase 6 (Catametricas' Prometheus source), Catavigia's external
   notifications and the K3s side of decision 102 dropped.
 - **2026-11-17, exposed passwords** (decision 102): no history rewrite; the old password, reused across the UIs,
@@ -1451,4 +1461,20 @@ Scope (2026-11-17):
      (phase 6, ADR 0013): every range keeps coming from MongoDB. Catavigia sends no external notifications
      (Telegram, email; decision 49, ADR 0015): its alerts stay in Catapulsar's alerts panel. The K3s side of
      decision 102 (the Grafana admin and slskd) is left as it is.
+
+Logs and traces (2026-11-17):
+
+104. **Loki, Tempo and Alloy** on meloes, in the namespace `observability` (`microshift/apps/observability/README.md`),
+     each an ArgoCD Application with automated sync and the newest chart (`*`): `loki` and `tempo` from
+     grafana-community/helm-charts (where the Loki chart moved on 2026-03-16), `alloy` from grafana/helm-charts, and
+     `observability` (SCC bindings, Alloy's configuration, Routes). **Alloy** (DaemonSet, privileged) ships every
+     container's log (`/var/log/pods`, all namespaces) and **meloes' whole journal** (volatile, `/run/log/journal`)
+     to **Loki**: one pod, filesystem on a 20 Gi PVC, **30 days**. The five apps run the **OpenTelemetry Java
+     agent** (OBS-11), copied by an init container from `autoinstrumentation-java:2` (the newest 2.x, so the apps'
+     images do not change and no operator is needed); it sends **every** trace (no sampling, to be reviewed) over
+     OTLP to Alloy, which forwards them to **Tempo**: one pod, 20 Gi PVC, **14 days**. Metrics stay with Prometheus.
+     Grafana gets the datasources Loki and Tempo (values of `monitoring`): a log line's `trace_id` opens its trace,
+     a span opens its app's logs. Loki and Tempo have Routes (`loki.` and `tempo.microshift.catacumbas69.com`),
+     without authentication, home network only. Memory: each app container asks for 64 Mi more and may use 128 Mi
+     more (448 Mi / 896 Mi) for the agent; Loki and Tempo 256 Mi / 1 Gi, Alloy 128 Mi / 512 Mi.
 

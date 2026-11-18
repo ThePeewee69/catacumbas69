@@ -1,0 +1,24 @@
+# ArgoCD Application of what goes with Loki, Tempo and Alloy on meloes (orch.md decision 104):
+# microshift/apps/observability: the SCC bindings, Alloy's configuration and the Routes of Loki and Tempo.
+# AUTOMATED sync with prune and selfHeal.
+# Applied by the root Application microshift (microshift/bootstrap/microshift.yaml): commit and push.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ThePeewee69/catacumbas69.git
+    targetRevision: main
+    path: microshift/apps/observability
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
