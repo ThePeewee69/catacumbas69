@@ -36,3 +36,11 @@ configMapGenerator:
     options:
       annotations:
         grafana_folder: JVM
+  # From Loki (orch.md decision 104): the pods' logs and meloes' journal
+  - name: dashboards-logs
+    files:
+      - dashboards/pods-logs.json
+      - dashboards/meloes-journal.json
+    options:
+      annotations:
+        grafana_folder: Logs

@@ -776,6 +776,7 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-18, log dashboards** (decision 104): **pods · logs** and **meloes · journal** in Grafana's folder Logs.
 - **2026-11-18, lighter agent** (decision 105): the OpenTelemetry agent only turns on the instrumentations the apps
   use, because with all of them the nine JVMs starting together did not fit the startup probe; Loki loses the label
   `filename`.
