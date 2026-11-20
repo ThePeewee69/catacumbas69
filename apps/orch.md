@@ -121,7 +121,7 @@ from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
 | `CATAPULSAR_AUTH_CLIENT_SECRET` | Catapulsar | Secret `catapulsar-oidc` (key `client-secret`, `dex-secret.sh`) | *(not used)* |
 | `SPRING_PROFILES_ACTIVE` | Catapulsar | *(not set: login on)* | `no-auth` (no login; actor = the browser's address) |
 | `CATAMETRICAS_COLLECT_INTERVAL_SECONDS` | Catapulsar, Catametricas (same value) | `60` | `60` |
-| `CATACOMMONS_*` (optional) | all | see `CatacommonsProperties`: retries `1s,2s,4s`, retention `7d`/`2GB`, backlog quota `1GB` (must be below the retention) | same |
+| `CATACOMMONS_*` (optional) | all | see `CatacommonsProperties`: retries `1s,2s,4s`, retention `7d`/`2GB`, backlog quota `1GB` (must be below the retention), `consumers` topic retention `7d` | same |
 | `CATAPONTE_STATUS_WRITEINTERVAL`, `CATAPONTE_STATUS_STALEAFTER` (optional) | Cataponte (status of each replica, ADR 0012) | `PT5S`, `PT30S` | same |
 | `CATAPONTE_CORS_ALLOWED_ORIGINS` (optional) | Cataponte | *(empty: CORS closed)* | *(empty)* |
 | `SERVER_PORT` | all (only for a second local instance) | Catapulsar `8081`, Cataponte `8082`, Catametricas `8083`, Cataudit `8084`, Catavigia `8085` | e.g. `8092`, `8093` |
@@ -407,8 +407,10 @@ Every package has a `package-info.java` (DOC-2). Dependencies point downwards on
   `PulsarProvisioner`, never by hand; topics are non-partitioned.
 - **EVT-6 [MUST]** Namespace policies are set by the app on every start: retention 7 days / 2 GB, backlog
   quota 1 GB with `producer_exception`. The quota MUST be below the retention size (Pulsar answers `412`
-  otherwise); `CatacommonsProperties` refuses to start when it is not. Compacted topics (settings) get topic policies: infinite retention
-  and a compaction threshold of 1 MB.
+  otherwise); `CatacommonsProperties` refuses to start when it is not. Compacted topics get topic policies: a
+  compaction threshold of 1 MB, and their own retention: infinite for the settings, **7 days** for each app's
+  `consumers` status topic (`consumers-retention-time`, decision 106). Retention removes old messages only; the
+  compacted view (the latest value of each key) stays.
 
 Event catalogue (phase 1):
 
@@ -776,6 +778,8 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-19, consumer status retention** (decision 106): the compacted `consumers` topics keep 7 days of
+  messages instead of all of them.
 - **2026-11-18, log dashboards** (decision 104): **pods · logs** and **meloes · journal** in Grafana's folder Logs.
 - **2026-11-18, lighter agent** (decision 105): the OpenTelemetry agent only turns on the instrumentations the apps
   use, because with all of them the nine JVMs starting together did not fit the startup probe; Loki loses the label
@@ -1492,4 +1496,17 @@ Logs and traces (2026-11-17):
      executors and `CompletableFuture`s) and `logback-mdc` (`trace_id` and `span_id` in the log line). The startup
      probe stays at 5 minutes. Alloy also drops the label `filename`, which changes with each restart of a
      container.
+
+Pulsar storage (2026-11-19):
+
+106. **The `consumers` topics keep 7 days.** Every replica of Catavigia, Cataudit and Catametricas publishes its
+     consumers' status every 10 s on its compacted `catacumbas69/<app>/consumers` topic (decision 67), and compacted
+     topics had infinite retention, so the whole history stayed: on 2026-11-19 each held about 80 MB (34 000
+     messages) for less than 1 MB of current state, growing towards the 10 Gi of Pulsar's PVC. They now keep 7 days
+     (`catacommons.provisioning.consumers-retention-time`, like the events); the compacted view, which is what the
+     TableViews of Catapulsar and Catavigia read first, is never removed by retention. The settings topic keeps
+     infinite retention: it changes rarely and its history is the history of the settings. The new policy is set
+     by `PulsarProvisioner` when each app starts; Pulsar removes the old ledgers on its own afterwards. The
+     sawtooth of these topics' backlog in the Pulsar dashboards is the `__compaction` cursor, which only moves when
+     a compaction runs (every 1 MB): not messages left unread.
 

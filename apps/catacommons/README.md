@@ -52,7 +52,8 @@ succeeds. "Already exists" counts as success, and policies are set again on ever
 | `catacommons.provisioning.retry-interval` / `max-retry-interval` | `30s` / `5m` |
 | `catacommons.provisioning.events-retention-time` / `events-retention-size` | `7d` / `2GB` (namespace) |
 | `catacommons.provisioning.events-backlog-quota` | `1GB`, `producer_exception` (namespace); must be smaller than the retention size, or the app refuses to start (Pulsar refuses it with `412`) |
-| `catacommons.provisioning.compaction-threshold` | `1MB` (compacted topics, plus infinite retention) |
+| `catacommons.provisioning.compaction-threshold` | `1MB` (compacted topics) |
+| `catacommons.provisioning.consumers-retention-time` | `7d`: how long the compacted `consumers` topic keeps its messages (orch.md decision 106); the compacted view stays. The settings topic keeps everything |
 | `catacommons.audit-bridge.enabled` | `true` |
 | `catacommons.audit-bridge.cataponte-url` | `http://cataponte:8082`; set it from `CATAPONTE_URL` |
 | `catacommons.audit-bridge.timeout` / `retry-interval` / `max-retry-interval` | `5s` / `10s` / `5m` |

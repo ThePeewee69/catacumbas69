@@ -84,6 +84,6 @@ class CatacommonsPropertiesTest {
 
     private static CatacommonsProperties.Provisioning provisioning(DataSize retention, DataSize backlogQuota) {
         return new CatacommonsProperties.Provisioning(true, Duration.ofSeconds(30), Duration.ofMinutes(5),
-                Duration.ofDays(7), retention, backlogQuota, DataSize.ofMegabytes(1));
+                Duration.ofDays(7), retention, backlogQuota, DataSize.ofMegabytes(1), Duration.ofDays(7));
     }
 }

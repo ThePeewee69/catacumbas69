@@ -38,6 +38,7 @@ class PulsarProvisionerTest {
 
     private static final String EVENTS = "persistent://catacumbas69/catapulsar/events";
     private static final String SETTINGS = "persistent://catacumbas69/catapulsar/settings";
+    private static final String CONSUMERS = "persistent://catacumbas69/catapulsar/consumers";
 
     private final PulsarAdmin admin = mock(PulsarAdmin.class);
     private final Tenants tenants = mock(Tenants.class);
@@ -48,7 +49,8 @@ class PulsarProvisionerTest {
     private final Schemas schemas = mock(Schemas.class);
     private final PulsarProvisioner provisioner = new PulsarProvisioner(admin, properties(), List.of(
             TopicSpec.of("events", Schema.JSON(CloudEvent.class)),
-            TopicSpec.compacted("settings", Schema.JSON(SettingValue.class))),
+            TopicSpec.compacted("settings", Schema.JSON(SettingValue.class)),
+            TopicSpec.compacted("consumers", Schema.JSON(SettingValue.class), Duration.ofDays(7))),
             mock(ScheduledExecutorService.class));
 
     PulsarProvisionerTest() {
@@ -87,8 +89,17 @@ class PulsarProvisionerTest {
         verify(topics).createNonPartitionedTopic(EVENTS);
         verify(topics).createNonPartitionedTopic(SETTINGS);
         verify(topicPolicies, never()).setRetention(eq(EVENTS), any());
-        verify(topicPolicies).setRetention(eq(SETTINGS), any(RetentionPolicies.class));
+        // settings keep everything; the consumer status topic only 7 days (decision 106)
+        ArgumentCaptor<RetentionPolicies> settingsRetention = ArgumentCaptor.forClass(RetentionPolicies.class);
+        verify(topicPolicies).setRetention(eq(SETTINGS), settingsRetention.capture());
+        assertThat(settingsRetention.getValue().getRetentionTimeInMinutes()).isEqualTo(-1);
+        assertThat(settingsRetention.getValue().getRetentionSizeInMB()).isEqualTo(-1);
+        ArgumentCaptor<RetentionPolicies> consumersRetention = ArgumentCaptor.forClass(RetentionPolicies.class);
+        verify(topicPolicies).setRetention(eq(CONSUMERS), consumersRetention.capture());
+        assertThat(consumersRetention.getValue().getRetentionTimeInMinutes()).isEqualTo(7 * 24 * 60);
+        assertThat(consumersRetention.getValue().getRetentionSizeInMB()).isEqualTo(-1);
         verify(topicPolicies).setCompactionThreshold(SETTINGS, DataSize.ofMegabytes(1).toBytes());
+        verify(topicPolicies).setCompactionThreshold(CONSUMERS, DataSize.ofMegabytes(1).toBytes());
         verify(schemas).createSchema(eq(EVENTS), any(org.apache.pulsar.common.schema.SchemaInfo.class));
     }
 
@@ -111,7 +122,7 @@ class PulsarProvisionerTest {
                 new CatacommonsProperties.Events(true, List.of(Duration.ofSeconds(1)), Duration.ofSeconds(10)),
                 new CatacommonsProperties.Provisioning(true, Duration.ofSeconds(30), Duration.ofMinutes(5),
                         Duration.ofDays(7), DataSize.ofGigabytes(2), DataSize.ofGigabytes(1),
-                        DataSize.ofMegabytes(1)),
+                        DataSize.ofMegabytes(1), Duration.ofDays(7)),
                 new CatacommonsProperties.AuditBridge(true, "http://localhost:8082", Duration.ofSeconds(1),
                         Duration.ofSeconds(10), Duration.ofMinutes(5)),
                 new CatacommonsProperties.Settings(true, Duration.ofSeconds(10)),

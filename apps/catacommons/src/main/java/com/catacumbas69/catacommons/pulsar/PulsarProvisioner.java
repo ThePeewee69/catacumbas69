@@ -129,7 +129,8 @@ public class PulsarProvisioner implements ApplicationListener<ApplicationReadyEv
     private void createTopic(String topic, TopicSpec spec) throws PulsarAdminException {
         ignoreConflict(() -> admin.topics().createNonPartitionedTopic(topic));
         if (spec.compacted()) {
-            admin.topicPolicies().setRetention(topic, new RetentionPolicies(-1, -1));
+            int retentionMinutes = spec.retention() == null ? -1 : minutes(spec.retention());
+            admin.topicPolicies().setRetention(topic, new RetentionPolicies(retentionMinutes, -1));
             admin.topicPolicies().setCompactionThreshold(topic, settings.compactionThreshold().toBytes());
         }
         if (spec.schema() != null) {

@@ -61,6 +61,9 @@ public record CatacommonsProperties(
      * @param eventsBacklogQuota unconsumed backlog allowed per topic; above it publishing fails
      *                           ({@code producer_exception})
      * @param compactionThreshold backlog size that triggers automatic compaction of compacted topics
+     * @param consumersRetentionTime how long the compacted consumer status topic keeps its messages (orch.md
+     *                               decision 106); the compacted view, the latest status of each consumer, is
+     *                               kept regardless. The settings topic keeps everything
      */
     public record Provisioning(
             @DefaultValue("true") boolean enabled,
@@ -69,7 +72,8 @@ public record CatacommonsProperties(
             @NotNull @DefaultValue("7d") Duration eventsRetentionTime,
             @NotNull @DefaultValue("2GB") DataSize eventsRetentionSize,
             @NotNull @DefaultValue("1GB") DataSize eventsBacklogQuota,
-            @NotNull @DefaultValue("1MB") DataSize compactionThreshold) {
+            @NotNull @DefaultValue("1MB") DataSize compactionThreshold,
+            @NotNull @DefaultValue("7d") Duration consumersRetentionTime) {
 
         /**
          * Tells whether Pulsar accepts the backlog quota: it refuses ({@code 412}) a quota equal to or above the

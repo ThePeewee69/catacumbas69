@@ -215,14 +215,18 @@ public class CatacommonsAutoConfiguration {
     }
 
     /**
-     * Declares the compacted consumer status topic.
+     * Declares the compacted consumer status topic. Its messages are kept for
+     * {@code catacommons.provisioning.consumers-retention-time} only (orch.md decision 106): each replica publishes
+     * its status every few seconds, and the compacted view already holds the latest one.
      *
+     * @param properties catacommons configuration
      * @return the topic spec
      */
     @Bean
     @ConditionalOnProperty(prefix = "catacommons.consumers", name = "enabled", havingValue = "true")
-    public TopicSpec catacommonsConsumersTopic() {
-        return TopicSpec.compacted(CatacumbasTopics.CONSUMERS, Schema.JSON(ConsumerStatus.class));
+    public TopicSpec catacommonsConsumersTopic(CatacommonsProperties properties) {
+        return TopicSpec.compacted(CatacumbasTopics.CONSUMERS, Schema.JSON(ConsumerStatus.class),
+                properties.provisioning().consumersRetentionTime());
     }
 
     /**
