@@ -778,6 +778,8 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-20, logs back and readable** (decision 107): Loki's schema starts in 2024 and Alloy drops lines older
+  than 7 days, so old lines no longer make Loki refuse whole batches; the log panels read like a `tail`.
 - **2026-11-19, consumer status retention** (decision 106): the compacted `consumers` topics keep 7 days of
   messages instead of all of them.
 - **2026-11-18, log dashboards** (decision 104): **pods · logs** and **meloes · journal** in Grafana's folder Logs.
@@ -1509,4 +1511,18 @@ Pulsar storage (2026-11-19):
      by `PulsarProvisioner` when each app starts; Pulsar removes the old ledgers on its own afterwards. The
      sawtooth of these topics' backlog in the Pulsar dashboards is the `__compaction` cursor, which only moves when
      a compaction runs (every 1 MB): not messages left unread.
+
+Logs (2026-11-20):
+
+107. **No more refused batches; logs read like a terminal.** Loki's schema started on 2026-11-17, the day it was
+     installed. Alloy, reading the existing log files of long-lived pods (ArgoCD, LVMS) from the start, kept sending
+     lines from before that date: Loki answered `500 no schema config found` for the **whole batch**, Alloy retried
+     it before dropping it, and the recent lines in the same and following batches (the apps' start-up among them)
+     never arrived. The first schema period now starts on **2024-01-01** (same store, schema and index: only its
+     start moved), and Alloy drops lines older than 167 h before sending them (`stage.drop`), just under Loki's
+     `reject_old_samples_max_age` of 7 days. The dashboards **pods · logs** and **meloes · journal** lose their
+     *error lines* panel; their log panel lists lines oldest first and opens at the newest one, like `tail`
+     (scrolling up loads older lines), without wrapping (the panel's controls turn it on), and shows our apps' ECS
+     JSON as `[thread] [Class] message`, with the stack trace of an error on the next lines; other pods' lines stay
+     as written, and the JSON fields stay in each line's details.
 

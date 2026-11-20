@@ -882,13 +882,13 @@
       "type": "logs",
       "id": 6,
       "title": "Logs",
-      "description": "As linhas com os filtros de cima, da mais antiga para a mais recente. Clica numa linha para ver os campos; o link Trace ao lado de trace_id abre o pedido no Tempo.",
+      "description": "As linhas com os filtros de cima, da mais antiga para a mais recente: abre no fim, como um tail, e o scroll para cima vai buscando as anteriores. As das nossas apps aparecem como [thread] [Classe] mensagem (o JSON completo está nos detalhes da linha). Clica numa linha para ver os campos; o link Trace ao lado de trace_id abre o pedido no Tempo.",
       "datasource": {
         "type": "loki",
         "uid": "${datasource}"
       },
       "gridPos": {
-        "h": 20,
+        "h": 24,
         "w": 24,
         "x": 0,
         "y": 17
@@ -900,7 +900,7 @@
             "uid": "${datasource}"
           },
           "refId": "A",
-          "expr": "{namespace=~\"$namespace\", app=~\"$app\", pod=~\"$pod\", container=~\"$container\"} | detected_level=~\"(?i)$level\" |~ \"(?i)$search\" |= \"$trace_id\"",
+          "expr": "{namespace=~\"$namespace\", app=~\"$app\", pod=~\"$pod\", container=~\"$container\"} | detected_level=~\"(?i)$level\" |~ \"(?i)$search\" |= \"$trace_id\" | json thread=\"process.thread.name\", logger=\"log.logger\", message=\"message\", stack=\"error.stack_trace\" | line_format `{{ if .message }}[{{ .thread }}] [{{ regexReplaceAll \"^.*\\\\.\" .logger \"\" }}] {{ .message }}{{ if .stack }}{{ \"\\n\" }}{{ .stack }}{{ end }}{{ else }}{{ __line__ }}{{ end }}` | drop __error__, __error_details__",
           "legendFormat": "",
           "queryType": "range"
         }
@@ -909,49 +909,11 @@
         "showTime": true,
         "showLabels": false,
         "showCommonLabels": false,
-        "wrapLogMessage": true,
+        "wrapLogMessage": false,
         "prettifyLogMessage": false,
         "enableLogDetails": true,
         "enableInfiniteScrolling": true,
-        "dedupStrategy": "none",
-        "sortOrder": "Ascending"
-      }
-    },
-    {
-      "type": "logs",
-      "id": 7,
-      "title": "Linhas de erro",
-      "description": "Só as linhas error e critical (com o stack trace, que as nossas apps põem em error.stack_trace).",
-      "datasource": {
-        "type": "loki",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 24,
-        "x": 0,
-        "y": 37
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "${datasource}"
-          },
-          "refId": "A",
-          "expr": "{namespace=~\"$namespace\", app=~\"$app\", pod=~\"$pod\", container=~\"$container\"} | detected_level=~\"(?i)error|critical\" |~ \"(?i)$search\" |= \"$trace_id\"",
-          "legendFormat": "",
-          "queryType": "range"
-        }
-      ],
-      "options": {
-        "showTime": true,
-        "showLabels": false,
-        "showCommonLabels": false,
-        "wrapLogMessage": true,
-        "prettifyLogMessage": false,
-        "enableLogDetails": true,
-        "enableInfiniteScrolling": true,
+        "showControls": true,
         "dedupStrategy": "none",
         "sortOrder": "Ascending"
       }

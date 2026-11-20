@@ -61,6 +61,13 @@ loki.process "pods" {
   // CRI-O's line format: time, stream, partial flag, then the line itself
   stage.cri {}
 
+  // Lines older than Loki accepts (reject_old_samples_max_age, 7 days) are dropped here, not sent: Loki refuses
+  // them, and a refused batch held back everything after it (orch.md decision 107)
+  stage.drop {
+    older_than          = "167h"
+    drop_counter_reason = "too_old"
+  }
+
   // loki.source.file adds the file's path; it changes with each restart of a container and pod and container
   // already say where the line comes from
   stage.label_drop {

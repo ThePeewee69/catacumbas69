@@ -689,13 +689,13 @@
       "type": "logs",
       "id": 5,
       "title": "Journal",
-      "description": "As linhas com os filtros de cima, da mais antiga para a mais recente.",
+      "description": "As linhas com os filtros de cima, da mais antiga para a mais recente: abre no fim, como um tail, e o scroll para cima vai buscando as anteriores.",
       "datasource": {
         "type": "loki",
         "uid": "${datasource}"
       },
       "gridPos": {
-        "h": 20,
+        "h": 24,
         "w": 24,
         "x": 0,
         "y": 17
@@ -716,49 +716,11 @@
         "showTime": true,
         "showLabels": false,
         "showCommonLabels": false,
-        "wrapLogMessage": true,
+        "wrapLogMessage": false,
         "prettifyLogMessage": false,
         "enableLogDetails": true,
         "enableInfiniteScrolling": true,
-        "dedupStrategy": "none",
-        "sortOrder": "Ascending"
-      }
-    },
-    {
-      "type": "logs",
-      "id": 6,
-      "title": "Linhas de erro",
-      "description": "Só emerg, alert, crit e err.",
-      "datasource": {
-        "type": "loki",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "h": 14,
-        "w": 24,
-        "x": 0,
-        "y": 37
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "${datasource}"
-          },
-          "refId": "A",
-          "expr": "{job=\"journal\", unit=~\"$unit\", identifier=~\"$identifier\", level=~\"emerg|alert|crit|err\"} |~ \"(?i)$search\"",
-          "legendFormat": "",
-          "queryType": "range"
-        }
-      ],
-      "options": {
-        "showTime": true,
-        "showLabels": false,
-        "showCommonLabels": false,
-        "wrapLogMessage": true,
-        "prettifyLogMessage": false,
-        "enableLogDetails": true,
-        "enableInfiniteScrolling": true,
+        "showControls": true,
         "dedupStrategy": "none",
         "sortOrder": "Ascending"
       }

@@ -27,7 +27,10 @@ spec:
             type: filesystem    # on the PVC: no object storage on meloes
           schemaConfig:
             configs:
-              - from: "2026-11-17"
+              # Any date before the oldest line Alloy may send: a line older than the first period has no schema,
+              # and Loki refuses the whole batch with a 500 (orch.md decision 107). Only the start moved: the
+              # index and chunks already written are the same
+              - from: "2024-01-01"
                 store: tsdb
                 object_store: filesystem
                 schema: v13
