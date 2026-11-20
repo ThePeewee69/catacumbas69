@@ -37,7 +37,8 @@ git commit + push ──▶ GitHub ──▶ ArgoCD (manual Sync) ──▶ ns c
 
 Every container asks for 25m CPU and 448 Mi and may use up to 1 CPU and 896 Mi (meloes has 4 CPUs, most of
 them already requested by MongoDB and Pulsar; 64 Mi and 128 Mi of that are for the OpenTelemetry agent, orch.md
-decision 104). The JVM options are in each Deployment's `JAVA_TOOL_OPTIONS`
+decision 104). Spring's banner is printed at start-up (`SPRING_MAIN_BANNER_MODE=console`: Spring turns it off when the log is
+JSON; orch.md decision 108). The JVM options are in each Deployment's `JAVA_TOOL_OPTIONS`
 (heap up to 50 % of the limit, exit on `OutOfMemoryError`; orch.md decision 89): change them there and Sync, no
 new image needed. The log starts with `Picked up JAVA_TOOL_OPTIONS: …`, which is the JVM confirming them. Probes are on Actuator
 (startup and liveness on `/actuator/health/liveness`, readiness on `/actuator/health/readiness`), each with a 3 s

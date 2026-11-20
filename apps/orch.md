@@ -629,7 +629,8 @@ Pyramid: many unit tests, focused slice tests, few end-to-end tests.
 - **OBS-2 [MUST]** Readiness includes MongoDB and a Pulsar health indicator (client connected / admin
   reachable). Liveness does **not** include external dependencies.
 - **OBS-3 [MUST]** Logs are JSON on stdout in the cluster (structured logging, ECS format) and
-  human-readable locally. Alloy ships them to Loki (decision 104); Kubernetes labels `app`, `namespace` come from
+  human-readable locally. In the cluster `SPRING_MAIN_BANNER_MODE=console` keeps Spring's banner, as plain lines
+  before the JSON (decision 108). Alloy ships them to Loki (decision 104); Kubernetes labels `app`, `namespace` come from
   Alloy, not from the app, and so do the label `level` and the structured metadata `trace_id` and `span_id`, read
   from the JSON.
 - **OBS-9 [MUST]** A failure the code handles (retried or ignored) is logged once, in one line, by our code.
@@ -778,6 +779,7 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-20, Spring's banner** (decision 108): the five apps print it again at start-up.
 - **2026-11-20, logs back and readable** (decision 107): Loki's schema starts in 2024 and Alloy drops lines older
   than 7 days, so old lines no longer make Loki refuse whole batches; the log panels read like a `tail`.
 - **2026-11-19, consumer status retention** (decision 106): the compacted `consumers` topics keep 7 days of
@@ -1525,4 +1527,9 @@ Logs (2026-11-20):
      (scrolling up loads older lines), without wrapping (the panel's controls turn it on), and shows our apps' ECS
      JSON as `[thread] [Class] message`, with the stack trace of an error on the next lines; other pods' lines stay
      as written, and the JSON fields stay in each line's details.
+
+108. **Spring's banner is back.** With `LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs` and no `spring.main.banner-mode`,
+     Spring Boot 3.5 turns the banner off, to keep stdout pure JSON. Each Deployment sets
+     `SPRING_MAIN_BANNER_MODE=console`, so it is printed at start-up as plain lines, as in a terminal; Alloy and Loki
+     keep them as they are (no level), and the log panels show them as written.
 

@@ -68,6 +68,10 @@ spec:
                 secretKeyRef:
                   name: catacumbas69-apps-mongodb
                   key: uri
+            # Spring turns its banner off when the console log is JSON (OBS-3); console prints it at start-up as
+            # plain lines, as in a terminal (orch.md decision 108)
+            - name: SPRING_MAIN_BANNER_MODE
+              value: console
             # Traces (orch.md decision 104): the agent sends them over OTLP to Alloy, which forwards them to Tempo.
             # Metrics stay with Prometheus (/actuator/prometheus) and logs on stdout (OBS-3), so the agent exports
             # neither; it puts trace_id and span_id in the MDC, which the ECS log lines carry
