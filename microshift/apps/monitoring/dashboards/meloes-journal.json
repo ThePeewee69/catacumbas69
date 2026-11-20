@@ -35,8 +35,9 @@
           "uid": "${datasource}"
         },
         "query": {
-          "qryType": 1,
-          "query": "label_values({job=\"journal\"}, unit)",
+          "type": 1,
+          "label": "unit",
+          "stream": "{job=\"journal\"}",
           "refId": "LokiVariableQueryEditor-VariableQuery"
         },
         "definition": "label_values({job=\"journal\"}, unit)",
@@ -64,8 +65,9 @@
           "uid": "${datasource}"
         },
         "query": {
-          "qryType": 1,
-          "query": "label_values({job=\"journal\", unit=~\"$unit\"}, identifier)",
+          "type": 1,
+          "label": "identifier",
+          "stream": "{job=\"journal\", unit=~\"$unit\"}",
           "refId": "LokiVariableQueryEditor-VariableQuery"
         },
         "definition": "label_values({job=\"journal\", unit=~\"$unit\"}, identifier)",
@@ -418,7 +420,7 @@
       }
     },
     {
-      "type": "bargauge",
+      "type": "table",
       "id": 3,
       "title": "Erros por unit",
       "description": "Linhas emerg, alert, crit e err no período, por unit (vazio: o kernel).",
@@ -439,43 +441,113 @@
             "uid": "${datasource}"
           },
           "refId": "A",
-          "expr": "sort_desc(sum by (unit) (count_over_time({job=\"journal\", unit=~\"$unit\", identifier=~\"$identifier\", level=~\"emerg|alert|crit|err\"} |~ \"(?i)$search\" [$__range])))",
-          "legendFormat": "{{unit}}",
+          "expr": "(sum by (unit) (count_over_time({job=\"journal\", unit=~\"$unit\", identifier=~\"$identifier\", level=~\"emerg|alert|crit|err\"} |~ \"(?i)$search\" [$__auto])))",
+          "legendFormat": "",
           "queryType": "instant"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "merge",
+          "options": {}
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "min": 0,
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "red"
-          },
-          "noValue": "0"
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byType",
+              "options": "time"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byType",
+              "options": "number"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Erros"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "basic",
+                  "valueDisplayMode": "text"
+                }
+              },
+              {
+                "id": "min",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "unit"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Unit"
+              }
+            ]
+          }
+        ]
       },
       "options": {
-        "orientation": "horizontal",
-        "displayMode": "basic",
-        "showUnfilled": true,
-        "valueMode": "color",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "namePlacement": "left",
-        "minVizHeight": 16,
-        "maxVizHeight": 24,
-        "sizing": "manual"
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "Erros",
+            "desc": true
+          }
+        ],
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ]
+        }
       }
     },
     {
-      "type": "bargauge",
+      "type": "table",
       "id": 4,
       "title": "Quem fala mais",
       "description": "Os 10 programas com mais linhas no período.",
@@ -496,46 +568,128 @@
             "uid": "${datasource}"
           },
           "refId": "A",
-          "expr": "topk(10, sum by (unit, identifier) (count_over_time({job=\"journal\", unit=~\"$unit\", identifier=~\"$identifier\", level=~\"$level\"} |~ \"(?i)$search\" [$__range])))",
-          "legendFormat": "{{unit}} / {{identifier}}",
+          "expr": "topk(10, sum by (unit, identifier) (count_over_time({job=\"journal\", unit=~\"$unit\", identifier=~\"$identifier\", level=~\"$level\"} |~ \"(?i)$search\" [$__auto])))",
+          "legendFormat": "",
           "queryType": "instant"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "merge",
+          "options": {}
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "min": 0,
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "blue"
-          },
-          "noValue": "0"
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byType",
+              "options": "time"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byType",
+              "options": "number"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Linhas"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "basic",
+                  "valueDisplayMode": "text"
+                }
+              },
+              {
+                "id": "min",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "unit"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Unit"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "identifier"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Programa"
+              }
+            ]
+          }
+        ]
       },
       "options": {
-        "orientation": "horizontal",
-        "displayMode": "basic",
-        "showUnfilled": true,
-        "valueMode": "color",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "namePlacement": "left",
-        "minVizHeight": 16,
-        "maxVizHeight": 24,
-        "sizing": "manual"
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "Linhas",
+            "desc": true
+          }
+        ],
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ]
+        }
       }
     },
     {
       "type": "logs",
       "id": 5,
       "title": "Journal",
-      "description": "As linhas com os filtros de cima, a mais recente primeiro.",
+      "description": "As linhas com os filtros de cima, da mais antiga para a mais recente.",
       "datasource": {
         "type": "loki",
         "uid": "${datasource}"
@@ -567,13 +721,13 @@
         "enableLogDetails": true,
         "enableInfiniteScrolling": true,
         "dedupStrategy": "none",
-        "sortOrder": "Descending"
+        "sortOrder": "Ascending"
       }
     },
     {
       "type": "logs",
       "id": 6,
-      "title": "Últimos erros",
+      "title": "Linhas de erro",
       "description": "Só emerg, alert, crit e err.",
       "datasource": {
         "type": "loki",
@@ -606,7 +760,7 @@
         "enableLogDetails": true,
         "enableInfiniteScrolling": true,
         "dedupStrategy": "none",
-        "sortOrder": "Descending"
+        "sortOrder": "Ascending"
       }
     }
   ],

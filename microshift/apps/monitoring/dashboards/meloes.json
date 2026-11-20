@@ -311,7 +311,7 @@
             "uid": "${datasource}"
           },
           "refId": "A",
-          "expr": "node_load1{job=\"node-exporter\"} / count(node_cpu_seconds_total{mode=\"idle\",job=\"node-exporter\"})",
+          "expr": "node_load1{job=\"node-exporter\"} / scalar(count(node_cpu_seconds_total{mode=\"idle\",job=\"node-exporter\"}))",
           "legendFormat": ""
         }
       ],
