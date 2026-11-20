@@ -10,4 +10,4 @@ resources:
   - catametricas-route.yaml
 images:
   - name: registry.catacumbas69.com/catametricas
-    newTag: "0.1.0-SNAPSHOT-1a1a209"
+    newTag: "0.1.0-SNAPSHOT-dd60141"
