@@ -48,7 +48,7 @@ brackets is the one seen running on the date given.
 | Red Hat Enterprise Linux | 9.8 | the host | meloes' operating system |
 | MicroShift | 4.22 | the host (RPM) | Kubernetes/OpenShift for everything below; its router serves the Routes, LVMS (TopoLVM) the volumes |
 | CRI-O | MicroShift's | the host | Container runtime |
-| Argo CD | installed by hand (not in git) | `microshift/bootstrap/microshift.yaml` (root Application) | GitOps: every Application in `microshift/argocd/` |
+| Argo CD | v3.4.4 (`quay.io/argoproj/argocd`, seen on 2026-11-21) | installed by hand, not in git; its configuration is in `microshift/apps/argocd-config/` and the root Application in `microshift/bootstrap/microshift.yaml` | GitOps: every Application in `microshift/argocd/` |
 | Docker Registry | 2.8.3 | `microshift/apps/registry/registry-deployment.yaml` | The apps' images (`registry.catacumbas69.com`) |
 | cert-manager | `*` | `microshift/argocd/cert-manager.yaml` | Our CA and the router's wildcard certificate (decision 97) |
 | trust-manager | `*` | `microshift/argocd/trust-manager.yaml` | The CA bundle (`catacumbas69-ca`) in the namespaces that need it |
