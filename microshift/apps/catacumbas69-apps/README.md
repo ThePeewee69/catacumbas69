@@ -118,7 +118,7 @@ Mac with `dscacheutil -q host -a name meloes` and on meloes with
 
 Pulsar advertises its external listener as `meloes:31650` (`microshift/apps/pulsar/broker-init-script.sh`).
 Its ConfigMap keeps the same name, so after syncing `pulsar` in ArgoCD restart the broker once:
-`oc -n pulsar rollout restart deploy/pulsar`.
+`oc -n pulsar delete pod -l app=pulsar` (not `rollout restart`, which ArgoCD undoes: orch.md decision 110).
 
 ### 2. Let CRI-O pull from the registry over HTTP (on meloes)
 
@@ -185,7 +185,7 @@ oc -n mongodb get secret catacumbas69-apps-connection    # created by the operat
 ```
 
 If it stays `Failed` although the password Secret exists, the operator is waiting longer between retries; make it
-reconcile now with `oc -n mongodb rollout restart deploy/mongodb-kubernetes-operator`. The reason is in
+reconcile now with `oc -n mongodb delete pod -l name=mongodb-kubernetes-operator` (decision 110). The reason is in
 `oc -n mongodb get mdbc catacumbas69 -o jsonpath='{.status.message}{"\n"}'`. A `Failed` here does not stop
 MongoDB: the members keep serving. Then:
 

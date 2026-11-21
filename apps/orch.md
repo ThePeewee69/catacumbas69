@@ -791,8 +791,9 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
-- **2026-11-21, Dex restarted by deleting its pod** (decision 110): `dex-secret.sh` no longer uses
-  `rollout restart`, which ArgoCD undid, so a new client reached Dex.
+- **2026-11-21, restarts by deleting the pod** (decision 110): `dex-secret.sh` no longer uses `rollout restart`,
+  which ArgoCD undid, so a new client reached Dex; the same for mongo-express (`mongo-admin.sh`), argocd-server,
+  the Pulsar broker and the MongoDB operator.
 - **2026-11-21, Catasonarr skeleton** (decision 109, G-22 opened): a sixth app, speaking Sonarr's API v3; the
   module, the login (Dex for the page, Sonarr's API key for the API v3), `system/status`, its deployment;
   `apps/.dockerignore` includes Catasonarr.
@@ -1574,10 +1575,14 @@ Catasonarr (2026-11-21):
      Calendar, Wanted and Queue, and those integrations. This change is the **skeleton**: the module, both logins,
      `system/status`, a page with the user and Sign out, the deployment and the scripts.
 
-110. **Dex is restarted by deleting its pod.** Dex reads `dex/dex-config` only when it starts, so `dex-secret.sh`
+110. **Restarts delete the pod (Dex first).** Dex reads `dex/dex-config` only when it starts, so `dex-secret.sh`
      restarts it after writing the configuration. `oc rollout restart` adds the `kubectl.kubernetes.io/restartedAt`
      annotation to the Deployment, and the Application `dex` has `selfHeal`: ArgoCD removed it and the new pod was
      killed, so Dex kept the old configuration and refused the new client `catasonarr` ("Invalid client_id
      provided"). The script deletes the pod instead (`-l app.kubernetes.io/name=dex`): the Deployment, unchanged,
      makes a new one and ArgoCD has nothing to undo. The login is down for a few seconds each time, accepted (one
-     replica, changes are rare). Teaching ArgoCD to ignore the annotation was the other way, not taken.
+     replica, changes are rare). Teaching ArgoCD to ignore the annotation was the other way, not taken. **The same
+     everywhere a pod is restarted by hand or by a script**: mongo-express (`mongo-admin.sh`, `app=mongo-express`),
+     argocd-server (`app.kubernetes.io/name=argocd-server`), the Pulsar broker (`app=pulsar`) and the MongoDB
+     operator (`name=mongodb-kubernetes-operator`). Catacumbas69's own apps keep `rollout restart` (no downtime):
+     their Applications sync by hand, without `selfHeal`, so nothing undoes it.

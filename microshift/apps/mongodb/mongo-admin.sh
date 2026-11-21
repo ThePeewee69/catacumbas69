@@ -51,9 +51,10 @@ apply_secret() {  # name, then key value pairs
   } | on_meloes 'oc apply -f -' >/dev/null
 }
 
-restart_express() {
+restart_express() {  # by deleting its pod: ArgoCD (selfHeal) undoes 'rollout restart' (orch.md decision 110)
   if on_meloes "oc -n $NS get deploy mongo-express" >/dev/null 2>&1; then
-    on_meloes "oc -n $NS rollout restart deploy/mongo-express" >/dev/null
+    on_meloes "oc -n $NS delete pod -l app=mongo-express" >/dev/null
+    on_meloes "oc -n $NS rollout status deploy/mongo-express --timeout=120s" >/dev/null
     echo "mongo-express restarted."
   fi
 }

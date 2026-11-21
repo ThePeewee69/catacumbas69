@@ -2,8 +2,8 @@
 # through Dex), argocd-rbac-cm, argocd-cmd-params-cm and the Route, from microshift/apps/argocd-config. ArgoCD itself
 # was installed by hand from the upstream manifests (2026-06-21) and stays so; only these four objects are in git.
 # AUTOMATED sync with prune and selfHeal: change them in git, never with `oc edit`.
-# argocd-server reads argocd-cmd-params-cm only when it starts: after a change there,
-#   oc -n argocd rollout restart deploy/argocd-server
+# argocd-server reads argocd-cmd-params-cm only when it starts: after a change there, delete its pod (decision 110)
+#   oc -n argocd delete pod -l app.kubernetes.io/name=argocd-server
 # Applied by the root Application microshift (microshift/bootstrap/microshift.yaml): commit and push.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
