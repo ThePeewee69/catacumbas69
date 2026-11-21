@@ -99,7 +99,7 @@ write_values() {
     catasonarrSecret "$v_catasonarrSecret" cookieKey "$v_cookieKey" | apply
 }
 
-write_config() {  # renders the template into dex/dex-config and restarts Dex if it runs
+write_config() {  # renders the template into dex/dex-config and restarts Dex if it runs (by deleting its pod)
   local c
   c="$(cat "$TEMPLATE")"
   c="${c//@ADMIN_EMAIL@/$v_adminEmail}"
@@ -118,7 +118,11 @@ write_config() {  # renders the template into dex/dex-config and restarts Dex if
     printf '    %s\n' "${c//$'\n'/$'\n'    }"   # every line indented under the block scalar
   } | apply
   if on_meloes 'oc -n dex get deploy dex' >/dev/null 2>&1; then
-    on_meloes 'oc -n dex rollout restart deploy/dex' >/dev/null
+    # Dex reads its configuration only when it starts. Not 'rollout restart': the Application dex has selfHeal, so
+    # ArgoCD removes the restartedAt annotation and kills the new pod (decision 110). The Deployment recreates a
+    # deleted pod unchanged, so ArgoCD has nothing to undo; the login is down for a few seconds
+    on_meloes 'oc -n dex delete pod -l app.kubernetes.io/name=dex' >/dev/null
+    on_meloes 'oc -n dex rollout status deploy/dex --timeout=120s' >/dev/null
     echo "Dex restarted with the new configuration."
   else
     echo "Dex is not deployed yet: Sync the Application dex in ArgoCD (it syncs on its own after a push)."
