@@ -120,6 +120,7 @@ versions, layer by layer: [`TECHNOLOGIES.md`](TECHNOLOGIES.md).
 | `CATAMETRICAS_URL` | Catapulsar (default of the editable URL of the overviews), Catavigia (until the setting exists) | `http://catametricas:8083` | `http://localhost:8083` |
 | `CATAVIGIA_URL` | Catapulsar (default of the editable URL of the alerts) | `http://catavigia:8085` | `http://localhost:8085` |
 | `CATAPULSAR_URL` | Catavigia (`service.down` of Catapulsar, decision 78) | `http://catapulsar:8081` | `http://localhost:8081` |
+| `CATASONARR_URL` | Catavigia (`service.down` of Catasonarr, decision 111) | `http://catasonarr:8086` | `http://localhost:8086` |
 | `CATAVIGIA_EXPECTED_BROKERS` (optional) | Catavigia (`pulsar.broker.down` below this) | `1` | `1` |
 | `CATAPULSAR_REFRESH_INTERVAL_SECONDS` | Catapulsar | `10` | `10` |
 | `CATAPULSAR_AUTH_ISSUER`, `CATAPULSAR_AUTH_CLIENT_ID` | Catapulsar (login through Dex, SEC-2) | `https://auth.catacumbas69.com`, `catapulsar` | *(not used: profile `no-auth`)* |
@@ -791,6 +792,7 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-21, Catavigia watches Catasonarr** (decision 111): `service.down` covers it too.
 - **2026-11-21, restarts by deleting the pod** (decision 110): `dex-secret.sh` no longer uses `rollout restart`,
   which ArgoCD undid, so a new client reached Dex; the same for mongo-express (`mongo-admin.sh`), argocd-server,
   the Pulsar broker and the MongoDB operator.
@@ -1586,3 +1588,8 @@ Catasonarr (2026-11-21):
      argocd-server (`app.kubernetes.io/name=argocd-server`), the Pulsar broker (`app=pulsar`) and the MongoDB
      operator (`name=mongodb-kubernetes-operator`). Catacumbas69's own apps keep `rollout restart` (no downtime):
      their Applications sync by hand, without `selfHeal`, so nothing undoes it.
+
+111. **Catavigia watches Catasonarr.** `service.down` (critical, same debounce) reads Catasonarr's readiness too, as
+     for the other four apps. Its URL comes only from `CATASONARR_URL` (default `http://catasonarr:8086`, in
+     Catavigia's ConfigMap), like Catapulsar's: it is not in Catapulsar's Settings → Connections. In the list of
+     watched apps it comes after Catametricas and before Catapulsar, the start order.

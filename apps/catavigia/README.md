@@ -47,7 +47,7 @@ every replica, each round ──▶ catavigia/check-tasks ──▶ every replic
 | `collection` | `collection.stale` | warning | `catametricas` | No sample for `alerts.collection-stale-intervals` collection intervals (default 3) |
 | `backlog` | `backlog` | warning | `<topic>\|<subscription>` | A subscription's backlog, partitions summed, is above its own limit or `alerts.backlog-limit` (default 10 000). The DLQs' `dlq` and Pulsar's `__*` subscriptions are left out |
 | `consumers` | `consumer.paused` | warning | `<app>/<consumer>` | A consumer of Cataudit, Catametricas or Catavigia is paused, automatically or by hand, on a replica that still reports. The details list the paused replicas |
-| `services` | `service.down` | critical | app | `/actuator/health/readiness` of Catapulsar, Cataponte, Catametricas or Cataudit is not `UP` or does not answer. The components of its full health that are not `UP` go in the details, for information |
+| `services` | `service.down` | critical | app | `/actuator/health/readiness` of Catapulsar, Cataponte, Catametricas, Cataudit or Catasonarr is not `UP` or does not answer. The components of its full health that are not `UP` go in the details, for information |
 | `pulsar` | `pulsar.broker.down` | critical | `brokers` | Fewer active brokers than `catavigia.checks.expected-brokers` (default 1) |
 | `pulsar` | `pulsar.bookie.down` | critical | `healthcheck` | Brokers answer, but the broker health check (write and read a message) fails. Pulsar's admin API also lists bookies that are down, so bookies are not counted |
 | — (each replica) | `mongodb.down` | critical | `catavigia@<instance>` | This replica's MongoDB does not answer a ping. See below |
@@ -60,7 +60,8 @@ published. It cannot be marked as seen (`409`).
 
 The app URLs are those set in Catapulsar's Settings → Connections (settings topic: `catapulsar.cataponte-url`,
 `catapulsar.catametricas-url`, `catapulsar.cataudit-url`); until then `CATAPONTE_URL`, `CATAMETRICAS_URL`,
-`CATAUDIT_URL`. Catapulsar's own URL comes from `CATAPULSAR_URL` (decision 78).
+`CATAUDIT_URL`. Catapulsar's own URL comes from `CATAPULSAR_URL` (decision 78), Catasonarr's from
+`CATASONARR_URL` (decision 111).
 
 ## Storage
 
@@ -105,6 +106,7 @@ Errors are RFC 9457 Problem Details: `400` for invalid input, `503` when MongoDB
 | `PULSAR_SERVICE_URL`, `PULSAR_BROKER_URL`, `PULSAR_LISTENER_NAME` | in-cluster Pulsar | As for every app |
 | `SPRING_DATA_MONGODB_URI` | in-cluster ReplicaSet | As for every app |
 | `CATAPULSAR_URL` | `http://catapulsar:8081` | Catapulsar, for `service.down` |
+| `CATASONARR_URL` | `http://catasonarr:8086` | Catasonarr, for `service.down` (decision 111) |
 | `CATAPONTE_URL`, `CATAMETRICAS_URL`, `CATAUDIT_URL` | `http://<app>:<port>` | Until Catapulsar's Settings has them; `CATAPONTE_URL` also registers the audit bridge |
 | `CATAVIGIA_EXPECTED_BROKERS` | `1` | `pulsar.broker.down` below this |
 | `catavigia.checks.http-timeout` | `5s` | Every call to an app |
@@ -135,6 +137,7 @@ CATAPULSAR_URL=http://localhost:8081
 CATAPONTE_URL=http://localhost:8082
 CATAMETRICAS_URL=http://localhost:8083
 CATAUDIT_URL=http://localhost:8084
+CATASONARR_URL=http://localhost:8086
 ```
 
 Keep the MongoDB URI with its password in the run configuration only (`.idea/` is git-ignored), never in the repo.

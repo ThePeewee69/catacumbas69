@@ -64,3 +64,6 @@ Pulsar and MongoDB (Testcontainers). The page's HTML, CSS and JavaScript are not
 `microshift/apps/catacumbas69-apps/catasonarr/` and the ArgoCD Application `catasonarr` (manual Sync, as the other
 apps). One replica, 320 Mi / 640 Mi, with the OpenTelemetry agent. Before the first Sync, see the one-time setup
 in [`microshift/apps/catacumbas69-apps/README.md`](../../microshift/apps/catacumbas69-apps/README.md#catasonarr).
+
+Catavigia watches its readiness: `service.down` (critical) opens when it is not `UP` or does not answer
+(`CATASONARR_URL` in Catavigia, orch.md decision 111).

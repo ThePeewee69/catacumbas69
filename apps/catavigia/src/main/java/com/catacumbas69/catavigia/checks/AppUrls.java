@@ -10,7 +10,8 @@ import org.springframework.util.StringUtils;
 
 /**
  * Where the watched apps answer (orch.md decision 78). Cataponte, Cataudit and Catametricas: the URL set in
- * Catapulsar's Settings (settings topic) wins over {@code catavigia.apps.*}; Catapulsar: {@code CATAPULSAR_URL}.
+ * Catapulsar's Settings (settings topic) wins over {@code catavigia.apps.*}; Catapulsar: {@code CATAPULSAR_URL};
+ * Catasonarr: {@code CATASONARR_URL} (decision 111).
  * Read on every call, so a new URL applies from the next round.
  */
 @Component
@@ -74,6 +75,15 @@ public class AppUrls {
     }
 
     /**
+     * Returns Catasonarr's base URL.
+     *
+     * @return the URL, without a trailing slash
+     */
+    public String catasonarr() {
+        return strip(apps.catasonarrUrl());
+    }
+
+    /**
      * Returns every watched app with its URL.
      *
      * @return app name to base URL, in start order
@@ -83,6 +93,7 @@ public class AppUrls {
         all.put("cataponte", cataponte());
         all.put("cataudit", cataudit());
         all.put("catametricas", catametricas());
+        all.put("catasonarr", catasonarr());
         all.put("catapulsar", catapulsar());
         return all;
     }

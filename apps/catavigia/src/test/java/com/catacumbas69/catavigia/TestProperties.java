@@ -20,7 +20,7 @@ public final class TestProperties {
                 new CatavigiaProperties.Tasks("catavigia", 1, second, second, second, Duration.ofHours(6)),
                 new CatavigiaProperties.Checks(second, second, 1, Duration.ofSeconds(30)),
                 new CatavigiaProperties.Apps("http://catapulsar:8081", "http://cataponte:8082",
-                        "http://catametricas:8083", "http://cataudit:8084"),
+                        "http://catametricas:8083", "http://cataudit:8084", "http://catasonarr:8086"),
                 new CatavigiaProperties.Api(50, 500));
     }
 }

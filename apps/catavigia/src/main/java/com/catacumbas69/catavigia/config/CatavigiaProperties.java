@@ -109,12 +109,14 @@ public record CatavigiaProperties(
      * @param cataponteUrl Cataponte, until the settings topic has one
      * @param catametricasUrl Catametricas, until the settings topic has one
      * @param catauditUrl Cataudit, until the settings topic has one
+     * @param catasonarrUrl Catasonarr (orch.md decision 111)
      */
     public record Apps(
             @NotBlank String catapulsarUrl,
             @NotBlank String cataponteUrl,
             @NotBlank String catametricasUrl,
-            @NotBlank String catauditUrl) {
+            @NotBlank String catauditUrl,
+            @NotBlank String catasonarrUrl) {
     }
 
     /**

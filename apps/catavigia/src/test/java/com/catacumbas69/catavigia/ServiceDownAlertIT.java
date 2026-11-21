@@ -42,7 +42,7 @@ class ServiceDownAlertIT {
     /** Rounds of 10 s, so a few rounds plus Pulsar's and MongoDB's own pace. */
     private static final Duration WAIT = Duration.ofSeconds(90);
 
-    /** The app the test looks at; the other three point at the same fake and open alerts of their own. */
+    /** The app the test looks at; the other four point at the same fake and open alerts of their own. */
     private static final String SUBJECT = "cataponte";
 
     /** What the fake app's readiness answers: {@code DOWN} until the test brings it back. */
@@ -58,7 +58,7 @@ class ServiceDownAlertIT {
     static void containers(DynamicPropertyRegistry registry) {
         CatacumbasContainers.register(registry, "catavigia");
         String url = "http://" + FAKE_APP.getAddress().getHostString() + ":" + FAKE_APP.getAddress().getPort();
-        for (String app : List.of("catapulsar", "cataponte", "catametricas", "cataudit")) {
+        for (String app : List.of("catapulsar", "cataponte", "catametricas", "cataudit", "catasonarr")) {
             registry.add("catavigia.apps." + app + "-url", () -> url);
         }
     }
