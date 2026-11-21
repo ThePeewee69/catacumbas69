@@ -792,7 +792,8 @@ Closed on 2026-10-30:
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
 - **2026-11-21, Catasonarr skeleton** (decision 109, G-22 opened): a sixth app, speaking Sonarr's API v3; the
-  module, the login (Dex for the page, Sonarr's API key for the API v3), `system/status`, its deployment.
+  module, the login (Dex for the page, Sonarr's API key for the API v3), `system/status`, its deployment;
+  `apps/.dockerignore` includes Catasonarr.
 - **2026-11-21, technologies and glossary** (DOC-6): `TECHNOLOGIES.md` lists every technology with its version
   and the file that pins it; `GLOSSARY.md` explains the acronyms, rule prefixes and names.
 - **2026-11-20, Spring's banner** (decision 108): the five apps print it again at start-up.
