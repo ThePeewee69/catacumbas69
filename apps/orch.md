@@ -14,6 +14,9 @@ Rule strength follows RFC 2119: **MUST** / **MUST NOT** are mandatory, **SHOULD*
 there is a written reason, **MAY** is optional. Each rule has an ID (e.g. `ARCH-3`) so reviews and commits
 can cite it.
 
+What each part is built with, and the versions, is in [`TECHNOLOGIES.md`](TECHNOLOGIES.md); the acronyms, rule
+prefixes and names are explained in [`GLOSSARY.md`](GLOSSARY.md).
+
 This file lives at `apps/orch.md`. `apps/<module>/orch.md` (catapulsar, cataponte, catametricas, cataudit,
 catacommons) are symlinks to it — edit only the original.
 
@@ -62,7 +65,8 @@ events to `catacumbas69/cataudit/audit`; Cataudit stores them and is the only au
 publishes the shared settings to the compacted topic `catacumbas69/catapulsar/settings`, read from phase 3.
 
 Runtime: MicroShift on `meloes` (NUC, `192.168.86.35`), deployed with ArgoCD. Local development runs
-from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts.
+from IntelliJ on the Mac (`necromancer`) against the cluster through NodePorts. The technologies and their
+versions, layer by layer: [`TECHNOLOGIES.md`](TECHNOLOGIES.md).
 
 ---
 
@@ -278,6 +282,9 @@ Standard: **W3C CSS** specs, **stylelint-config-standard**, Prettier formatting.
   BFF for bridges (ARCH-2), Cataponte replicas (ARCH-5), at-least-once fan-out (ARCH-6),
   config-as-desired-state reconciliation (ARCH-4).
 - **DOC-5 [SHOULD]** Diagrams as text (Mermaid or ASCII) in Markdown, so they are versioned with the code.
+- **DOC-6 [MUST]** A change that adds, removes or upgrades a technology updates
+  [`TECHNOLOGIES.md`](TECHNOLOGIES.md) (version and the file that pins it), and one that brings a new acronym, rule
+  prefix or name into the docs adds it to [`GLOSSARY.md`](GLOSSARY.md), in the same commit.
 
 ### 3.7 Tooling
 
@@ -779,6 +786,8 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-21, technologies and glossary** (DOC-6): `TECHNOLOGIES.md` lists every technology with its version
+  and the file that pins it; `GLOSSARY.md` explains the acronyms, rule prefixes and names.
 - **2026-11-20, Spring's banner** (decision 108): the five apps print it again at start-up.
 - **2026-11-20, logs back and readable** (decision 107): Loki's schema starts in 2024 and Alloy drops lines older
   than 7 days, so old lines no longer make Loki refuse whole batches; the log panels read like a `tail`.
