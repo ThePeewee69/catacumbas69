@@ -16,6 +16,8 @@ the same commit.
 | **Catametricas** | Collects every topic's statistics and serves them (8083; formerly Contário) |
 | **Cataudit** | Owns the audit trail (8084) |
 | **Catavigia** | Watches the platform and keeps the history of every alert (8085) |
+| **Catasonarr** | TV series manager that speaks Sonarr's API v3 (8086; decision 109); GPL-3.0 |
+| **Sonarr** | The open-source TV series manager Catasonarr replaces; its API v3 is what Prowlarr, Bazarr, Overseerr, Jellyseerr and Homarr speak |
 | **catacommons** | Shared Java library of the apps (not a service) |
 | **meloes** | The NUC that runs MicroShift, where everything in `microshift/` is deployed |
 | **necromancer** | The Mac (Intel, macOS 13) where the code is written, built and pushed |
@@ -77,6 +79,7 @@ there is a written reason, **MAY** is optional.
 | **ECDSA** | Elliptic Curve Digital Signature Algorithm | The key type of our CA (P-256) |
 | **ECS** | Elastic Common Schema | The JSON layout of the apps' logs (OBS-3) |
 | **GitOps** | Git as the source of truth for what runs | Argo CD on meloes, Flux on K3s |
+| **GPL** | GNU General Public License | Sonarr's licence, so also Catasonarr's (`apps/catasonarr/LICENSE`, GPL-3.0) |
 | **HTTP(S)** | HyperText Transfer Protocol (Secure) | Every Route is HTTPS (SEC-8) |
 | **ID** | Identifier | Rule IDs, trace IDs, bridge IDs |
 | **IT** | Integration Test | Test classes named `*IT`, run by failsafe with Testcontainers |
@@ -85,10 +88,11 @@ there is a written reason, **MAY** is optional.
 | **LTS** | Long-Term Support | Java 21 |
 | **LVMS** | Logical Volume Manager Storage | MicroShift's storage (TopoLVM, `topolvm-provisioner`) |
 | **MDC** | Mapped Diagnostic Context | Per-thread log fields: `bridgeId`, `trace_id` (OBS-4, OBS-11) |
+| **NFS** | Network File System | The NAS share with the media and the downloads |
 | **NUC** | Next Unit of Computing | The small Intel PC that is meloes |
 | **OIDC** | OpenID Connect | The login protocol Dex speaks (decision 98) |
-| **OTLP** | OpenTelemetry Protocol | How the agent sends traces to Alloy (ports 4317 and 4318) |
 | **OTel** | OpenTelemetry | The Java agent in every app (OBS-11) |
+| **OTLP** | OpenTelemetry Protocol | How the agent sends traces to Alloy (ports 4317 and 4318) |
 | **PKCE** | Proof Key for Code Exchange | Used by Grafana's login through Dex |
 | **PSI** | Pressure Stall Information | meloes' CPU, memory and I/O pressure, on the host dashboard |
 | **PVC** | Persistent Volume Claim | A pod's disk: MongoDB, Pulsar, Prometheus, Loki, Tempo, Grafana, registry |
@@ -96,10 +100,13 @@ there is a written reason, **MAY** is optional.
 | **REST** | Representational State Transfer | The apps' HTTP APIs |
 | **RHEL** | Red Hat Enterprise Linux | meloes' operating system |
 | **RPM** | RPM Package Manager | How MicroShift is installed on meloes |
+| **RSS** | Really Simple Syndication | The indexers' feeds of new releases, read on every RSS sync |
 | **SCC** | Security Context Constraints | OpenShift's pod security; granted by RoleBindings in git |
 | **SHA** | Secure Hash Algorithm (here: a commit's hash) | The image tag `<version>-<short sha>` (OPS-2) |
 | **SSO** | Single Sign-On | One Dex session for Catapulsar, Grafana and Argo CD |
 | **TLS** | Transport Layer Security | Ended at the router with the wildcard certificate (`termination: edge`) |
+| **TMDB** / **TVDB** | The Movie Database / TheTVDB | Where Catasonarr reads series, seasons and episodes (decision 109) |
+| **Torznab** | Torrent indexer API in the Newznab style | How Prowlarr's indexers answer searches |
 | **TTL** | Time To Live | MongoDB TTL indexes; claims and status documents that expire |
 | **UI** | User Interface | Catapulsar's web page; the Grafana, Argo CD and Pulsar UIs |
 | **URI** / **URL** | Uniform Resource Identifier / Locator | MongoDB's connection string; the apps' editable URLs |

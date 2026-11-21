@@ -1,0 +1,52 @@
+/* Catasonarr's page (orch.md decision 109): the top bar of the skeleton, until the real pages arrive. */
+
+/* ══ Base ══ */
+:root {
+  --bg: #11151c;
+  --fg: #e6e9ef;
+  --bar: #1b222c;
+  --accent: #35c5f4;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+/* ══ Top bar ══ */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+  background: var(--bar);
+}
+
+.topbar-title {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--accent);
+}
+
+.topbar-user {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.topbar-user button {
+  min-height: 44px;
+  padding: 0 1rem;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--fg);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* ══ Content ══ */
+.content {
+  padding: 1.25rem;
+}

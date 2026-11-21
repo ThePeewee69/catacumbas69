@@ -9,13 +9,14 @@ without use) signs in to all three: the first app asks for the password, the oth
 | `microshift/argocd/dex.yaml` | The Application: the `dex` chart (automated, newest version) and this folder |
 | `dex-route.yaml` | The Route `auth.catacumbas69.com` (HTTPS, orch.md decision 97) |
 | `config.yaml.tmpl` | Dex's configuration with `@…@` markers for what may not be in git: the user's email, the password hash, the client secrets, the session cookie key |
-| `dex-secret.sh` | Runs on the Mac: fills the template into the Secret `dex/dex-config`, writes the client secrets for the three apps, makes the password |
+| `dex-secret.sh` | Runs on the Mac: fills the template into the Secret `dex/dex-config`, writes the client secrets for the four clients, makes the password |
 
 | Client | Redirect URI | Its Secret (key) |
 |---|---|---|
 | `catapulsar` | `https://catapulsar.catacumbas69.com/login/oauth2/code/dex` | `catacumbas69-apps/catapulsar-oidc` (`client-secret`) |
 | `grafana` | `https://grafana.microshift.catacumbas69.com/login/generic_oauth` | `monitoring/grafana-oidc` (`client-secret`) |
 | `argocd` | `https://argocd.catacumbas69.com/auth/callback` | `argocd/argocd-oidc` (`clientSecret`, label `app.kubernetes.io/part-of: argocd`) |
+| `catasonarr` | `https://catasonarr.catacumbas69.com/login/oauth2/code/dex` | `catacumbas69-apps/catasonarr-oidc` (`client-secret`) (orch.md decision 109) |
 
 ## The scripts run on the Mac, over ssh
 
@@ -38,13 +39,14 @@ After the push that brings `microshift/argocd/dex.yaml` (Dex waits in `Container
 bash microshift/apps/dex/dex-secret.sh create
 ```
 
-It asks for the user's email, generates the password, the three client secrets and the cookie key, writes the
+It asks for the user's email, generates the password, the client secrets and the cookie key, writes the
 Secrets and restarts Dex. **The password is shown once**: keep it in your password manager. Then sign in at
 `https://catapulsar.catacumbas69.com`.
 
 | Later | Command |
 |---|---|
 | Changed `config.yaml.tmpl` | `bash microshift/apps/dex/dex-secret.sh config` |
+| A new client (added to `config.yaml.tmpl` and to `KEYS`/`CLIENT_KEYS` in the script, as `catasonarr` was) | `bash microshift/apps/dex/dex-secret.sh clients`: generates only the missing client secrets, writes every client's Secret, renders the template, restarts Dex |
 | A new password (forgotten, or to rotate it) | `bash microshift/apps/dex/dex-secret.sh password` |
 | A new email | `bash microshift/apps/dex/dex-secret.sh email` |
 
@@ -56,6 +58,8 @@ The values the template needs are kept in the Secret `dex/dex-values` (the passw
 - **Grafana**: dashboards are still visible without login (Viewer); **Sign in** goes straight to Dex and you are
   Admin. The local `admin` (`grafana-secret.sh`) is still there for emergencies, at
   `https://grafana.microshift.catacumbas69.com/login?disableAutoLogin=true`.
+- **Catasonarr**: as Catapulsar for the page; its API v3 (`/api/v3`) takes Sonarr's API key instead (orch.md
+  decision 109).
 - **ArgoCD**: **Log in via Dex**; you are `role:admin`. The local `admin` stays for emergencies, since Dex itself is
   deployed by ArgoCD. ArgoCD does not check Dex's certificate (orch.md decision 99).
 

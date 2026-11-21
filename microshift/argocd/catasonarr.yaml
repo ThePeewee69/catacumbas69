@@ -1,0 +1,19 @@
+# ArgoCD Application of Catasonarr (orch.md decision 109): manual Sync in the UI after each commit, as the other apps.
+# Applied by the root Application microshift (microshift/bootstrap/microshift.yaml): commit and push.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: catasonarr
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ThePeewee69/catacumbas69.git
+    targetRevision: main
+    path: microshift/apps/catacumbas69-apps/catasonarr
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: catacumbas69-apps
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

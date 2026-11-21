@@ -10,7 +10,7 @@
 # Environment: REGISTRY (default registry.catacumbas69.com), FORCE=1.
 set -euo pipefail
 
-APPS=(cataponte cataudit catametricas catavigia catapulsar)
+APPS=(cataponte cataudit catametricas catavigia catasonarr catapulsar)
 REGISTRY="${REGISTRY:-registry.catacumbas69.com}"
 APPS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_DIR="$(git -C "$APPS_DIR" rev-parse --show-toplevel)"

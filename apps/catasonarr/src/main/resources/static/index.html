@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Catasonarr</title>
+    <link rel="stylesheet" href="catasonarr.css" />
+    <script src="catasonarr.js" defer></script>
+  </head>
+  <body>
+    <!-- ══ Top bar: the user signed in through Dex, and Sign out (orch.md decision 109) ══ -->
+    <header class="topbar">
+      <h1 class="topbar-title">Catasonarr</h1>
+      <div class="topbar-user" hidden data-testid="user">
+        <span data-testid="user-name"></span>
+        <button type="button" data-testid="sign-out">Sign out</button>
+      </div>
+    </header>
+
+    <!-- ══ Placeholder until the series, calendar, wanted and queue pages arrive ══ -->
+    <main class="content">
+      <p>Catasonarr is running. Sonarr's API v3 answers at <code>/api/v3</code>; the pages come next.</p>
+    </main>
+  </body>
+</html>

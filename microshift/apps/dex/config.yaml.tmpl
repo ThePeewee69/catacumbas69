@@ -43,6 +43,13 @@ staticClients:
     secret: "@ARGOCD_SECRET@"
     redirectURIs:
       - https://argocd.catacumbas69.com/auth/callback
+  - id: catasonarr
+    name: Catasonarr
+    secret: "@CATASONARR_SECRET@"
+    redirectURIs:
+      - https://catasonarr.catacumbas69.com/login/oauth2/code/dex
+    postLogoutRedirectURIs:
+      - https://catasonarr.catacumbas69.com/
 
 # Local users only, no upstream identity provider. One user, the admin of every app (decision 98)
 enablePasswordDB: true

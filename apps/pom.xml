@@ -25,5 +25,6 @@
         <module>catametricas</module>
         <module>cataudit</module>
         <module>catavigia</module>
+        <module>catasonarr</module>
     </modules>
 </project>

@@ -3,8 +3,11 @@
 # (key-based: `ssh meloes oc whoami` must work without a password). Nothing secret ever goes on a command line.
 #
 #   bash microshift/apps/dex/dex-secret.sh create     once, before the first Sync of dex: asks for your email,
-#                                                     generates your password (shown ONCE), the three client
-#                                                     secrets and the session cookie key, and writes the Secrets
+#                                                     generates your password (shown ONCE), the client secrets
+#                                                     and the session cookie key, and writes the Secrets
+#   bash microshift/apps/dex/dex-secret.sh clients    after a client is added to config.yaml.tmpl and this script:
+#                                                     generates the secrets of the new clients only, writes the
+#                                                     clients' Secrets, renders the template and restarts Dex
 #   bash microshift/apps/dex/dex-secret.sh config     after changing config.yaml.tmpl: renders it again into
 #                                                     dex/dex-config and restarts Dex
 #   bash microshift/apps/dex/dex-secret.sh password   a new random password (shown ONCE); the old one stops working
@@ -17,12 +20,15 @@
 #   catacumbas69-apps/catapulsar-oidc  client-secret, read by Catapulsar
 #   monitoring/grafana-oidc            client-secret, read by Grafana
 #   argocd/argocd-oidc                 clientSecret, read by ArgoCD through argocd-cm ($argocd-oidc:clientSecret)
+#   catacumbas69-apps/catasonarr-oidc  client-secret, read by Catasonarr (orch.md decision 109)
 set -euo pipefail
 
 MELOES="${MELOES:-meloes}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATE="$HERE/config.yaml.tmpl"
-KEYS=(adminEmail adminHash catapulsarSecret grafanaSecret argocdSecret cookieKey)
+KEYS=(adminEmail adminHash catapulsarSecret grafanaSecret argocdSecret catasonarrSecret cookieKey)
+# The clients' secrets: 'clients' generates the ones dex/dex-values does not have yet (a client added later)
+CLIENT_KEYS=(catapulsarSecret grafanaSecret argocdSecret catasonarrSecret)
 
 on_meloes() { ssh -o BatchMode=yes "$MELOES" "$@"; }
 
@@ -73,12 +79,16 @@ get_value() {  # key → value from dex/dex-values
   on_meloes "oc -n dex get secret dex-values -o 'jsonpath={.data.$1}'" | openssl base64 -d -A
 }
 
-load_values() {  # into v_<key>; bash 3.2 (macOS) has no associative arrays
+load_values() {  # into v_<key>; bash 3.2 (macOS) has no associative arrays. $1 = new: missing client secrets
   local k name
   for k in "${KEYS[@]}"; do
     name="v_$k"
     printf -v "$name" '%s' "$(get_value "$k")"
-    [[ -n "${!name}" ]] || { echo "dex/dex-values has no $k; nothing changed." >&2; exit 1; }
+    if [[ -z "${!name}" && "${1:-}" == new && " ${CLIENT_KEYS[*]} " == *" $k "* ]]; then
+      printf -v "$name" '%s' "$(random 40)"
+      echo "Generated the secret of a new client: $k."
+    fi
+    [[ -n "${!name}" ]] || { echo "dex/dex-values has no $k (a new client? run 'clients'); nothing changed." >&2; exit 1; }
   done
 }
 
@@ -86,7 +96,7 @@ write_values() {
   secret_yaml dex dex-values \
     adminEmail "$v_adminEmail" adminHash "$v_adminHash" \
     catapulsarSecret "$v_catapulsarSecret" grafanaSecret "$v_grafanaSecret" argocdSecret "$v_argocdSecret" \
-    cookieKey "$v_cookieKey" | apply
+    catasonarrSecret "$v_catasonarrSecret" cookieKey "$v_cookieKey" | apply
 }
 
 write_config() {  # renders the template into dex/dex-config and restarts Dex if it runs
@@ -97,6 +107,7 @@ write_config() {  # renders the template into dex/dex-config and restarts Dex if
   c="${c//@CATAPULSAR_SECRET@/$v_catapulsarSecret}"
   c="${c//@GRAFANA_SECRET@/$v_grafanaSecret}"
   c="${c//@ARGOCD_SECRET@/$v_argocdSecret}"
+  c="${c//@CATASONARR_SECRET@/$v_catasonarrSecret}"
   c="${c//@COOKIE_KEY@/$v_cookieKey}"
   if grep -q '@[A-Z_]*@' <<<"$c"; then
     echo "config.yaml.tmpl has a marker this script does not know; nothing changed." >&2
@@ -118,6 +129,7 @@ write_client_secrets() {
   secret_yaml catacumbas69-apps catapulsar-oidc client-secret "$v_catapulsarSecret" | apply
   secret_yaml monitoring grafana-oidc client-secret "$v_grafanaSecret" | apply
   secret_yaml argocd argocd-oidc clientSecret "$v_argocdSecret" | apply
+  secret_yaml catacumbas69-apps catasonarr-oidc client-secret "$v_catasonarrSecret" | apply
 }
 
 show_password_once() {
@@ -151,12 +163,20 @@ case "${1:-}" in
     v_catapulsarSecret="$(random 40)"
     v_grafanaSecret="$(random 40)"
     v_argocdSecret="$(random 40)"
+    v_catasonarrSecret="$(random 40)"
     v_cookieKey="$(random 32)"   # 32 bytes: AES-256
     for ns in dex catacumbas69-apps monitoring argocd; do ensure_namespace "$ns"; done
     write_values
     write_client_secrets
     write_config
     show_password_once "$password"
+    ;;
+  clients)
+    load_values new
+    for ns in catacumbas69-apps monitoring argocd; do ensure_namespace "$ns"; done
+    write_values
+    write_client_secrets
+    write_config
     ;;
   config)
     load_values
@@ -177,7 +197,7 @@ case "${1:-}" in
     write_config
     ;;
   *)
-    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
     exit 1
     ;;
 esac

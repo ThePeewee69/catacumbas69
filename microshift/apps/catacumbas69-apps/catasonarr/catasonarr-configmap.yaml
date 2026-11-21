@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: catasonarr-config
+data:
+  PULSAR_SERVICE_URL: http://pulsar.pulsar.svc.cluster.local:8080
+  PULSAR_BROKER_URL: pulsar://pulsar.pulsar.svc.cluster.local:6650
+  # The URI (Secret catacumbas69-apps-mongodb) authenticates against admin; the apps' data is in catacumbas69
+  SPRING_DATA_MONGODB_DATABASE: catacumbas69
+  # JSON logs for Loki (OBS-3)
+  LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+  # Where the audit-catasonarr bridge is registered (ADR 0009)
+  CATAPONTE_URL: http://cataponte:8082
+  # What GET /api/v3/system/status says to Sonarr's clients: the version of the Sonarr it replaces (decision 109)
+  CATASONARR_SONARR_VERSION: "4.0.20.0"

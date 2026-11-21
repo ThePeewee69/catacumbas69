@@ -33,6 +33,7 @@ git commit + push ──▶ GitHub ──▶ ArgoCD (manual Sync) ──▶ ns c
 | Cataudit | 2 | 8084 | `https://cataudit.catacumbas69.com` |
 | Catametricas | 2 | 8083 | `https://catametricas.catacumbas69.com` |
 | Catavigia | 2 | 8085 | `https://catavigia.catacumbas69.com` |
+| Catasonarr | 1 | 8086 | `https://catasonarr.catacumbas69.com` (page: login through Dex; `/api/v3`: Sonarr's API key) |
 | Catapulsar | 1 | 8081 | `https://catapulsar.catacumbas69.com` (login through Dex) |
 
 Every container asks for 25m CPU and 448 Mi and may use up to 1 CPU and 896 Mi (meloes has 4 CPUs, most of
@@ -233,6 +234,27 @@ request a good part of them (trimmed a little in orch.md decision 96), so each a
 Catapulsar's settings topic may still hold the `localhost` URLs saved from IntelliJ runs, and they win over the
 ConfigMap. Open `https://catapulsar.catacumbas69.com` → Settings → Connections and choose **use default** for
 Cataponte, Catametricas, Cataudit and Catavigia (Catavigia also reads the first three from there).
+
+### 8. Catasonarr
+
+Catasonarr (orch.md decision 109, [`apps/catasonarr/README.md`](../../../apps/catasonarr/README.md)) needs, before its
+first Sync:
+
+1. **DNS**: `catasonarr.catacumbas69.com` pointing at meloes, like the other Routes.
+2. **Its Dex client** (after the push that brings it in `microshift/apps/dex/config.yaml.tmpl`), on the Mac:
+   ```
+   bash microshift/apps/dex/dex-secret.sh clients
+   ```
+   It generates only the new client's secret, writes `catacumbas69-apps/catasonarr-oidc` and restarts Dex.
+3. **Sonarr's API key**, so the clients only change Sonarr's address (Sonarr → Settings → General → API Key), on
+   the Mac:
+   ```
+   bash microshift/apps/catacumbas69-apps/catasonarr/catasonarr-secret.sh api-key
+   ```
+   It asks for the key twice, without showing it, and writes `catacumbas69-apps/catasonarr-api-key`.
+4. **The image**: `apps/build/push.sh catasonarr`, commit the new tag, push, and **Sync** `catasonarr` in ArgoCD.
+
+Without either Secret the pod stays in `CreateContainerConfigError`.
 
 ## Every release (after changing code)
 

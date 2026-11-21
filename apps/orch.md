@@ -1,7 +1,7 @@
 # orch.md — Engineering rules for `catacumbas69/apps`
 
-This file is the single source of truth for **how Catapulsar, Cataponte, Catametricas and Cataudit are built,
-changed and run**.
+This file is the single source of truth for **how Catapulsar, Cataponte, Catametricas, Cataudit, Catavigia and
+Catasonarr are built, changed and run**.
 It is written for two readers:
 
 - **Humans** — read it top to bottom once; use the checklists when reviewing.
@@ -50,6 +50,7 @@ catacommons) are symlinks to it — edit only the original.
 | **catacommons** | Shared library (not a service): CloudEvents envelope, event publisher with retries, Pulsar names, start-up provisioning of the tenant/namespace/topics, registration of the app's audit bridge (ADR 0008, 0009) | — | Pulsar binary + Admin API through each app's clients; Cataponte REST |
 | **Catavigia** | Watches the platform and keeps the history of every alert (ADR 0015): checks as tasks on Pulsar, one per check and round, shared by its replicas; debounce; open, seen and archived alerts; backlog limits per subscription; events for every alert and limit change; `catavigia_alerts_open` metric. Only watches; the owner of each resource fixes it | `catavigia_alerts`, `catavigia_alerts_archive`, `catavigia_observations`, `catavigia_task_runs`, `catavigia_backlog_limits`; reads its thresholds from the settings topic | Pulsar Admin API + binary (tasks, consumers' status, events, settings), Cataponte, Catametricas and every app's health (REST), MongoDB |
 | **Catametricas** | Collects every topic's statistics from Pulsar on an interval and stores traffic (messages/bytes in and out) and backlog per topic: latest snapshot, per minute (30 days), per hour and all-time (ADR 0007). The work is shared by every replica through collection tasks on Pulsar (ADR 0012). The only metrics API: topics, series and collector state (ADR 0013) | `catametricas_topic_snapshots`, `catametricas_topic_minutes`, `catametricas_topic_hours`, `catametricas_topic_totals`, `catametricas_task_runs`; reads its interval from the settings topic | Pulsar Admin API + binary (tasks, events, settings), MongoDB |
+| **Catasonarr** | TV series manager that speaks **Sonarr's API v3**, so Prowlarr, qBittorrent, Transmission, Bazarr, Overseerr, Jellyseerr and Homarr use it as they use Sonarr (decision 109). Skeleton: `GET /api/v3/system/status` and a page with the login. **GPL-3.0** (its release parser is translated from Sonarr's) | `catasonarr_*` | MongoDB, Pulsar (its one events topic), Dex; later TheTVDB, TMDB, Prowlarr, qBittorrent, Transmission, the media folder (NFS) |
 
 **Names.** The apps were renamed on 2026-10-31: Pulsário → **Catapulsar**, Passário → **Cataponte**,
 Contário → **Catametricas** (folders, Maven artifacts, packages, classes, properties, environment variables,
@@ -123,12 +124,16 @@ versions, layer by layer: [`TECHNOLOGIES.md`](TECHNOLOGIES.md).
 | `CATAPULSAR_REFRESH_INTERVAL_SECONDS` | Catapulsar | `10` | `10` |
 | `CATAPULSAR_AUTH_ISSUER`, `CATAPULSAR_AUTH_CLIENT_ID` | Catapulsar (login through Dex, SEC-2) | `https://auth.catacumbas69.com`, `catapulsar` | *(not used: profile `no-auth`)* |
 | `CATAPULSAR_AUTH_CLIENT_SECRET` | Catapulsar | Secret `catapulsar-oidc` (key `client-secret`, `dex-secret.sh`) | *(not used)* |
-| `SPRING_PROFILES_ACTIVE` | Catapulsar | *(not set: login on)* | `no-auth` (no login; actor = the browser's address) |
+| `SPRING_PROFILES_ACTIVE` | Catapulsar, Catasonarr | *(not set: login on)* | `no-auth` (no login; actor = the browser's address) |
+| `CATASONARR_AUTH_API_KEY` | Catasonarr (Sonarr's API v3, decision 109) | Secret `catasonarr-api-key` (key `api-key`, `catasonarr-secret.sh`): the key of the Sonarr it replaces | *(not used: profile `no-auth`)* |
+| `CATASONARR_AUTH_ISSUER`, `CATASONARR_AUTH_CLIENT_ID` | Catasonarr (the page's login through Dex) | `https://auth.catacumbas69.com`, `catasonarr` | *(not used)* |
+| `CATASONARR_AUTH_CLIENT_SECRET` | Catasonarr | Secret `catasonarr-oidc` (key `client-secret`, `dex-secret.sh`) | *(not used)* |
+| `CATASONARR_INSTANCE_NAME`, `CATASONARR_SONARR_VERSION` | Catasonarr (`GET /api/v3/system/status`) | `Catasonarr`, `4.0.20.0` | same |
 | `CATAMETRICAS_COLLECT_INTERVAL_SECONDS` | Catapulsar, Catametricas (same value) | `60` | `60` |
 | `CATACOMMONS_*` (optional) | all | see `CatacommonsProperties`: retries `1s,2s,4s`, retention `7d`/`2GB`, backlog quota `1GB` (must be below the retention), `consumers` topic retention `7d` | same |
 | `CATAPONTE_STATUS_WRITEINTERVAL`, `CATAPONTE_STATUS_STALEAFTER` (optional) | Cataponte (status of each replica, ADR 0012) | `PT5S`, `PT30S` | same |
 | `CATAPONTE_CORS_ALLOWED_ORIGINS` (optional) | Cataponte | *(empty: CORS closed)* | *(empty)* |
-| `SERVER_PORT` | all (only for a second local instance) | Catapulsar `8081`, Cataponte `8082`, Catametricas `8083`, Cataudit `8084`, Catavigia `8085` | e.g. `8092`, `8093` |
+| `SERVER_PORT` | all (only for a second local instance) | Catapulsar `8081`, Cataponte `8082`, Catametricas `8083`, Cataudit `8084`, Catavigia `8085`, Catasonarr `8086` | e.g. `8092`, `8093` |
 
 `CATAPONTE_URL`, `CATAUDIT_URL` and `CATAMETRICAS_URL` are defaults; each can be changed at runtime from
 Catapulsar's Settings → Connections (`PUT /api/v1/settings/cataponte|cataudit|catametricas`), which stores them in
@@ -768,7 +773,7 @@ The code does not yet follow every rule. Agents fixing a gap remove it here in t
 
 | ID | Service | Gap | Rule |
 |---|---|---|---|
-| — | — | None open (G-17, G-18 and G-20 closed on 2026-11-14, decision 94) | — |
+| G-22 | Catasonarr | The page's HTML, CSS and JavaScript (`apps/catasonarr/src/main/resources/static/`) are not linted or formatted in `mvn verify` yet; they come with the real pages (decision 109) | §3.7, HTML-*, JS-*, CSS-* |
 
 Closed on 2026-10-30:
 
@@ -786,6 +791,8 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-21, Catasonarr skeleton** (decision 109, G-22 opened): a sixth app, speaking Sonarr's API v3; the
+  module, the login (Dex for the page, Sonarr's API key for the API v3), `system/status`, its deployment.
 - **2026-11-21, technologies and glossary** (DOC-6): `TECHNOLOGIES.md` lists every technology with its version
   and the file that pins it; `GLOSSARY.md` explains the acronyms, rule prefixes and names.
 - **2026-11-20, Spring's banner** (decision 108): the five apps print it again at start-up.
@@ -1541,4 +1548,26 @@ Logs (2026-11-20):
      Spring Boot 3.5 turns the banner off, to keep stdout pure JSON. Each Deployment sets
      `SPRING_MAIN_BANNER_MODE=console`, so it is printed at start-up as plain lines, as in a terminal; Alloy and Loki
      keep them as they are (no level), and the log panels show them as written.
+
+Catasonarr (2026-11-21):
+
+109. **Catasonarr**, a sixth app (`apps/catasonarr`, port **8086**, `https://catasonarr.catacumbas69.com`): a TV
+     series manager in Spring Boot that does what Sonarr does and **speaks Sonarr's API v3**, so Prowlarr,
+     qBittorrent, Transmission, Bazarr, Overseerr, Jellyseerr and Homarr work with it as they do with Sonarr. It runs
+     on MicroShift with the other apps, keeps its data in MongoDB (`catasonarr_*`) and, **keeping it simple**, does
+     its periodic work (RSS sync, searches, following the downloads, importing) inside its own pod with
+     `@Scheduled`, not as tasks on Pulsar; **everything it does is an event on its one topic**,
+     `catacumbas69/catasonarr/events`, which Cataudit stores through `audit-catasonarr` and any other app may read.
+     **One replica**, 320 Mi / 640 Mi, with the OpenTelemetry agent. **Two ways in**: `/api/v3/**` takes Sonarr's API
+     key (`X-Api-Key` or `?apikey=`), **the key of the Sonarr it replaces**, asked by `catasonarr-secret.sh` with
+     `read -s`, so the clients only change the address; everything else logs in through **Dex** (client
+     `catasonarr`, `dex-secret.sh clients`). `GET /api/v3/system/status` answers with Sonarr's fields, `appName`
+     `Catasonarr` and as `version` the replaced Sonarr's (`4.0.20.0`), so the clients' version checks pass. Its own
+     **UI in Catapulsar's style**. Series data from **TheTVDB and TMDB** (Sonarr's own metadata service is meant
+     for Sonarr). **Torrents only** (Torznab through Prowlarr; qBittorrent and Transmission). Its release-name
+     parser is **translated from Sonarr's**, so **the module is GPL-3.0** (`apps/catasonarr/LICENSE`); the rest of
+     the repository is not affected. Sonarr keeps running next to it until Catasonarr does what is used, and
+     Sonarr's database is imported. First phase: series and episodes, automatic downloads, import and rename,
+     Calendar, Wanted and Queue, and those integrations. This change is the **skeleton**: the module, both logins,
+     `system/status`, a page with the user and Sign out, the deployment and the scripts.
 
