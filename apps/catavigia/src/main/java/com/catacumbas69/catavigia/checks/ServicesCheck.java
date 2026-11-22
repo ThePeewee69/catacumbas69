@@ -12,8 +12,9 @@ import org.springframework.stereotype.Component;
 /**
  * {@code service.down}: an app's readiness ({@code /actuator/health/readiness}) is not {@code UP} or does not
  * answer (orch.md decision 79). The components of its full health that are not {@code UP} go in the details, as
- * information: an app whose dependency is down is not down itself. This check never fails: an app that does not
- * answer is what it reports.
+ * information: an app whose dependency is down is not down itself. When the app's page has a public address, the
+ * details carry it as {@code pageUrl} (decision 113), so Catapulsar opens it without knowing the app. This check
+ * never fails: an app that does not answer is what it reports.
  */
 @Component
 public class ServicesCheck implements Check {
@@ -51,6 +52,7 @@ public class ServicesCheck implements Check {
         urls.all().forEach((app, url) -> {
             Map<String, String> details = new LinkedHashMap<>();
             details.put("url", url);
+            urls.pageUrl(app).ifPresent(page -> details.put("pageUrl", page));
             try {
                 String status = apps.getAnyStatus(url + "/actuator/health/readiness").path("status").asText("?");
                 if ("UP".equals(status)) {

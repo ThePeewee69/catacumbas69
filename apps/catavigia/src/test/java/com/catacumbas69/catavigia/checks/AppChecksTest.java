@@ -15,6 +15,7 @@ import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
@@ -42,13 +43,16 @@ class AppChecksTest {
                 "{\"status\":\"DOWN\",\"components\":{\"mongo\":{\"status\":\"DOWN\"},\"ping\":{\"status\":\"UP\"}}}"));
         when(apps.getAnyStatus("http://cataudit:8084/actuator/health/readiness"))
                 .thenThrow(new SourceUnavailableException("connection refused", null));
+        when(urls.pageUrl("cataudit")).thenReturn(Optional.of("https://cataudit.example"));
 
         List<Finding> findings = new ServicesCheck(apps, urls).run();
 
         assertThat(findings).extracting(Finding::subject).containsExactly("catapulsar", "cataudit");
         assertThat(findings.get(0).details()).containsEntry("readiness", "OUT_OF_SERVICE")
-                .containsEntry("components", "mongo=DOWN");
-        assertThat(findings.get(1).details()).containsEntry("error", "connection refused");
+                .containsEntry("components", "mongo=DOWN")
+                .doesNotContainKey("pageUrl");
+        assertThat(findings.get(1).details()).containsEntry("error", "connection refused")
+                .containsEntry("pageUrl", "https://cataudit.example");
     }
 
     @Test

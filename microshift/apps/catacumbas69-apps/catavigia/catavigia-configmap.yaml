@@ -15,3 +15,5 @@ data:
   CATAMETRICAS_URL: http://catametricas:8083
   CATAUDIT_URL: http://cataudit:8084
   CATASONARR_URL: http://catasonarr:8086
+  # The public address of an app's page, in its service.down alert, so Catapulsar's button opens it (orch.md 113)
+  CATASONARR_PAGE_URL: https://catasonarr.catacumbas69.com

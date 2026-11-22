@@ -2126,6 +2126,7 @@ function app() {
      * @returns {string} the label
      */
     alertActionLabel(alert) {
+      if (this.alertPageUrl(alert)) return 'Open ' + alert.subject;
       if (alert.type === 'poison') return 'Open DLQ';
       if (alert.type.startsWith('bridge.')) return 'Open bridge';
       if (alert.type === 'backlog') return 'Open subscription';
@@ -2135,10 +2136,26 @@ function app() {
     },
 
     /**
-     * Takes an alert to where its owner fixes it, with the resource selected.
+     * The public address of the app's own page, when the alert brings one (orch.md decision 113): Catavigia puts it
+     * in a service.down alert's details, so this page knows no app by name. Only http and https.
+     * @param {object} alert the alert
+     * @returns {string|null} the address, or null
+     */
+    alertPageUrl(alert) {
+      const url = alert.type === 'service.down' ? alert.details?.pageUrl : null;
+      return typeof url === 'string' && /^https?:\/\//.test(url) ? url : null;
+    },
+
+    /**
+     * Takes an alert to where its owner fixes it, with the resource selected; an app's own page opens in a new tab.
      * @param {object} alert the alert
      */
     async runAlertAction(alert) {
+      const page = this.alertPageUrl(alert);
+      if (page) {
+        window.open(page, '_blank', 'noopener');
+        return;
+      }
       try {
         if (alert.type === 'poison') {
           this.openConsumers('deadletters');

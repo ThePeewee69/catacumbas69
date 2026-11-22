@@ -18,6 +18,7 @@ the same commit.
 | **Catavigia** | Watches the platform and keeps the history of every alert (8085) |
 | **Catasonarr** | TV series manager that speaks Sonarr's API v3 (8086; decision 109); GPL-3.0 |
 | **Sonarr** | The open-source TV series manager Catasonarr replaces; its API v3 is what Prowlarr, Bazarr, Overseerr, Jellyseerr and Homarr speak |
+| **TVmaze** | The free series database Catasonarr reads series and episodes from (decision 112); CC BY-SA |
 | **catacommons** | Shared Java library of the apps (not a service) |
 | **meloes** | The NUC that runs MicroShift, where everything in `microshift/` is deployed |
 | **necromancer** | The Mac (Intel, macOS 13) where the code is written, built and pushed |
@@ -71,7 +72,8 @@ there is a written reason, **MAY** is optional.
 | **CRD** | Custom Resource Definition | Kubernetes types added by operators (cert-manager, Prometheus, MongoDB) |
 | **CRI-O** | Container Runtime Interface, OCI implementation | MicroShift's container runtime |
 | **CRUD** | Create, Read, Update, Delete | The bridges' API in Cataponte |
-| **CSRF** / **XSRF** | Cross-Site Request Forgery | Catapulsar's token in the `XSRF-TOKEN` cookie (SEC-2) |
+| **CC BY-SA** | Creative Commons Attribution-ShareAlike | TVmaze's data licence: credited in Catasonarr's page |
+| **CSRF** / **XSRF** | Cross-Site Request Forgery | Catapulsar's and Catasonarr's token in the `XSRF-TOKEN` cookie (SEC-2) |
 | **DLQ** | Dead-Letter Queue | The topic a message goes to after too many failed deliveries (decision 68) |
 | **DNS** | Domain Name System | The records that point `*.catacumbas69.com` at meloes |
 | **DOM** | Document Object Model | The page Alpine.js updates |
@@ -95,17 +97,20 @@ there is a written reason, **MAY** is optional.
 | **OTLP** | OpenTelemetry Protocol | How the agent sends traces to Alloy (ports 4317 and 4318) |
 | **PKCE** | Proof Key for Code Exchange | Used by Grafana's login through Dex |
 | **PSI** | Pressure Stall Information | meloes' CPU, memory and I/O pressure, on the host dashboard |
+| **PUID** / **PGID** | Process user / group id (linuxserver.io images) | Sonarr's 1000/1000; Catasonarr runs as the same (decision 112) |
+| **PV** | Persistent Volume | The static NFS volumes of Catasonarr (`catasonarr-storage.yaml`) |
 | **PVC** | Persistent Volume Claim | A pod's disk: MongoDB, Pulsar, Prometheus, Loki, Tempo, Grafana, registry |
 | **RBAC** | Role-Based Access Control | Kubernetes permissions; Argo CD's `argocd-rbac-cm` |
 | **REST** | Representational State Transfer | The apps' HTTP APIs |
 | **RHEL** | Red Hat Enterprise Linux | meloes' operating system |
 | **RPM** | RPM Package Manager | How MicroShift is installed on meloes |
 | **RSS** | Really Simple Syndication | The indexers' feeds of new releases, read on every RSS sync |
-| **SCC** | Security Context Constraints | OpenShift's pod security; granted by RoleBindings in git |
+| **SCC** | Security Context Constraints | OpenShift's pod security; granted by RoleBindings in git (`nonroot-v2` for Catasonarr's user 1000) |
 | **SHA** | Secure Hash Algorithm (here: a commit's hash) | The image tag `<version>-<short sha>` (OPS-2) |
 | **SSO** | Single Sign-On | One Dex session for Catapulsar, Grafana and Argo CD |
 | **TLS** | Transport Layer Security | Ended at the router with the wildcard certificate (`termination: edge`) |
-| **TMDB** / **TVDB** | The Movie Database / TheTVDB | Where Catasonarr reads series, seasons and episodes (decision 109) |
+| **TMDB** | The Movie Database | Catasonarr's pictures and pt-PT summaries, when its token is set (decision 112) |
+| **TVDB** | TheTVDB | The series ids Sonarr's clients send; Catasonarr finds the series by them in TVmaze (decision 112) |
 | **Torznab** | Torrent indexer API in the Newznab style | How Prowlarr's indexers answer searches |
 | **TTL** | Time To Live | MongoDB TTL indexes; claims and status documents that expire |
 | **UI** | User Interface | Catapulsar's web page; the Grafana, Argo CD and Pulsar UIs |

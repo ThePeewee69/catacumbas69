@@ -1,5 +1,6 @@
 package com.catacumbas69.catasonarr.config;
 
+import java.net.http.HttpClient;
 import java.time.Clock;
 import java.util.concurrent.TimeUnit;
 import org.apache.pulsar.client.admin.PulsarAdmin;
@@ -9,10 +10,13 @@ import org.apache.pulsar.client.api.PulsarClientException;
 import org.springframework.boot.autoconfigure.mongo.MongoClientSettingsBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestClient;
 
 /**
- * Clients: clock, MongoDB timeouts, Pulsar admin and binary clients.
+ * Clients: clock, MongoDB timeouts, Pulsar admin and binary clients, TVmaze and TMDB.
  */
 @Configuration
 public class CoreConfig {
@@ -80,6 +84,53 @@ public class CoreConfig {
             builder.listenerName(pulsar.listenerName());
         }
         return builder.build();
+    }
+
+    /**
+     * HTTP client for TVmaze (orch.md decision 112). It follows redirects: TVmaze answers a lookup by TheTVDB's id
+     * with a redirect to the show.
+     *
+     * @param builder Spring Boot's builder, with its JSON converters
+     * @param properties address and timeouts
+     * @return the client
+     */
+    @Bean
+    public RestClient tvmazeRestClient(RestClient.Builder builder, CatasonarrProperties properties) {
+        CatasonarrProperties.Metadata metadata = properties.metadata();
+        return builder.clone()
+                .baseUrl(metadata.tvmazeUrl())
+                .requestFactory(requestFactory(metadata))
+                .defaultHeader(HttpHeaders.USER_AGENT, "Catasonarr (https://github.com/ThePeewee69/catacumbas69)")
+                .build();
+    }
+
+    /**
+     * HTTP client for TMDB (orch.md decision 112), with the API Read Access Token when there is one.
+     *
+     * @param builder Spring Boot's builder, with its JSON converters
+     * @param properties address, token and timeouts
+     * @return the client
+     */
+    @Bean
+    public RestClient tmdbRestClient(RestClient.Builder builder, CatasonarrProperties properties) {
+        CatasonarrProperties.Metadata metadata = properties.metadata();
+        RestClient.Builder tmdb = builder.clone()
+                .baseUrl(metadata.tmdbUrl())
+                .requestFactory(requestFactory(metadata));
+        if (StringUtils.hasText(metadata.tmdbToken())) {
+            tmdb.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + metadata.tmdbToken().strip());
+        }
+        return tmdb.build();
+    }
+
+    private static JdkClientHttpRequestFactory requestFactory(CatasonarrProperties.Metadata metadata) {
+        HttpClient client = HttpClient.newBuilder()
+                .connectTimeout(metadata.connectTimeout())
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(client);
+        factory.setReadTimeout(metadata.readTimeout());
+        return factory;
     }
 
     private static int toInt(long millis) {

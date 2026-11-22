@@ -23,8 +23,13 @@ spec:
         app.kubernetes.io/part-of: catacumbas69
     spec:
       terminationGracePeriodSeconds: 40   # OPS-5: graceful shutdown takes up to 30 s
+      # As Sonarr (PUID/PGID 1000): the files on the NAS stay the same user's (orch.md decision 112); nonroot-v2
+      # through this service account (catasonarr-serviceaccount.yaml)
+      serviceAccountName: catasonarr
       securityContext:
         runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
       initContainers:
@@ -80,6 +85,14 @@ spec:
                 secretKeyRef:
                   name: catasonarr-api-key
                   key: api-key
+            # TMDB's API Read Access Token (decision 112), made by catasonarr-secret.sh tmdb; without it TMDB is off
+            # and TVmaze's poster and English summary stay
+            - name: CATASONARR_TMDB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: catasonarr-tmdb
+                  key: token
+                  optional: true
             - name: SPRING_DATA_MONGODB_URI
               valueFrom:
                 secretKeyRef:
@@ -167,6 +180,11 @@ spec:
             - name: otel-agent
               mountPath: /otel
               readOnly: true
+            # The NAS as Sonarr sees it (catasonarr-storage.yaml)
+            - name: media
+              mountPath: /data
+            - name: downloads
+              mountPath: /downloads
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -179,3 +197,9 @@ spec:
         - name: catacumbas69-ca
           configMap:
             name: catacumbas69-ca
+        - name: media
+          persistentVolumeClaim:
+            claimName: catasonarr-media
+        - name: downloads
+          persistentVolumeClaim:
+            claimName: catasonarr-downloads

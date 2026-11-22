@@ -36,6 +36,8 @@ git commit + push ──▶ GitHub ──▶ ArgoCD (manual Sync) ──▶ ns c
 | Catasonarr | 1 | 8086 | `https://catasonarr.catacumbas69.com` (page: login through Dex; `/api/v3`: Sonarr's API key) |
 | Catapulsar | 1 | 8081 | `https://catapulsar.catacumbas69.com` (login through Dex) |
 
+Catasonarr is the only one that mounts the NAS (`/data` and `/downloads` over NFS, as user 1000; section 8).
+
 Every container asks for 25m CPU and 448 Mi and may use up to 1 CPU and 896 Mi (meloes has 4 CPUs, most of
 them already requested by MongoDB and Pulsar; 64 Mi and 128 Mi of that are for the OpenTelemetry agent, orch.md
 decision 104). Spring's banner is printed at start-up (`SPRING_MAIN_BANNER_MODE=console`: Spring turns it off when the log is
@@ -237,8 +239,8 @@ Cataponte, Catametricas, Cataudit and Catavigia (Catavigia also reads the first 
 
 ### 8. Catasonarr
 
-Catasonarr (orch.md decision 109, [`apps/catasonarr/README.md`](../../../apps/catasonarr/README.md)) needs, before its
-first Sync:
+Catasonarr (orch.md decisions 109 and 112, [`apps/catasonarr/README.md`](../../../apps/catasonarr/README.md)) needs,
+before its first Sync:
 
 1. **DNS**: `catasonarr.catacumbas69.com` pointing at meloes, like the other Routes.
 2. **Its Dex client** (after the push that brings it in `microshift/apps/dex/config.yaml.tmpl`), on the Mac:
@@ -252,9 +254,32 @@ first Sync:
    bash microshift/apps/catacumbas69-apps/catasonarr/catasonarr-secret.sh api-key
    ```
    It asks for the key twice, without showing it, and writes `catacumbas69-apps/catasonarr-api-key`.
-4. **The image**: `apps/build/push.sh catasonarr`, commit the new tag, push, and **Sync** `catasonarr` in ArgoCD.
+4. **The NAS for meloes** (decision 112): Catasonarr mounts `192.168.86.50:/volume1/Media` on `/data` and
+   `192.168.86.50:/volumeUSB4/usbshare` on `/downloads`, as Sonarr does in K3s. On meloes, NFS must be installed:
+   ```
+   rpm -q nfs-utils
+   ```
+   (if it is missing: `sudo dnf install nfs-utils`). On the Synology, in **Control Panel → Shared Folder**, edit **Media** and the USB
+   share, **NFS Permissions → Create**: meloes' IP (`192.168.86.35`), *Read/Write*, the same *Squash* and *Security*
+   as the K3s nodes already have. Without them the pod stays in `ContainerCreating` (`mount.nfs: access denied`).
+5. **TMDB** (optional: without it, TVmaze's pictures and English summaries). Make the token at
+   <https://www.themoviedb.org>: an account, then **Settings → API → Create → Developer**, fill in the form (personal
+   use), and copy the **API Read Access Token** (the long one, `eyJ…`, not the short API Key). On the Mac:
+   ```
+   bash microshift/apps/catacumbas69-apps/catasonarr/catasonarr-secret.sh tmdb
+   ```
+   It asks for it twice, without showing it, and writes `catacumbas69-apps/catasonarr-tmdb`.
+6. **The image**: `apps/build/push.sh catasonarr`, commit the new tag, push, and **Sync** `catasonarr` in ArgoCD.
+7. **Quality from Sonarr** (after the Sync): copy `sonarr.db` from Sonarr's `/config` (`/volume1/k3s/media/Sonarr`
+   on the NAS) to the Mac, then:
+   ```
+   bash microshift/apps/catacumbas69-apps/catasonarr/catasonarr-import-sonarr.sh ~/Downloads/sonarr.db
+   ```
+   It reads the copy only, asks for the API key without showing it, and replaces Catasonarr's quality definitions,
+   custom formats, profiles and folder naming with Sonarr's. Then add the root folders in Catasonarr's
+   **Settings** (the same as Sonarr's, e.g. `/data/...`).
 
-Without either Secret the pod stays in `CreateContainerConfigError`.
+Without the API key or the Dex Secret the pod stays in `CreateContainerConfigError`; the TMDB Secret is optional.
 
 ## Every release (after changing code)
 

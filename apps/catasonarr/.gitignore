@@ -1,4 +1,8 @@
 target/
+
+# Frontend tools (orch.md decisions 94, 112): Node installed by Maven, npm packages
+node/
+node_modules/
 .idea/
 *.iml
 *.iws

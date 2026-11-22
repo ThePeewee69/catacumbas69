@@ -1,0 +1,38 @@
+{
+  "qualityDefinitions": [
+    { "id": 1, "quality": 0, "title": "Unknown", "minSize": 1, "maxSize": 199.9, "preferredSize": 95 },
+    { "id": 2, "quality": 1, "title": "SDTV", "minSize": 2, "maxSize": 100, "preferredSize": 95 },
+    { "id": 15, "quality": 3, "title": "WEB-DL 1080p", "minSize": 5, "maxSize": 120, "preferredSize": 60 }
+  ],
+  "customFormats": [
+    {
+      "id": 4,
+      "name": "x265",
+      "specifications": "[{\"type\":\"ReleaseTitleSpecification\",\"body\":{\"name\":\"x265\",\"negate\":false,\"required\":true,\"value\":\"[xh][ .]?265|hevc\",\"implementationName\":\"Release Title\",\"infoLink\":\"https://wiki.servarr.com\"}}]",
+      "includeCustomFormatWhenRenaming": 0
+    }
+  ],
+  "qualityProfiles": [
+    {
+      "id": 7,
+      "name": "Mine 1080p",
+      "cutoff": 1002,
+      "items": "[{\"quality\":1,\"items\":[],\"allowed\":false},{\"id\":1002,\"name\":\"WEB 1080p\",\"items\":[{\"quality\":15,\"items\":[],\"allowed\":true},{\"quality\":3,\"items\":[],\"allowed\":true}],\"allowed\":true}]",
+      "upgradeAllowed": 1,
+      "formatItems": "[{\"format\":4,\"score\":-100}]",
+      "minFormatScore": 0,
+      "cutoffFormatScore": 0,
+      "minUpgradeFormatScore": 1
+    }
+  ],
+  "naming": [
+    {
+      "seriesFolderFormat": "{Series TitleYear} [tvdbid-{TvdbId}]",
+      "seasonFolderFormat": "Season {season:00}",
+      "specialsFolderFormat": "Specials",
+      "replaceIllegalCharacters": 1,
+      "colonReplacementFormat": 4,
+      "customColonReplacementFormat": ""
+    }
+  ]
+}

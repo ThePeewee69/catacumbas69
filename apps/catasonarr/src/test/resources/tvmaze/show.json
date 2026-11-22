@@ -1,0 +1,19 @@
+{
+  "id": 60574,
+  "name": "Andor",
+  "type": "Scripted",
+  "language": "English",
+  "genres": ["Drama", "Action", "Science-Fiction"],
+  "status": "Ended",
+  "runtime": null,
+  "averageRuntime": 47,
+  "premiered": "2022-09-21",
+  "ended": "2025-05-13",
+  "schedule": { "time": "", "days": ["Tuesday"] },
+  "rating": { "average": 8.4 },
+  "network": null,
+  "webChannel": { "id": 287, "name": "Disney+" },
+  "externals": { "tvrage": null, "thetvdb": 393189, "imdb": "tt9253284" },
+  "image": { "medium": "https://static.tvmaze.com/m.jpg", "original": "https://static.tvmaze.com/o.jpg" },
+  "summary": "<p><b>Andor</b> follows Cassian &amp; friends.</p>"
+}

@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.Duration;
+import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -110,13 +111,21 @@ public record CatavigiaProperties(
      * @param catametricasUrl Catametricas, until the settings topic has one
      * @param catauditUrl Cataudit, until the settings topic has one
      * @param catasonarrUrl Catasonarr (orch.md decision 111)
+     * @param pageUrls the public address of an app's page, by app name, which its {@code service.down} alert carries
+     *     as {@code pageUrl} so Catapulsar can open it without knowing the app (orch.md decision 113); none: empty
      */
     public record Apps(
             @NotBlank String catapulsarUrl,
             @NotBlank String cataponteUrl,
             @NotBlank String catametricasUrl,
             @NotBlank String catauditUrl,
-            @NotBlank String catasonarrUrl) {
+            @NotBlank String catasonarrUrl,
+            Map<String, String> pageUrls) {
+
+        /** No page addresses when none is set. */
+        public Apps {
+            pageUrls = pageUrls == null ? Map.of() : Map.copyOf(pageUrls);
+        }
     }
 
     /**

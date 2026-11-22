@@ -2,6 +2,7 @@ package com.catacumbas69.catavigia;
 
 import com.catacumbas69.catavigia.config.CatavigiaProperties;
 import java.time.Duration;
+import java.util.Map;
 
 /**
  * Small, fast settings for unit tests.
@@ -20,7 +21,8 @@ public final class TestProperties {
                 new CatavigiaProperties.Tasks("catavigia", 1, second, second, second, Duration.ofHours(6)),
                 new CatavigiaProperties.Checks(second, second, 1, Duration.ofSeconds(30)),
                 new CatavigiaProperties.Apps("http://catapulsar:8081", "http://cataponte:8082",
-                        "http://catametricas:8083", "http://cataudit:8084", "http://catasonarr:8086"),
+                        "http://catametricas:8083", "http://cataudit:8084", "http://catasonarr:8086",
+                        Map.of("catasonarr", "https://catasonarr.catacumbas69.com/", "cataudit", "javascript:alert(1)")),
                 new CatavigiaProperties.Api(50, 500));
     }
 }

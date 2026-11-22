@@ -1,33 +1,106 @@
-/* Catasonarr's page (orch.md decision 109): the top bar of the skeleton, until the real pages arrive. */
+/* Catasonarr's pages (orch.md decisions 109 and 112), in Catapulsar's colours. */
 
 /* ══ Base ══ */
 :root {
-  --bg: #11151c;
-  --fg: #e6e9ef;
-  --bar: #1b222c;
+  --bg: #0f1117;
+  --bar: #161b27;
+  --panel: #1a2035;
+  --border: #2a3148;
   --accent: #35c5f4;
+  --text: #e2e8f0;
+  --muted: #8b97ab;
+  --success: #22c55e;
+  --danger: #ef4444;
+  --warn: #f59e0b;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  font-family: system-ui, sans-serif;
-  color: var(--fg);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--text);
   background: var(--bg);
+}
+
+a {
+  color: var(--accent);
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+button {
+  min-height: 36px;
+  padding: 0 0.9rem;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button.danger {
+  border-color: var(--danger);
+}
+
+button.primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+input,
+select {
+  min-height: 36px;
+  padding: 0 0.6rem;
 }
 
 /* ══ Top bar ══ */
 .topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 1.5rem;
   padding: 0.75rem 1.25rem;
   background: var(--bar);
+  border-bottom: 1px solid var(--border);
 }
 
 .topbar-title {
   margin: 0;
   font-size: 1.25rem;
+}
+
+.topbar-title a {
   color: var(--accent);
+  text-decoration: none;
+}
+
+.topbar-nav {
+  display: flex;
+  gap: 1rem;
+  flex: 1;
+}
+
+.topbar-nav a {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 0.3rem 0;
+}
+
+.topbar-nav a.active {
+  color: var(--text);
+  border-bottom: 2px solid var(--accent);
 }
 
 .topbar-user {
@@ -36,17 +109,206 @@ body {
   align-items: center;
 }
 
-.topbar-user button {
-  min-height: 44px;
-  padding: 0 1rem;
-  color: var(--fg);
-  background: transparent;
-  border: 1px solid var(--fg);
-  border-radius: 4px;
-  cursor: pointer;
-}
-
 /* ══ Content ══ */
 .content {
   padding: 1.25rem;
+  min-height: calc(100vh - 140px);
+}
+
+.toolbar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* ══ Series grid ══ */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.card img,
+.poster-missing {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  background: var(--bar);
+}
+
+.card-body {
+  padding: 0.5rem 0.6rem;
+}
+
+.card-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress {
+  height: 4px;
+  background: var(--border);
+  margin-top: 0.4rem;
+}
+
+.progress span {
+  display: block;
+  height: 100%;
+  background: var(--success);
+}
+
+.badge {
+  display: inline-block;
+  padding: 0 0.4rem;
+  border-radius: 3px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.badge.on {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+/* ══ Add series ══ */
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.result {
+  display: flex;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.result img,
+.result .poster-missing {
+  width: 90px;
+  flex: none;
+}
+
+.result-body {
+  flex: 1;
+}
+
+.form {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.6rem 1rem;
+  align-items: center;
+  margin-top: 0.75rem;
+  max-width: 640px;
+}
+
+/* ══ Series detail ══ */
+.detail {
+  display: flex;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.detail img,
+.detail .poster-missing {
+  width: 180px;
+  flex: none;
+  border-radius: 6px;
+}
+
+.detail-title {
+  margin: 0 0 0.4rem;
+}
+
+.season {
+  margin-bottom: 1rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.season-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+td,
+th {
+  text-align: left;
+  padding: 0.35rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+th {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* ══ Settings ══ */
+section {
+  margin-bottom: 1.75rem;
+}
+
+section h2 {
+  font-size: 1.05rem;
+  margin: 0 0 0.6rem;
+}
+
+/* ══ Messages and footer ══ */
+.toast {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  max-width: 480px;
+  padding: 0.75rem 1rem;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+}
+
+.toast.error {
+  border-color: var(--danger);
+}
+
+.footer {
+  padding: 1rem 1.25rem;
+  font-size: 12px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
 }

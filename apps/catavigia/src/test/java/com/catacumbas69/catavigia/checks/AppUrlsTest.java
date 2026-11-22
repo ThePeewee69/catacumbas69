@@ -23,6 +23,15 @@ class AppUrlsTest {
                 Map.entry("catapulsar", "http://catapulsar:8081"));
     }
 
+    @Test
+    void pageUrl_onlyWhenSet_andOnlyHttp() {
+        AppUrls urls = new AppUrls(TestProperties.properties(), noSettings());
+
+        assertThat(urls.pageUrl("catasonarr")).contains("https://catasonarr.catacumbas69.com");
+        assertThat(urls.pageUrl("cataudit")).isEmpty();
+        assertThat(urls.pageUrl("cataponte")).isEmpty();
+    }
+
     @SuppressWarnings("unchecked")
     private static ObjectProvider<SharedSettings> noSettings() {
         return mock(ObjectProvider.class);

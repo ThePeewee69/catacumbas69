@@ -5,9 +5,11 @@ kind: Kustomization
 namespace: catacumbas69-apps
 resources:
   - catasonarr-configmap.yaml
+  - catasonarr-serviceaccount.yaml
+  - catasonarr-storage.yaml
   - catasonarr-deployment.yaml
   - catasonarr-service.yaml
   - catasonarr-route.yaml
 images:
   - name: registry.catacumbas69.com/catasonarr
-    newTag: "0.1.0-SNAPSHOT-2b22bae"
+    newTag: "0.1.0-SNAPSHOT-dec07e6"

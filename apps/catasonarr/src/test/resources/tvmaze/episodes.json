@@ -1,0 +1,7 @@
+[
+  { "id": 2001, "name": "Kassa", "season": 1, "number": 1, "type": "regular", "airdate": "2022-09-21", "airtime": "", "airstamp": "2022-09-21T07:00:00+00:00", "runtime": 39, "image": { "original": "https://static.tvmaze.com/e1.jpg" }, "summary": "<p>One.</p>" },
+  { "id": 2002, "name": "That Would Be Me", "season": 1, "number": 2, "type": "regular", "airdate": "2022-09-21", "airstamp": "2022-09-21T07:00:00+00:00", "runtime": 35, "image": null, "summary": null },
+  { "id": 2900, "name": "Making Of", "season": 1, "number": null, "type": "significant_special", "airdate": "2022-12-01", "airstamp": "2022-12-01T08:00:00+00:00", "runtime": 50, "image": null, "summary": "" },
+  { "id": 2101, "name": "One Year Later", "season": 2, "number": 1, "type": "regular", "airdate": "2025-04-22", "airstamp": "2025-04-22T01:00:00+00:00", "runtime": 50, "image": null, "summary": "<p>Two.</p>" },
+  { "id": 2800, "name": "Trailer", "season": 1, "number": null, "type": "insignificant_special", "airdate": "2022-05-26", "airstamp": "2022-05-26T16:00:00+00:00", "runtime": 2, "image": null, "summary": null }
+]

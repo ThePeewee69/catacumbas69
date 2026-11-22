@@ -5,8 +5,8 @@ import static org.awaitility.Awaitility.await;
 
 import com.catacumbas69.catacommons.test.CatacumbasContainers;
 import com.catacumbas69.catasonarr.dto.SystemStatusResponse;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Duration;
-import java.util.Map;
 import org.apache.pulsar.client.admin.PulsarAdmin;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,7 +39,8 @@ class ProvisioningIT {
                     .contains("persistent://catacumbas69/catasonarr/events"));
         }
         await().atMost(WAIT).untilAsserted(() -> assertThat(
-                http.getForObject("/actuator/health/readiness", Map.class)).containsEntry("status", "UP"));
+                http.getForObject("/actuator/health/readiness", JsonNode.class).path("status").asText())
+                .isEqualTo("UP"));
 
         SystemStatusResponse status = http.getForObject("/api/v3/system/status", SystemStatusResponse.class);
         assertThat(status.appName()).isEqualTo("Catasonarr");

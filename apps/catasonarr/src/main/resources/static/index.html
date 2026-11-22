@@ -8,18 +8,30 @@
     <script src="catasonarr.js" defer></script>
   </head>
   <body>
-    <!-- ══ Top bar: the user signed in through Dex, and Sign out (orch.md decision 109) ══ -->
+    <!-- ══ Top bar: the pages, and the user signed in through Dex with Sign out (orch.md decision 109) ══ -->
     <header class="topbar">
-      <h1 class="topbar-title">Catasonarr</h1>
+      <h1 class="topbar-title"><a href="#/">Catasonarr</a></h1>
+      <nav class="topbar-nav" aria-label="Pages">
+        <a href="#/" data-page="series">Series</a>
+        <a href="#/add" data-page="add">Add series</a>
+        <a href="#/settings" data-page="settings">Settings</a>
+      </nav>
       <div class="topbar-user" hidden data-testid="user">
         <span data-testid="user-name"></span>
         <button type="button" data-testid="sign-out">Sign out</button>
       </div>
     </header>
 
-    <!-- ══ Placeholder until the series, calendar, wanted and queue pages arrive ══ -->
-    <main class="content">
-      <p>Catasonarr is running. Sonarr's API v3 answers at <code>/api/v3</code>; the pages come next.</p>
-    </main>
+    <!-- ══ The page shown, drawn by catasonarr.js from the address (#/, #/add, #/series/<id>, #/settings) ══ -->
+    <main class="content" id="page" aria-live="polite"></main>
+
+    <div class="toast" id="toast" role="status" hidden></div>
+
+    <!-- ══ Where the data comes from (orch.md decision 112): TVmaze's CC BY-SA and TMDB's terms ask for this ══ -->
+    <footer class="footer">
+      Series and episodes from <a href="https://www.tvmaze.com" rel="noopener">TVmaze</a> (CC BY-SA). Images and
+      summaries from <a href="https://www.themoviedb.org" rel="noopener">TMDB</a>: this product uses the TMDB API but is
+      not endorsed or certified by TMDB.
+    </footer>
   </body>
 </html>

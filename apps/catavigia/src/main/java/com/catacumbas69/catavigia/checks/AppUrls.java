@@ -4,6 +4,7 @@ import com.catacumbas69.catacommons.settings.SharedSettings;
 import com.catacumbas69.catavigia.config.CatavigiaProperties;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -11,8 +12,9 @@ import org.springframework.util.StringUtils;
 /**
  * Where the watched apps answer (orch.md decision 78). Cataponte, Cataudit and Catametricas: the URL set in
  * Catapulsar's Settings (settings topic) wins over {@code catavigia.apps.*}; Catapulsar: {@code CATAPULSAR_URL};
- * Catasonarr: {@code CATASONARR_URL} (decision 111).
- * Read on every call, so a new URL applies from the next round.
+ * Catasonarr: {@code CATASONARR_URL} (decision 111). Also the public address of an app's page, when one is set
+ * ({@code catavigia.apps.page-urls.<app>}, decision 113). Read on every call, so a new URL applies from the next
+ * round.
  */
 @Component
 public class AppUrls {
@@ -96,6 +98,23 @@ public class AppUrls {
         all.put("catasonarr", catasonarr());
         all.put("catapulsar", catapulsar());
         return all;
+    }
+
+    /**
+     * Returns the public address of an app's page, which its {@code service.down} alert carries so Catapulsar can
+     * open it (orch.md decision 113). Only {@code http://} and {@code https://} addresses count.
+     *
+     * @param app app name, as in {@link #all()}
+     * @return the address without a trailing slash, or empty when none is set
+     */
+    public Optional<String> pageUrl(String app) {
+        String url = apps.pageUrls().get(app);
+        if (!StringUtils.hasText(url)) {
+            return Optional.empty();
+        }
+        String stripped = strip(url);
+        return stripped.startsWith("https://") || stripped.startsWith("http://") ? Optional.of(stripped)
+                : Optional.empty();
     }
 
     private String url(String key, String fallback) {

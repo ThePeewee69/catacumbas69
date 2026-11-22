@@ -61,7 +61,10 @@ published. It cannot be marked as seen (`409`).
 The app URLs are those set in Catapulsar's Settings → Connections (settings topic: `catapulsar.cataponte-url`,
 `catapulsar.catametricas-url`, `catapulsar.cataudit-url`); until then `CATAPONTE_URL`, `CATAMETRICAS_URL`,
 `CATAUDIT_URL`. Catapulsar's own URL comes from `CATAPULSAR_URL` (decision 78), Catasonarr's from
-`CATASONARR_URL` (decision 111).
+`CATASONARR_URL` (decision 111). An app may also have a public page address (`catavigia.apps.page-urls.<app>`;
+Catasonarr's is `CATASONARR_PAGE_URL`, default `https://catasonarr.catacumbas69.com`): its `service.down` alert
+carries it in the details as `pageUrl`, and Catapulsar's button opens it without knowing the app (decision 113).
+Only `http://` and `https://` addresses count.
 
 ## Storage
 
@@ -107,6 +110,7 @@ Errors are RFC 9457 Problem Details: `400` for invalid input, `503` when MongoDB
 | `SPRING_DATA_MONGODB_URI` | in-cluster ReplicaSet | As for every app |
 | `CATAPULSAR_URL` | `http://catapulsar:8081` | Catapulsar, for `service.down` |
 | `CATASONARR_URL` | `http://catasonarr:8086` | Catasonarr, for `service.down` (decision 111) |
+| `CATASONARR_PAGE_URL` | `https://catasonarr.catacumbas69.com` | Catasonarr's public page, carried by its `service.down` as `pageUrl` (decision 113). Any app can have one: `catavigia.apps.page-urls.<app>` |
 | `CATAPONTE_URL`, `CATAMETRICAS_URL`, `CATAUDIT_URL` | `http://<app>:<port>` | Until Catapulsar's Settings has them; `CATAPONTE_URL` also registers the audit bridge |
 | `CATAVIGIA_EXPECTED_BROKERS` | `1` | `pulsar.broker.down` below this |
 | `catavigia.checks.http-timeout` | `5s` | Every call to an app |
@@ -126,21 +130,16 @@ before every round. The keys, defaults and ranges are in catacommons `AlertSetti
 
 ## Run locally (IntelliJ on necromancer)
 
-Like the other apps, with the NodePort URLs and port 8085:
+Run `CatavigiaApplication` (port **8085**). IntelliJ *Environment variables* (replace `<user>` and `<password>`;
+`.idea/` stays out of Git, CFG-2):
 
 ```
-PULSAR_SERVICE_URL=http://192.168.86.35:31080
-PULSAR_BROKER_URL=pulsar://192.168.86.35:31650
-PULSAR_LISTENER_NAME=external
-SPRING_DATA_MONGODB_URI=<NodePort 32017 URI, authSource=admin&directConnection=true>
-CATAPULSAR_URL=http://localhost:8081
-CATAPONTE_URL=http://localhost:8082
-CATAMETRICAS_URL=http://localhost:8083
-CATAUDIT_URL=http://localhost:8084
-CATASONARR_URL=http://localhost:8086
+PULSAR_SERVICE_URL=http://192.168.86.35:31080;PULSAR_BROKER_URL=pulsar://192.168.86.35:31650;PULSAR_LISTENER_NAME=external;SPRING_DATA_MONGODB_URI=mongodb://<user>:<password>@192.168.86.35:32017/catacumbas69?authSource=admin&directConnection=true;CATAPULSAR_URL=http://localhost:8081;CATAPONTE_URL=http://localhost:8082;CATAMETRICAS_URL=http://localhost:8083;CATAUDIT_URL=http://localhost:8084;CATASONARR_URL=http://localhost:8086
 ```
 
-Keep the MongoDB URI with its password in the run configuration only (`.idea/` is git-ignored), never in the repo.
+Start it **fourth**: Cataponte → Cataudit → Catametricas → Catavigia → Catasonarr → Catapulsar. An app not running
+on the Mac shows as `service.down` after a few rounds. The URLs of Cataponte, Cataudit and Catametricas saved in
+Catapulsar's Settings → Connections win over these; `CATAPULSAR_URL` and `CATASONARR_URL` are only these.
 
 ## Build and test
 

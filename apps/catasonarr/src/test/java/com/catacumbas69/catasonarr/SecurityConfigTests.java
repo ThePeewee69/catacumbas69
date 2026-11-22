@@ -26,8 +26,9 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * The two ways in, with the login on (orch.md decision 109): Sonarr's API key for /api/v3, Dex for the rest. Every
- * other Spring test runs with the profile {@code no-auth}. The whole context, without MongoDB or Pulsar running.
+ * The two ways in, with the login on (orch.md decisions 109 and 112): Sonarr's API key for /api/v3, Dex for the rest
+ * and for the page's own calls to /api/v3. Every other Spring test runs with the profile {@code no-auth}. The whole
+ * context, without MongoDB or Pulsar running.
  */
 @SpringBootTest(properties = {
         // Not no-auth (src/test/resources/config/application.properties): SecurityConfig is on
@@ -65,6 +66,21 @@ class SecurityConfigTests {
     void sonarrApi_withoutTheKey_orWithAnother_is401() throws Exception {
         mvc.perform(get("/api/v3/system/status")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/v3/system/status").header("X-Api-Key", "ffffffffffffffffffffffffffffffff"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void sonarrApi_fromThePage_withTheDexSession_andTheCsrfTokenForChanges() throws Exception {
+        mvc.perform(get("/api/v3/system/status").with(peewee69())).andExpect(status().isOk());
+        mvc.perform(post("/api/v3/command").with(peewee69()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\": \"RssSync\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void sonarrApi_withAKey_needsNoCsrfToken() throws Exception {
+        mvc.perform(post("/api/v3/tag").header("X-Api-Key", "ffffffffffffffffffffffffffffffff")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"label\": \"x\"}"))
                 .andExpect(status().isUnauthorized());
     }
 

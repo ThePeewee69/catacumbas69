@@ -50,7 +50,7 @@ catacommons) are symlinks to it — edit only the original.
 | **catacommons** | Shared library (not a service): CloudEvents envelope, event publisher with retries, Pulsar names, start-up provisioning of the tenant/namespace/topics, registration of the app's audit bridge (ADR 0008, 0009) | — | Pulsar binary + Admin API through each app's clients; Cataponte REST |
 | **Catavigia** | Watches the platform and keeps the history of every alert (ADR 0015): checks as tasks on Pulsar, one per check and round, shared by its replicas; debounce; open, seen and archived alerts; backlog limits per subscription; events for every alert and limit change; `catavigia_alerts_open` metric. Only watches; the owner of each resource fixes it | `catavigia_alerts`, `catavigia_alerts_archive`, `catavigia_observations`, `catavigia_task_runs`, `catavigia_backlog_limits`; reads its thresholds from the settings topic | Pulsar Admin API + binary (tasks, consumers' status, events, settings), Cataponte, Catametricas and every app's health (REST), MongoDB |
 | **Catametricas** | Collects every topic's statistics from Pulsar on an interval and stores traffic (messages/bytes in and out) and backlog per topic: latest snapshot, per minute (30 days), per hour and all-time (ADR 0007). The work is shared by every replica through collection tasks on Pulsar (ADR 0012). The only metrics API: topics, series and collector state (ADR 0013) | `catametricas_topic_snapshots`, `catametricas_topic_minutes`, `catametricas_topic_hours`, `catametricas_topic_totals`, `catametricas_task_runs`; reads its interval from the settings topic | Pulsar Admin API + binary (tasks, events, settings), MongoDB |
-| **Catasonarr** | TV series manager that speaks **Sonarr's API v3**, so Prowlarr, qBittorrent, Transmission, Bazarr, Overseerr, Jellyseerr and Homarr use it as they use Sonarr (decision 109). Skeleton: `GET /api/v3/system/status` and a page with the login. **GPL-3.0** (its release parser is translated from Sonarr's) | `catasonarr_*` | MongoDB, Pulsar (its one events topic), Dex; later TheTVDB, TMDB, Prowlarr, qBittorrent, Transmission, the media folder (NFS) |
+| **Catasonarr** | TV series manager that speaks **Sonarr's API v3**, so Prowlarr, qBittorrent, Transmission, Bazarr, Overseerr, Jellyseerr and Homarr use it as they use Sonarr (decision 109). Phase 1 (decision 112): series and episodes, root folders, quality profiles, definitions and custom formats, tags and commands, through Sonarr's API v3 and its own page; series data from **TVmaze** (TMDB for pictures and the Portuguese summary). **GPL-3.0** (its release parser is translated from Sonarr's) | `catasonarr_*` | MongoDB, Pulsar (its one events topic), Dex; TVmaze, TMDB (optional), the NAS over NFS (`/data`, `/downloads`); later Prowlarr, qBittorrent, Transmission |
 
 **Names.** The apps were renamed on 2026-10-31: Pulsário → **Catapulsar**, Passário → **Cataponte**,
 Contário → **Catametricas** (folders, Maven artifacts, packages, classes, properties, environment variables,
@@ -121,6 +121,7 @@ versions, layer by layer: [`TECHNOLOGIES.md`](TECHNOLOGIES.md).
 | `CATAVIGIA_URL` | Catapulsar (default of the editable URL of the alerts) | `http://catavigia:8085` | `http://localhost:8085` |
 | `CATAPULSAR_URL` | Catavigia (`service.down` of Catapulsar, decision 78) | `http://catapulsar:8081` | `http://localhost:8081` |
 | `CATASONARR_URL` | Catavigia (`service.down` of Catasonarr, decision 111) | `http://catasonarr:8086` | `http://localhost:8086` |
+| `CATASONARR_PAGE_URL` (optional) | Catavigia (`pageUrl` in Catasonarr's `service.down`, decision 113) | `https://catasonarr.catacumbas69.com` | same |
 | `CATAVIGIA_EXPECTED_BROKERS` (optional) | Catavigia (`pulsar.broker.down` below this) | `1` | `1` |
 | `CATAPULSAR_REFRESH_INTERVAL_SECONDS` | Catapulsar | `10` | `10` |
 | `CATAPULSAR_AUTH_ISSUER`, `CATAPULSAR_AUTH_CLIENT_ID` | Catapulsar (login through Dex, SEC-2) | `https://auth.catacumbas69.com`, `catapulsar` | *(not used: profile `no-auth`)* |
@@ -130,6 +131,9 @@ versions, layer by layer: [`TECHNOLOGIES.md`](TECHNOLOGIES.md).
 | `CATASONARR_AUTH_ISSUER`, `CATASONARR_AUTH_CLIENT_ID` | Catasonarr (the page's login through Dex) | `https://auth.catacumbas69.com`, `catasonarr` | *(not used)* |
 | `CATASONARR_AUTH_CLIENT_SECRET` | Catasonarr | Secret `catasonarr-oidc` (key `client-secret`, `dex-secret.sh`) | *(not used)* |
 | `CATASONARR_INSTANCE_NAME`, `CATASONARR_SONARR_VERSION` | Catasonarr (`GET /api/v3/system/status`) | `Catasonarr`, `4.0.20.0` | same |
+| `CATASONARR_TMDB_TOKEN` (optional) | Catasonarr (TMDB's pictures and Portuguese summary, decision 112) | Secret `catasonarr-tmdb` (key `token`, `catasonarr-secret.sh tmdb`); without it TMDB is off | *(empty: TMDB off)* |
+| `CATASONARR_TVMAZE_URL` (optional) | Catasonarr (series data, decision 112) | `https://api.tvmaze.com` | same (the tests point it at a fake) |
+| `CATASONARR_METADATA_REFRESHINTERVAL` (optional) | Catasonarr (refresh of every series, decision 112) | `PT12H` | same |
 | `CATAMETRICAS_COLLECT_INTERVAL_SECONDS` | Catapulsar, Catametricas (same value) | `60` | `60` |
 | `CATACOMMONS_*` (optional) | all | see `CatacommonsProperties`: retries `1s,2s,4s`, retention `7d`/`2GB`, backlog quota `1GB` (must be below the retention), `consumers` topic retention `7d` | same |
 | `CATAPONTE_STATUS_WRITEINTERVAL`, `CATAPONTE_STATUS_STALEAFTER` (optional) | Cataponte (status of each replica, ADR 0012) | `PT5S`, `PT30S` | same |
@@ -774,7 +778,8 @@ The code does not yet follow every rule. Agents fixing a gap remove it here in t
 
 | ID | Service | Gap | Rule |
 |---|---|---|---|
-| G-22 | Catasonarr | The page's HTML, CSS and JavaScript (`apps/catasonarr/src/main/resources/static/`) are not linted or formatted in `mvn verify` yet; they come with the real pages (decision 109) | §3.7, HTML-*, JS-*, CSS-* |
+
+*(none open)*
 
 Closed on 2026-10-30:
 
@@ -792,6 +797,14 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-22, the alert brings the app's page** (decision 113): Catasonarr's `service.down` opens its page from
+  Catapulsar, which still knows no app by name; `ProvisioningIT` of Catasonarr reads the readiness as JSON
+  (no unchecked warning).
+- **2026-11-21, Catasonarr phase 1** (decision 112, G-22 closed): series and episodes through Sonarr's API v3
+  (series, episode, rootfolder, qualityprofile, qualitydefinition, customformat, tag, command, language) and its
+  own page (series, add, detail, settings); series data from TVmaze, TMDB optional; the NAS mounted as Sonarr's;
+  `catasonarr-import-sonarr.sh` imports quality and naming from a copy of `sonarr.db`; the page is linted and
+  formatted in `mvn verify` as Catapulsar's.
 - **2026-11-21, Catavigia watches Catasonarr** (decision 111): `service.down` covers it too.
 - **2026-11-21, restarts by deleting the pod** (decision 110): `dex-secret.sh` no longer uses `rollout restart`,
   which ArgoCD undid, so a new client reached Dex; the same for mongo-express (`mongo-admin.sh`), argocd-server,
@@ -1570,7 +1583,7 @@ Catasonarr (2026-11-21):
      `catasonarr`, `dex-secret.sh clients`). `GET /api/v3/system/status` answers with Sonarr's fields, `appName`
      `Catasonarr` and as `version` the replaced Sonarr's (`4.0.20.0`), so the clients' version checks pass. Its own
      **UI in Catapulsar's style**. Series data from **TheTVDB and TMDB** (Sonarr's own metadata service is meant
-     for Sonarr). **Torrents only** (Torznab through Prowlarr; qBittorrent and Transmission). Its release-name
+     for Sonarr; decision 112 takes TVmaze instead of TheTVDB). **Torrents only** (Torznab through Prowlarr; qBittorrent and Transmission). Its release-name
      parser is **translated from Sonarr's**, so **the module is GPL-3.0** (`apps/catasonarr/LICENSE`); the rest of
      the repository is not affected. Sonarr keeps running next to it until Catasonarr does what is used, and
      Sonarr's database is imported. First phase: series and episodes, automatic downloads, import and rename,
@@ -1593,3 +1606,45 @@ Catasonarr (2026-11-21):
      for the other four apps. Its URL comes only from `CATASONARR_URL` (default `http://catasonarr:8086`, in
      Catavigia's ConfigMap), like Catapulsar's: it is not in Catapulsar's Settings → Connections. In the list of
      watched apps it comes after Catametricas and before Catapulsar, the start order.
+
+112. **Catasonarr phase 1: series and episodes.** What Sonarr's clients and its own page need to keep series:
+     `/api/v3/series` (list, lookup, add, edit, delete), `episode` (list, edit, monitor), `rootfolder`,
+     `qualityprofile`, `qualitydefinition`, `customformat`, `tag`, `command`, `language` and `languageprofile`,
+     with Sonarr 4's fields and ids (integers, from counters in `catasonarr_sequences`), so Overseerr and Jellyseerr
+     add series as they do in Sonarr. Translated from Sonarr's own code (GPL, decision 109): the monitoring rules
+     when a series is added (`EpisodeMonitoredService`), the folder names (`FileNameBuilder`), the default
+     qualities, sizes and the six default profiles. **Series data from TVmaze** (free, no key; CC BY-SA, credited in
+     the page's footer), not TheTVDB, which asks to be paid for: TVmaze finds series by TheTVDB's id, which the
+     clients send, and gives episodes, specials (season 0, numbered by air date) and other titles; calls are spaced
+     (at most 20 every 10 s, TVmaze's limit). **TMDB helps** when its API Read Access Token is in the Secret
+     `catasonarr-tmdb` (`catasonarr-secret.sh tmdb`, asked with `read -s`): the poster, fan art and banner, and the
+     summary in pt-PT; without the token, or when TMDB fails, TVmaze's stay. Pictures are TVmaze's and TMDB's URLs,
+     not copies. **Refresh every 12 hours** (`@Scheduled`, the first 10 minutes after start, as Sonarr): only the
+     series TVmaze changed in the last week, or not refreshed for a week; episodes are replaced, added or removed,
+     and the monitoring kept; `RefreshSeries` does it by hand. **The NAS as Sonarr mounts it**: `/data` is
+     `192.168.86.50:/volume1/Media` and `/downloads` `192.168.86.50:/volumeUSB4/usbshare`, static NFS volumes
+     (Retain), and the pod runs as **user and group 1000**, as Sonarr's PUID/PGID, through its own service account
+     with the SCC `nonroot-v2`; so the root folders and the series' paths are the same as Sonarr's. **Root folders
+     are configurable** (page and API, with Sonarr's checks). **Delete with `deleteFiles=true` deletes the series'
+     folder**, as Sonarr, and only inside a root folder; while Sonarr runs next to it on the same NAS, that is
+     Sonarr's folder too. **Everything about quality comes from Sonarr's database**: `catasonarr-import-sonarr.sh`
+     runs on the Mac on a copy of `sonarr.db` (only read, with macOS's `sqlite3`), and sends the definitions,
+     custom formats, profiles and the folder naming to `POST /api/v3/catasonarr/import/sonarr-quality` (not part of
+     Sonarr's API) with the API key; Sonarr's ids are kept, so the series imported later point at the same
+     profiles. **Commands** are kept 7 days and run one at a time on a virtual thread; until phase 2, the searches
+     (`SeriesSearch`, `SeasonSearch`, `EpisodeSearch`, `MissingEpisodeSearch`) and `RescanSeries` are accepted,
+     recorded and end *unsuccessful* ("Catasonarr does not search yet"), so adding a series with "search on add"
+     works for the clients. The **page** (series, add, detail with seasons and episodes, settings) calls the same
+     `/api/v3` with the Dex session: `/api/v3` takes the API key when a request carries one (`X-Api-Key` or
+     `?apikey=`), and the session, with CSRF, when it does not. Every change is an event
+     (`com.catacumbas69.catasonarr.<series|episode|rootfolder|qualityprofile|qualitydefinition|customformat|tag|command|import>.<action>.v1`).
+     The page's HTML, CSS and JavaScript are linted and formatted in `mvn verify` as Catapulsar's (G-22 closed).
+
+113. **The alert brings the app's page.** A `service.down` alert's details carry `pageUrl`, the public address of
+     the app's own page, when Catavigia has one for that app (`catavigia.apps.page-urls.<app>`; Catasonarr's is
+     `CATASONARR_PAGE_URL`, default `https://catasonarr.catacumbas69.com`, in Catavigia's ConfigMap). Catapulsar's
+     action button then reads **Open <app>** and opens that address in a new tab (`noopener`), instead of Settings →
+     Connections, where Catasonarr is not. **Catapulsar knows no app by name**: a new app gets the button with one
+     line of Catavigia's configuration, and none in Catapulsar. Catavigia keeps the address, not the app, because
+     a down app may not answer. Only `http://` and `https://` count, in both. The other apps have none for now:
+     their button still opens Connections, where their URL is changed.

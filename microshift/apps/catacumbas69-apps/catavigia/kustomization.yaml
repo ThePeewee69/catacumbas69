@@ -10,4 +10,4 @@ resources:
   - catavigia-route.yaml
 images:
   - name: registry.catacumbas69.com/catavigia
-    newTag: "0.1.0-SNAPSHOT-c745773"
+    newTag: "0.1.0-SNAPSHOT-dec07e6"

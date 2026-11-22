@@ -27,8 +27,10 @@ import org.springframework.util.StringUtils;
 /**
  * Two ways in (orch.md decision 109):
  * <ul>
- *   <li>Sonarr's API v3 ({@code /api/v3/**}) takes Sonarr's API key, in {@code X-Api-Key} or {@code ?apikey=}, as
- *       Prowlarr, Bazarr, Overseerr, Jellyseerr and Homarr send it: no session, no CSRF, {@code 401} without it;</li>
+ *   <li>Sonarr's API v3 ({@code /api/v3/**}) with Sonarr's API key, in {@code X-Api-Key} or {@code ?apikey=}, as
+ *       Prowlarr, Bazarr, Overseerr, Jellyseerr and Homarr send it: no session, no CSRF, {@code 401} with a wrong
+ *       key. A request to {@code /api/v3} without a key goes to the second chain: the page uses the API v3 with its
+ *       Dex session and the CSRF token, as Sonarr's own page uses it (orch.md decision 112);</li>
  *   <li>everything else is the page and Catasonarr's own API, with the login through Dex as in Catapulsar (SEC-2):
  *       {@code /api/**} answers {@code 401}, pages go to Dex, changes need the CSRF token from the
  *       {@code XSRF-TOKEN} cookie, and signing out ends Dex's session too. The health probes, the Prometheus scrape
@@ -46,12 +48,18 @@ public class SecurityConfig {
     /** The registration id, also the last segment of the redirect URI registered in Dex. */
     static final String REGISTRATION_ID = "dex";
 
+    /** Sonarr's API v3 called with a key: the first chain. Without a key it is the page's, with its session. */
+    private static final RequestMatcher API_KEY = request ->
+            request.getRequestURI().startsWith(request.getContextPath() + "/api/v3/")
+                    && (StringUtils.hasText(request.getHeader(ApiKeyAuthenticationFilter.HEADER))
+                    || StringUtils.hasText(request.getParameter(ApiKeyAuthenticationFilter.PARAMETER)));
+
     /** Catasonarr's own JSON API: without a session it answers 401, where a page would be sent to Dex. */
     private static final RequestMatcher API =
             request -> request.getRequestURI().startsWith(request.getContextPath() + "/api/");
 
     /**
-     * Sonarr's API v3, with the API key. Checked first.
+     * Sonarr's API v3 called with a key. Checked first.
      *
      * @param http the builder
      * @param auth the API key
@@ -66,7 +74,7 @@ public class SecurityConfig {
                     + " (Secret catasonarr-api-key), or run with the profile no-auth");
         }
         http
-                .securityMatcher("/api/v3/**")
+                .securityMatcher(API_KEY)
                 .authorizeHttpRequests(authz -> authz.anyRequest().authenticated())
                 .addFilterBefore(new ApiKeyAuthenticationFilter(auth.apiKey()), AnonymousAuthenticationFilter.class)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

@@ -1,0 +1,77 @@
+# The NAS, mounted as Sonarr mounts it in K3s (apps/media/sonarr), so root folders and paths are the same
+# (orch.md decision 112): /data is 192.168.86.50:/volume1/Media, /downloads is 192.168.86.50:/volumeUSB4/usbshare.
+# Static NFS volumes, each bound to its claim by claimRef. The NAS must allow meloes in each share's NFS permissions
+# (read/write), and meloes needs nfs-utils. Retain: deleting these objects never touches the NAS.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: catasonarr-media
+spec:
+  capacity:
+    storage: 40Ti
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: catacumbas69-apps
+    name: catasonarr-media
+  nfs:
+    server: 192.168.86.50
+    path: /volume1/Media
+  mountOptions:
+    - nfsvers=4.0
+    - rsize=1048576
+    - wsize=1048576
+    - noatime
+    - hard
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: catasonarr-media
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ""
+  volumeName: catasonarr-media
+  resources:
+    requests:
+      storage: 40Ti
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: catasonarr-downloads
+spec:
+  capacity:
+    storage: 1Ti
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: catacumbas69-apps
+    name: catasonarr-downloads
+  nfs:
+    server: 192.168.86.50
+    path: /volumeUSB4/usbshare
+  mountOptions:
+    - nfsvers=4.0
+    - rsize=1048576
+    - wsize=1048576
+    - noatime
+    - hard
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: catasonarr-downloads
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ""
+  volumeName: catasonarr-downloads
+  resources:
+    requests:
+      storage: 1Ti

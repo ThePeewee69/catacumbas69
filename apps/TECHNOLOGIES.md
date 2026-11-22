@@ -21,6 +21,9 @@ brackets is the one seen running on the date given.
 | Lombok | managed by Spring Boot | `apps/cataponte/pom.xml` | Boilerplate in a few of Cataponte's classes |
 | catacommons | the repository's version | `apps/catacommons/pom.xml` | Shared library: CloudEvents, publisher, provisioning, settings, consumer control |
 | CloudEvents | 1.0 (JSON, our own envelope) | `catacommons` | Every event (§4.4, ADR 0008) |
+| TVmaze API | public REST, no key | `catasonarr.metadata.tvmaze-url` in `apps/catasonarr/src/main/resources/application.properties` | Catasonarr's series, episodes and other titles (decision 112); CC BY-SA, credited in its page |
+| TMDB API | v3, API Read Access Token | `catasonarr.metadata.tmdb-url` (same file); Secret `catasonarr-tmdb` | Catasonarr's pictures and pt-PT summaries, optional (decision 112) |
+| JDK `HttpClient` (Spring `RestClient`) | Java 21 | `CoreConfig` in `apps/catasonarr` | Catasonarr's calls to TVmaze and TMDB, following TVmaze's redirects |
 | Spring Boot structured logging | ECS | `LOGGING_STRUCTURED_FORMAT_CONSOLE` in each app's ConfigMap | JSON logs on stdout (OBS-3) |
 
 ## Frontend (Catapulsar)
@@ -68,8 +71,8 @@ brackets is the one seen running on the date given.
 | Testcontainers | managed by Spring Boot | each `pom.xml` | Integration tests (`*IT`) against real Pulsar 4.2.2 and MongoDB 7.0 (decision 91) |
 | Playwright for Java | 1.63.0 | `playwright.version` in `apps/catapulsar/pom.xml` | Catapulsar's UI smoke test (decision 93) |
 | Checkstyle | 10.18.2 | `checkstyle.version` in each `pom.xml` | Java style in `mvn verify` |
-| Node.js | v26.13.1 | `node.version` in `apps/catapulsar/pom.xml` (frontend-maven-plugin) | Runs the frontend linters in `mvn verify` |
-| ESLint, Stylelint, html-validate, Prettier | 10.15.0, 18.0.0, 11.21.1, 3.10.1 | `apps/catapulsar/package.json` | JS, CSS and HTML lint and format (§3.7) |
+| Node.js | v26.13.1 | `node.version` in `apps/catapulsar/pom.xml` and `apps/catasonarr/pom.xml` (frontend-maven-plugin) | Runs the frontend linters in `mvn verify` |
+| ESLint, Stylelint, html-validate, Prettier | 10.15.0, 18.0.0, 11.21.1, 3.10.1 | `apps/catapulsar/package.json`, `apps/catasonarr/package.json` | JS, CSS and HTML lint and format (§3.7), for both pages |
 | Podman (Podman Desktop) | 5.8 | the Mac | Builds and pushes the images (`apps/build/push.sh`) |
 | GitHub Actions | — | `.github/workflows/` | `apps` (`mvn verify`, Temurin 21), `manifests`, `scripts` (decision 88) |
 | kustomize, kubeconform | 5.8.3, 0.8.0 | `.github/scripts/install-manifest-tools.sh` | Building and validating every manifest in `microshift/` |
