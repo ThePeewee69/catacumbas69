@@ -1672,6 +1672,8 @@ Catasonarr (2026-11-21):
      (2005)`) putting that year's series first. Each row can take another result or search again; a bar sets the
      monitoring and the quality profile of every row, and each row can change them. Ticked rows are added one by one
      with `POST /api/v3/series` and the folder's own path, without searching. Searches stop when the page changes.
+     **Refresh** reads the folders on the NAS again: folders imported since (here or by a client) leave, new ones
+     come in and are searched, and the rows already listed keep their match and choices without asking TVmaze again.
      **The look**: lavender greys, light grey rounded cards with soft shadows, pills in the top bar and one deep
      violet accent (buttons, progress, the word in the top bar), different from Catapulsar's dark one; only the
      **logo** keeps its colours (cyan, violet, pink, amber) on light lavender. The logo joins the three ideas asked

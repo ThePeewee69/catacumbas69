@@ -48,7 +48,8 @@ the summary in pt-PT. Every series is refreshed every 12 hours (only those TVmaz
 **Import library** (the page's *Import library*, decision 115): as Sonarr's Library Import, the folders of a root
 folder that are no series yet, matched in TVmaze by name and year (`The Office (2005)`) or by an id in the name
 (`{tvdb-79168}`); check the matches, change the wrong ones, set monitoring and profile, and import. Nothing is
-searched for when importing.
+searched for when importing. **Refresh** reads the NAS again: what was imported leaves, new folders come in, and
+the rows already there keep their choices.
 
 **Import from Sonarr**: everything about quality and the folder naming, from the `sonarr.db` of a Sonarr backup
 (System → Backup → Backup Now, then unzip), on the Mac:

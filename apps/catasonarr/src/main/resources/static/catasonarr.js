@@ -435,6 +435,7 @@ async function importPage() {
       count();
     };
     item.search = async (term) => {
+      item.searching = true;
       state.textContent = 'Searching TVmaze…';
       try {
         item.results = (await api('GET', `/api/v3/series/lookup?term=${encodeURIComponent(term)}`)).filter(
@@ -452,6 +453,7 @@ async function importPage() {
         state.textContent = e.message;
       }
       item.searched = true;
+      item.searching = false;
       show();
     };
     choice.addEventListener('change', show);
@@ -475,16 +477,34 @@ async function importPage() {
     return item;
   };
 
-  const load = async () => {
+  let pass = 0;
+  /**
+   * Reads the root folder's folders that are no series yet, from the NAS. Rows already listed keep their match and
+   * choices; folders imported since (or gone) leave; new ones are searched, one after another.
+   *
+   * @param {boolean} [refresh] whether it is the Refresh button, which says what changed
+   */
+  const load = async (refresh = false) => {
+    pass += 1;
+    const mineToo = pass;
     const folder = await api('GET', `/api/v3/rootfolder/${rootPick.value}`);
-    rows = (folder.unmappedFolders || []).map(row);
+    const known = new Map(rows.filter((r) => !r.done).map((r) => [r.folder.path, r]));
+    const before = rows.length;
+    rows = (folder.unmappedFolders || []).map((f) => known.get(f.path) || row(f));
+    const added = rows.filter((r) => !known.has(r.folder.path)).length;
     body.replaceChildren(...rows.map((r) => r.tr));
     count();
+    if (refresh) {
+      const left = before - (rows.length - added);
+      toast(`${added} new folder(s), ${left} no longer to import, ${rows.length} to import`);
+    }
     for (const r of rows) {
-      if (generation !== mine || !r.tr.isConnected) {
-        return; // another page or another root folder: stop searching
+      if (generation !== mine || pass !== mineToo) {
+        return; // another page, another root folder or a refresh: that one searches now
       }
-      await r.search(r.folder.name);
+      if (!r.searched && !r.searching) {
+        await r.search(r.folder.name);
+      }
     }
   };
 
@@ -526,7 +546,10 @@ async function importPage() {
   });
   allMonitor.addEventListener('change', () => rows.forEach((r) => (r.monitor.value = allMonitor.value)));
   allProfile.addEventListener('change', () => rows.forEach((r) => (r.profile.value = allProfile.value)));
-  rootPick.addEventListener('change', load);
+  rootPick.addEventListener('change', () => {
+    rows = [];
+    load();
+  });
 
   page.replaceChildren(
     el('div', { className: 'page-head' }, [
@@ -542,6 +565,12 @@ async function importPage() {
       el('label', { className: 'inline' }, ['Monitor ', allMonitor]),
       el('label', { className: 'inline' }, ['Profile ', allProfile]),
       summary,
+      el('button', {
+        type: 'button',
+        textContent: 'Refresh',
+        title: 'Read the folders on the NAS again: what was imported leaves, new folders come in',
+        onclick: () => load(true),
+      }),
       importButton,
     ]),
     el('table', { className: 'import' }, [
