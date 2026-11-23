@@ -1,27 +1,25 @@
-/* Catasonarr's pages (orch.md decisions 109, 112 and 115): light lavender, in the colours of its logo. */
+/* Catasonarr's pages (orch.md decisions 109, 112 and 115): lavender greys with one deep violet accent. */
 
 /* ══ Base ══ */
 :root {
-  --bg: #f5f3ff;
-  --bar: rgb(255 255 255 / 80%);
-  --panel: #fff;
-  --panel-soft: #faf8ff;
-  --border: #e4defc;
-  --border-strong: #c9bdf7;
-  --accent: #7c3aed;
-  --accent-soft: #ede9fe;
-  --pink: #db2777;
-  --cyan: #0891b2;
-  --amber: #d97706;
-  --text: #1e1b4b;
-  --muted: #6b6894;
+  --bg: #d2d0da;
+  --bar: rgb(225 223 232 / 90%);
+  --panel: #eae8ef;
+  --panel-soft: #e0dee7;
+  --border: #c4c0d0;
+  --border-strong: #aaa5bc;
+  --accent: #5b21b6;
+  --accent-dark: #4c1d95;
+  --accent-soft: #d6d0e8;
+  --text: #1f1d2e;
+  --muted: #5d5a70;
   --success: #059669;
   --success-soft: #d1fae5;
   --danger: #e11d48;
   --danger-soft: #ffe4e6;
-  --brand: linear-gradient(90deg, #0891b2, #7c3aed 40%, #db2777 75%, #d97706);
-  --shadow: 0 1px 2px rgb(76 29 149 / 6%), 0 8px 24px rgb(76 29 149 / 8%);
-  --shadow-lift: 0 2px 4px rgb(76 29 149 / 8%), 0 16px 32px rgb(76 29 149 / 14%);
+  --brand: linear-gradient(90deg, #4c1d95, #6d28d9);
+  --shadow: 0 1px 2px rgb(31 29 46 / 8%), 0 8px 24px rgb(31 29 46 / 10%);
+  --shadow-lift: 0 2px 4px rgb(31 29 46 / 10%), 0 16px 32px rgb(31 29 46 / 18%);
   --radius: 14px;
 }
 
@@ -39,9 +37,7 @@ body {
   font-size: 14px;
   line-height: 1.5;
   color: var(--text);
-  background:
-    radial-gradient(1200px 500px at 15% -10%, #e9e4ff 0%, transparent 60%),
-    radial-gradient(900px 400px at 100% 0%, #fce7f3 0%, transparent 55%), var(--bg);
+  background: radial-gradient(1200px 500px at 15% -10%, #cbc6dd 0%, transparent 60%), var(--bg);
   background-attachment: fixed;
 }
 
@@ -88,12 +84,13 @@ button:disabled {
 
 button.primary {
   color: #fff;
-  background: linear-gradient(135deg, #7c3aed, #db2777);
+  background: var(--accent);
   border-color: transparent;
   font-weight: 600;
 }
 
 button.primary:hover {
+  background: var(--accent-dark);
   transform: translateY(-1px);
   box-shadow: var(--shadow-lift);
 }
@@ -156,7 +153,7 @@ input[type='checkbox'] {
 }
 
 .brand-cata {
-  color: #4c1d95;
+  color: var(--text);
   font-weight: 300;
 }
 
@@ -284,7 +281,7 @@ input[type='checkbox'] {
   width: 100%;
   aspect-ratio: 2 / 3;
   object-fit: cover;
-  background: linear-gradient(160deg, #ede9fe, #fce7f3);
+  background: linear-gradient(160deg, #d0cbe0, #c9c4d8);
 }
 
 .card-body {
@@ -462,7 +459,7 @@ table.import td {
   width: 40px;
   height: 60px;
   overflow: hidden;
-  background: linear-gradient(160deg, #ede9fe, #fce7f3);
+  background: linear-gradient(160deg, #d0cbe0, #c9c4d8);
   border-radius: 6px;
 }
 

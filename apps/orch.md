@@ -798,7 +798,8 @@ Closed on 2026-10-30:
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
 - **2026-11-23, import library and the new look** (decision 115): Sonarr's Library Import, matching folders by
-  name, year or id; light lavender pages and Catasonarr's logo and icon; the stray "null" on Add series is gone.
+  name, year or id; pages in lavender greys with one deep violet, and Catasonarr's logo and icon; the stray "null"
+  on Add series is gone.
 - **2026-11-23, browse for folders** (decision 114): Sonarr's `/api/v3/filesystem` and a Browse button with
   suggestions for the root folders; `catasonarr-import-sonarr.sh` reads a temporary copy, so Sonarr's WAL database
   opens (copy it from Sonarr's own backup).
@@ -1671,9 +1672,11 @@ Catasonarr (2026-11-21):
      (2005)`) putting that year's series first. Each row can take another result or search again; a bar sets the
      monitoring and the quality profile of every row, and each row can change them. Ticked rows are added one by one
      with `POST /api/v3/series` and the folder's own path, without searching. Searches stop when the page changes.
-     **The look**: light lavender, white rounded cards with soft shadows, pills in the top bar, in the colours of its
-     **logo** (cyan, violet, pink, amber), different from Catapulsar's dark one. The logo joins the three ideas
-     asked for: Catapulsar's pulse runs into an old TV whose screen is a sonar, its echo a play button, with sonar
-     waves above and episodes stacked behind; the word **catasonarr**, "cata" light and "sonarr" in the colours, has
-     a sonar for its "o". `catasonarr-icon.svg` (top bar, tab; `favicon.png` and `apple-touch-icon.png` from it) and
-     `catasonarr-logo.svg` (an empty library), letters as outlines of Poppins (OFL), so they look the same everywhere.
+     **The look**: lavender greys, light grey rounded cards with soft shadows, pills in the top bar and one deep
+     violet accent (buttons, progress, the word in the top bar), different from Catapulsar's dark one; only the
+     **logo** keeps its colours (cyan, violet, pink, amber) on light lavender. The logo joins the three ideas asked
+     for: Catapulsar's pulse runs into an old TV whose screen is a sonar, its echo a play button, with sonar waves
+     above and episodes stacked behind; the word **catasonarr**, "cata" light and "sonarr" in the colours, has a
+     sonar for its "o".
+     `catasonarr-icon.svg` (top bar, tab; `favicon.png` and `apple-touch-icon.png` from it) and `catasonarr-logo.svg`
+     (an empty library), letters as outlines of Poppins (OFL), so they look the same everywhere.
