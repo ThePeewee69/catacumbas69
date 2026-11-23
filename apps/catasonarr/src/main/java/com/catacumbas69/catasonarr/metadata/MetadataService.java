@@ -4,6 +4,7 @@ import com.catacumbas69.catasonarr.config.CatasonarrProperties;
 import com.catacumbas69.catasonarr.model.MediaCover;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -43,8 +44,10 @@ public class MetadataService {
 
     /**
      * Sonarr's {@code series/lookup}: {@code tvdb:<id>} and {@code imdb:<id>} find one series, with its episodes (so
-     * its seasons) and TMDB's images; anything else is a search by name, without episodes. Series TVmaze has no
-     * TheTVDB id for are left out: Sonarr's clients add series by that id.
+     * its seasons) and TMDB's images; anything else is a search by name, without episodes. A folder's name works too
+     * (the library import, decision 115): an id in it ({@code {tvdb-79168}}) finds that series, and a year at its end
+     * ({@code The Office (2005)}) puts the series of that year first. Series TVmaze has no TheTVDB id for are left
+     * out: Sonarr's clients add series by that id.
      *
      * @param term what was typed
      * @return the series found
@@ -60,15 +63,27 @@ public class MetadataService {
             return tvmaze.lookupImdb(t.substring(5).strip()).map(this::full).filter(s -> s.tvdbId() > 0)
                     .map(List::of).orElse(List.of());
         }
-        if (t.isEmpty()) {
+        FolderTerm folder = FolderTerm.parse(t);
+        if (folder.tvdbId() != null) {
+            return byTvdb(folder.tvdbId()).map(List::of).orElse(List.of());
+        }
+        if (folder.imdbId() != null) {
+            return tvmaze.lookupImdb(folder.imdbId()).map(this::full).filter(s -> s.tvdbId() > 0)
+                    .map(List::of).orElse(List.of());
+        }
+        if (folder.title().isEmpty()) {
             return List.of();
         }
         List<SeriesInfo> found = new ArrayList<>();
-        for (JsonNode show : tvmaze.search(t)) {
+        for (JsonNode show : tvmaze.search(folder.title())) {
             SeriesInfo info = TvMazeMapper.show(show);
             if (info.tvdbId() > 0) {
                 found.add(info);
             }
+        }
+        if (folder.year() != null) {
+            int year = folder.year();
+            found.sort(Comparator.comparing(s -> s.year() != year)); // the year asked first, TVmaze's order kept
         }
         return found;
     }

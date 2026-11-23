@@ -195,7 +195,7 @@ public class RootFolderService {
     private static List<Path> unmapped(Path root, Set<Path> seriesPaths) {
         try (Stream<Path> children = Files.list(root)) {
             return children.filter(Files::isDirectory)
-                    .filter(c -> !c.getFileName().toString().startsWith("."))
+                    .filter(c -> !FileSystemLookup.hidden(c.getFileName().toString()))
                     .filter(c -> !seriesPaths.contains(c.normalize()))
                     .sorted()
                     .toList();

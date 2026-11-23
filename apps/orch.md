@@ -797,6 +797,11 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-23, import library and the new look** (decision 115): Sonarr's Library Import, matching folders by
+  name, year or id; light lavender pages and Catasonarr's logo and icon; the stray "null" on Add series is gone.
+- **2026-11-23, browse for folders** (decision 114): Sonarr's `/api/v3/filesystem` and a Browse button with
+  suggestions for the root folders; `catasonarr-import-sonarr.sh` reads a temporary copy, so Sonarr's WAL database
+  opens (copy it from Sonarr's own backup).
 - **2026-11-22, the alert brings the app's page** (decision 113): Catasonarr's `service.down` opens its page from
   Catapulsar, which still knows no app by name; `ProvisioningIT` of Catasonarr reads the readiness as JSON
   (no unchecked warning).
@@ -1648,3 +1653,27 @@ Catasonarr (2026-11-21):
      line of Catavigia's configuration, and none in Catapulsar. Catavigia keeps the address, not the app, because
      a down app may not answer. Only `http://` and `https://` count, in both. The other apps have none for now:
      their button still opens Connections, where their URL is changed.
+
+114. **Browse for folders.** Catasonarr answers Sonarr's `GET /api/v3/filesystem` (`path`, `includeFiles`,
+     `allowFoldersWithoutTrailingSlashes`) and `GET /api/v3/filesystem/type`, translated from Sonarr's
+     `FileSystemLookupService`: what is typed up to its last `/` is the folder listed, folders end with `/`, and
+     **the whole file system of the pod** can be browsed, as in Sonarr (reads only; behind the API key or the Dex
+     session like the rest of `/api/v3`). **Hidden**: Sonarr's list of system folders (Synology's `#recycle` and
+     `@eaDir`, QNAP's, macOS' and Windows') and every name that starts with a dot; the same names are left out of a
+     root folder's unmapped folders. The page's root folder field has **both**: a **Browse…** button that opens a
+     window of folders (click to go in, `..` to go up, Select puts the folder in the field) and suggestions of the
+     folders below what is typed. Sonarr's `/filesystem/mediafiles` comes with the import of downloads (phase 3).
+
+115. **Import library, and Catasonarr's own look.** **Import library** (`#/import`) does what Sonarr's Library
+     Import does: a root folder's folders that are no series yet are listed at once and matched in TVmaze one after
+     another, through `series/lookup`, which now reads a folder's name (`FolderTerm`): an id in it wins
+     (`{tvdb-79168}`, `[tvdbid-…]`, `{imdb-tt…}`), otherwise the title, with the year at its end (`The Office
+     (2005)`) putting that year's series first. Each row can take another result or search again; a bar sets the
+     monitoring and the quality profile of every row, and each row can change them. Ticked rows are added one by one
+     with `POST /api/v3/series` and the folder's own path, without searching. Searches stop when the page changes.
+     **The look**: light lavender, white rounded cards with soft shadows, pills in the top bar, in the colours of its
+     **logo** (cyan, violet, pink, amber), different from Catapulsar's dark one. The logo joins the three ideas
+     asked for: Catapulsar's pulse runs into an old TV whose screen is a sonar, its echo a play button, with sonar
+     waves above and episodes stacked behind; the word **catasonarr**, "cata" light and "sonarr" in the colours, has
+     a sonar for its "o". `catasonarr-icon.svg` (top bar, tab; `favicon.png` and `apple-touch-icon.png` from it) and
+     `catasonarr-logo.svg` (an empty library), letters as outlines of Poppins (OFL), so they look the same everywhere.

@@ -8,7 +8,8 @@ topic, `catacumbas69/catasonarr/events`, which Cataudit stores (and any other ap
 **This module is GPL-3.0** ([`LICENSE`](LICENSE)): its release-name parser is translated from Sonarr's, which is
 GPL-3.0. The rest of the repository keeps its own licence.
 
-Engineering rules: [`../orch.md`](../orch.md). Decisions: orch.md 109 (the app) and 112 (phase 1).
+Engineering rules: [`../orch.md`](../orch.md). Decisions: orch.md 109 (the app), 112 (phase 1), 114 (browse for
+folders) and 115 (import library, look and logo).
 
 ## Status
 
@@ -34,6 +35,7 @@ What phase 1 answers, with Sonarr 4's fields (Swagger UI at `/swagger-ui.html`):
 | `GET/POST /api/v3/series`, `GET/PUT/DELETE /api/v3/series/{id}`, `GET /api/v3/series/lookup?term=` | Series. `lookup` takes words, `tvdb:<id>` or `imdb:<id>`; `DELETE ?deleteFiles=true` deletes the series' folder (only inside a root folder) |
 | `GET /api/v3/episode?seriesId=`, `GET/PUT /api/v3/episode/{id}`, `PUT /api/v3/episode/monitor` | Episodes and their monitoring |
 | `/api/v3/rootfolder` | Root folders, with free space and folders not yet series |
+| `GET /api/v3/filesystem?path=`, `GET /api/v3/filesystem/type?path=` | The folder browser behind **Browse…** (decision 114): the pod's whole file system, as Sonarr's; system folders (`#recycle`, `@eaDir`, …) and dot names hidden |
 | `/api/v3/qualityprofile`, `/api/v3/qualitydefinition`, `/api/v3/customformat` | Quality (also their `schema`) |
 | `/api/v3/tag`, `/api/v3/language`, `/api/v3/languageprofile` | Tags; languages (Sonarr's list; language profiles as Sonarr 4: one, deprecated) |
 | `GET/POST /api/v3/command`, `GET /api/v3/command/{id}` | `RefreshSeries` runs; the searches and `RescanSeries` end *unsuccessful* until phase 2 |
@@ -43,7 +45,13 @@ What phase 1 answers, with Sonarr 4's fields (Swagger UI at `/swagger-ui.html`):
 TheTVDB's id as the clients send it. With a TMDB token, [TMDB](https://www.themoviedb.org) gives the pictures and
 the summary in pt-PT. Every series is refreshed every 12 hours (only those TVmaze changed, or a week old).
 
-**Import from Sonarr**: everything about quality and the folder naming, from a copy of `sonarr.db`, on the Mac:
+**Import library** (the page's *Import library*, decision 115): as Sonarr's Library Import, the folders of a root
+folder that are no series yet, matched in TVmaze by name and year (`The Office (2005)`) or by an id in the name
+(`{tvdb-79168}`); check the matches, change the wrong ones, set monitoring and profile, and import. Nothing is
+searched for when importing.
+
+**Import from Sonarr**: everything about quality and the folder naming, from the `sonarr.db` of a Sonarr backup
+(System → Backup → Backup Now, then unzip), on the Mac:
 
 ```
 bash microshift/apps/catacumbas69-apps/catasonarr/catasonarr-import-sonarr.sh ~/Downloads/sonarr.db

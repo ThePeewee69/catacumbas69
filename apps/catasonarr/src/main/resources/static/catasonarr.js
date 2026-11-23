@@ -1,5 +1,8 @@
-// Catasonarr's pages (orch.md decisions 109 and 112): the series, adding a series, a series with its episodes, and
-// the settings. They use Sonarr's API v3 with the Dex session and the CSRF token, as Sonarr's own page uses it.
+// Catasonarr's pages (orch.md decisions 109, 112, 114 and 115): the series, adding a series, importing the series
+// already on the NAS, a series with its episodes, and the settings. They use Sonarr's API v3 with the Dex session and the CSRF token, as Sonarr's own page uses it.
+
+/** Grows on every page change, so work a page left behind (the import's searches) stops. */
+let generation = 0;
 
 /** The cookie Spring Security writes the CSRF token into (SEC-2). */
 const CSRF_COOKIE = 'XSRF-TOKEN';
@@ -178,7 +181,18 @@ async function seriesPage() {
       el('span', { className: 'muted', textContent: `${series.length} series` }),
       el('button', { type: 'button', textContent: 'Refresh all', onclick: () => refresh() }),
     ]),
-    series.length ? grid : el('p', { className: 'empty', textContent: 'No series yet: add one.' }),
+    series.length
+      ? grid
+      : el('div', { className: 'empty' }, [
+          el('img', { src: 'catasonarr-logo.svg', alt: '' }),
+          el('p', {}, [
+            'No series yet: ',
+            el('a', { href: '#/add', textContent: 'add one' }),
+            ' or ',
+            el('a', { href: '#/import', textContent: 'import the ones on the NAS' }),
+            '.',
+          ]),
+        ]),
   );
 }
 
@@ -217,7 +231,7 @@ async function addPage() {
       input,
       el('button', { type: 'button', className: 'primary', textContent: 'Search', onclick: search }),
     ]),
-    folders.length ? null : el('p', { className: 'muted', textContent: 'Add a root folder in Settings first.' }),
+    ...(folders.length ? [] : [el('p', { className: 'muted', textContent: 'Add a root folder in Settings first.' })]),
     results,
   );
   input.focus();
@@ -320,6 +334,230 @@ function addForm(s, folders, profiles) {
     el('span'),
     el('button', { type: 'button', className: 'primary', textContent: `Add ${s.title}`, onclick: add }),
   ]);
+}
+
+/**
+ * A select with options.
+ *
+ * @param {Array<[string|number, string]>} options value and text of each option
+ * @param {string|number} [value] the one chosen
+ * @param {object} [props] more properties, e.g. aria-label
+ * @returns {HTMLSelectElement} the select
+ */
+function select(options, value, props = {}) {
+  const node = el(
+    'select',
+    props,
+    options.map(([v, t]) => el('option', { value: v, textContent: t })),
+  );
+  if (value !== undefined) {
+    node.value = String(value);
+  }
+  return node;
+}
+
+/**
+ * Imports the series already on the NAS, as Sonarr's Library Import (orch.md decision 115): a root folder's folders
+ * that are no series yet, each matched in TVmaze by its name and year (or the id in its name), one after another;
+ * you check the matches, change what is wrong and import the ones ticked.
+ */
+async function importPage() {
+  const mine = generation;
+  const [folders, profiles] = await Promise.all([
+    api('GET', '/api/v3/rootfolder'),
+    api('GET', '/api/v3/qualityprofile'),
+  ]);
+  if (!folders.length) {
+    page.replaceChildren(
+      el('div', { className: 'empty' }, [
+        el('p', { textContent: 'Add a root folder first, in ' }, [
+          el('a', { href: '#/settings', textContent: 'Settings' }),
+        ]),
+      ]),
+    );
+    return;
+  }
+  const profileOptions = profiles.map((p) => [p.id, p.name]);
+  const rootPick = select(
+    folders.map((f) => [f.id, `${f.path} · ${(f.unmappedFolders || []).length} to import`]),
+    folders[0].id,
+    { 'aria-label': 'Root folder' },
+  );
+  const allMonitor = select(MONITOR_OPTIONS, 'all', { 'aria-label': 'Monitor, for every row' });
+  const allProfile = select(profileOptions, profiles[0] && profiles[0].id, {
+    'aria-label': 'Quality profile, for every row',
+  });
+  const importButton = el('button', { type: 'button', className: 'primary', textContent: 'Import' });
+  const summary = el('span', { className: 'muted' });
+  const body = el('tbody');
+  let rows = [];
+
+  const count = () => {
+    const ready = rows.filter((r) => r.tick.checked && r.match() && !r.done);
+    importButton.textContent = `Import ${ready.length}`;
+    importButton.disabled = ready.length === 0;
+    const found = rows.filter((r) => r.searched).length;
+    summary.textContent = `${rows.length} folders · ${found} searched`;
+  };
+
+  /**
+   * One folder: its match, monitor and profile.
+   *
+   * @param {{name: string, path: string}} folder a folder that is no series yet
+   * @returns {object} the row, with its search
+   */
+  const row = (folder) => {
+    const tick = el('input', { type: 'checkbox', checked: true, 'aria-label': `Import ${folder.name}` });
+    const choice = el('select', { 'aria-label': `Series for ${folder.name}`, hidden: true });
+    const again = el('input', {
+      type: 'search',
+      placeholder: 'Search again',
+      size: 18,
+      'aria-label': `Search again for ${folder.name}`,
+    });
+    const thumb = el('div', { className: 'thumb' });
+    const state = el('span', { className: 'muted', textContent: 'Waiting…' });
+    const monitor = select(MONITOR_OPTIONS, allMonitor.value, { 'aria-label': `Monitor ${folder.name}` });
+    const profile = select(profileOptions, allProfile.value, { 'aria-label': `Quality profile of ${folder.name}` });
+    const item = {
+      folder,
+      tick,
+      monitor,
+      profile,
+      results: [],
+      searched: false,
+      done: false,
+      match: () => item.results[Number(choice.value)] || null,
+    };
+    const show = () => {
+      const m = item.match();
+      thumb.replaceChildren(m && m.remotePoster ? el('img', { src: m.remotePoster, alt: '', loading: 'lazy' }) : '');
+      count();
+    };
+    item.search = async (term) => {
+      state.textContent = 'Searching TVmaze…';
+      try {
+        item.results = (await api('GET', `/api/v3/series/lookup?term=${encodeURIComponent(term)}`)).filter(
+          (s) => !s.id,
+        );
+        choice.replaceChildren(
+          ...item.results.map((s, i) =>
+            el('option', { value: i, textContent: `${s.title}${s.year ? ` (${s.year})` : ''} · ${s.network || ''}` }),
+          ),
+        );
+        choice.hidden = item.results.length === 0;
+        state.textContent = item.results.length ? '' : 'No match: search again';
+        tick.checked = tick.checked && item.results.length > 0;
+      } catch (e) {
+        state.textContent = e.message;
+      }
+      item.searched = true;
+      show();
+    };
+    choice.addEventListener('change', show);
+    tick.addEventListener('change', count);
+    again.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && again.value.trim()) {
+        tick.checked = true;
+        item.search(again.value.trim());
+      }
+    });
+    item.state = state;
+    item.tr = el('tr', {}, [
+      el('td', {}, [tick]),
+      el('td', {}, [el('div', { className: 'folder-name', textContent: folder.name })]),
+      el('td', {}, [
+        el('div', { className: 'match' }, [thumb, el('div', { className: 'match-pick' }, [choice, state, again])]),
+      ]),
+      el('td', {}, [monitor]),
+      el('td', {}, [profile]),
+    ]);
+    return item;
+  };
+
+  const load = async () => {
+    const folder = await api('GET', `/api/v3/rootfolder/${rootPick.value}`);
+    rows = (folder.unmappedFolders || []).map(row);
+    body.replaceChildren(...rows.map((r) => r.tr));
+    count();
+    for (const r of rows) {
+      if (generation !== mine || !r.tr.isConnected) {
+        return; // another page or another root folder: stop searching
+      }
+      await r.search(r.folder.name);
+    }
+  };
+
+  importButton.addEventListener('click', async () => {
+    const ready = rows.filter((r) => r.tick.checked && r.match() && !r.done);
+    importButton.disabled = true;
+    let imported = 0;
+    for (const r of ready) {
+      const s = r.match();
+      r.state.textContent = 'Importing…';
+      try {
+        await api('POST', '/api/v3/series', {
+          tvdbId: s.tvdbId,
+          title: s.title,
+          qualityProfileId: Number(r.profile.value),
+          path: r.folder.path,
+          monitored: r.monitor.value !== 'none',
+          seasonFolder: true,
+          seriesType: 'standard',
+          monitorNewItems: 'all',
+          addOptions: {
+            monitor: r.monitor.value,
+            searchForMissingEpisodes: false,
+            searchForCutoffUnmetEpisodes: false,
+          },
+        });
+        r.done = true;
+        r.tick.checked = false;
+        r.tick.disabled = true;
+        r.tr.classList.add('imported');
+        r.state.textContent = 'Imported';
+        imported += 1;
+      } catch (e) {
+        r.state.textContent = e.message;
+      }
+      count();
+    }
+    toast(`${imported} of ${ready.length} series imported`, imported < ready.length);
+  });
+  allMonitor.addEventListener('change', () => rows.forEach((r) => (r.monitor.value = allMonitor.value)));
+  allProfile.addEventListener('change', () => rows.forEach((r) => (r.profile.value = allProfile.value)));
+  rootPick.addEventListener('change', load);
+
+  page.replaceChildren(
+    el('div', { className: 'page-head' }, [
+      el('h2', { textContent: 'Import library' }),
+      el('p', {
+        className: 'muted',
+        textContent:
+          'The folders of a root folder that are no series yet, matched in TVmaze by name and year. Check the matches, then import.',
+      }),
+    ]),
+    el('div', { className: 'toolbar panel' }, [
+      rootPick,
+      el('label', { className: 'inline' }, ['Monitor ', allMonitor]),
+      el('label', { className: 'inline' }, ['Profile ', allProfile]),
+      summary,
+      importButton,
+    ]),
+    el('table', { className: 'import' }, [
+      el('thead', {}, [
+        el('tr', {}, [
+          el('th', { textContent: '' }),
+          el('th', { textContent: 'Folder' }),
+          el('th', { textContent: 'Series' }),
+          el('th', { textContent: 'Monitor' }),
+          el('th', { textContent: 'Quality profile' }),
+        ]),
+      ]),
+      body,
+    ]),
+  );
+  await load();
 }
 
 /**
@@ -505,6 +743,87 @@ async function remove(s, deleteFiles) {
   }
 }
 
+/**
+ * What a folder holds, from Catasonarr's folder browser (Sonarr's /api/v3/filesystem, orch.md decision 114).
+ *
+ * @param {string} path the folder, ending with /; or what is typed, whose folder is the text up to its last /
+ * @returns {Promise<{parent: string, directories: Array<{name: string, path: string}>}>} the folder's contents
+ */
+function folderContents(path) {
+  return api('GET', `/api/v3/filesystem?${new URLSearchParams({ path })}`);
+}
+
+/**
+ * Suggests, as it is typed, the folders below what a path field holds.
+ *
+ * @param {HTMLInputElement} input the field, with an id
+ * @returns {HTMLDataListElement} the suggestions, to put in the page next to the field
+ */
+function suggestFolders(input) {
+  const list = el('datalist', { id: `${input.id}-suggestions` });
+  input.setAttribute('list', list.id);
+  let timer;
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      try {
+        const contents = await folderContents(input.value);
+        list.replaceChildren(...contents.directories.map((d) => el('option', { value: d.path })));
+      } catch {
+        list.replaceChildren();
+      }
+    }, 250);
+  });
+  return list;
+}
+
+/**
+ * Opens the folder browser at what the field holds (or /); Select puts the chosen folder in the field.
+ *
+ * @param {HTMLInputElement} input the path field
+ */
+function browseFolders(input) {
+  const where = el('p', { className: 'browser-path' });
+  const list = el('ul', { className: 'browser-list' });
+  const dialog = el('dialog', { className: 'browser', 'aria-label': 'Choose a folder' });
+  let folder = '/';
+  const show = async (path) => {
+    try {
+      const contents = await folderContents(path);
+      folder = path;
+      where.textContent = folder;
+      const up = contents.parent
+        ? [el('li', {}, [el('button', { type: 'button', textContent: '..', onclick: () => show(contents.parent) })])]
+        : [];
+      const down = contents.directories.map((d) =>
+        el('li', {}, [el('button', { type: 'button', textContent: d.name, onclick: () => show(d.path) })]),
+      );
+      const none = down.length ? [] : [el('li', { className: 'muted', textContent: 'No folders here.' })];
+      list.replaceChildren(...up, ...down, ...none);
+    } catch (e) {
+      toast(e.message, true);
+    }
+  };
+  const select = () => {
+    input.value = folder.length > 1 ? folder.replace(/\/$/, '') : folder;
+    dialog.close();
+  };
+  dialog.append(
+    el('h2', { textContent: 'Choose a folder' }),
+    where,
+    list,
+    el('div', { className: 'browser-actions' }, [
+      el('button', { type: 'button', textContent: 'Cancel', onclick: () => dialog.close() }),
+      el('button', { type: 'button', className: 'primary', textContent: 'Select', onclick: select }),
+    ]),
+  );
+  dialog.addEventListener('close', () => dialog.remove());
+  document.body.append(dialog);
+  dialog.showModal();
+  const typed = input.value.trim();
+  show(typed ? `${typed.replace(/\/+$/, '')}/` : '/');
+}
+
 /** Root folders, quality profiles and tags. */
 async function settingsPage() {
   const [folders, profiles, tags] = await Promise.all([
@@ -512,7 +831,13 @@ async function settingsPage() {
     api('GET', '/api/v3/qualityprofile'),
     api('GET', '/api/v3/tag'),
   ]);
-  const path = el('input', { placeholder: '/data/TV', size: 30, 'aria-label': 'Root folder path' });
+  const path = el('input', {
+    id: 'root-folder-path',
+    placeholder: '/data/Series',
+    size: 30,
+    autocomplete: 'off',
+    'aria-label': 'Root folder path',
+  });
   const addFolder = async () => {
     try {
       await api('POST', '/api/v3/rootfolder', { path: path.value.trim() });
@@ -565,6 +890,8 @@ async function settingsPage() {
       ]),
       el('div', { className: 'toolbar' }, [
         path,
+        suggestFolders(path),
+        el('button', { type: 'button', textContent: 'Browse…', onclick: () => browseFolders(path) }),
         el('button', { type: 'button', textContent: 'Add root folder', onclick: addFolder }),
       ]),
     ]),
@@ -600,9 +927,10 @@ async function settingsPage() {
 
 /** Draws the page the address asks for. */
 async function route() {
+  generation += 1;
   const hash = window.location.hash || '#/';
   const detail = hash.match(/^#\/series\/(\d+)$/);
-  const name = detail ? 'series' : { '#/add': 'add', '#/settings': 'settings' }[hash] || 'series';
+  const name = detail ? 'series' : { '#/add': 'add', '#/import': 'import', '#/settings': 'settings' }[hash] || 'series';
   document
     .querySelectorAll('.topbar-nav a')
     .forEach((a) => a.classList.toggle('active', a.dataset.page === name && !detail));
@@ -612,6 +940,8 @@ async function route() {
       await detailPage(Number(detail[1]));
     } else if (name === 'add') {
       await addPage();
+    } else if (name === 'import') {
+      await importPage();
     } else if (name === 'settings') {
       await settingsPage();
     } else {

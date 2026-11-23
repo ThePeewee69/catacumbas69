@@ -65,6 +65,22 @@ class SeriesApiIT {
     }
 
     @Test
+    void browseFolders_asSonarrsFileSystemApi() throws IOException {
+        Path root = Files.createTempDirectory("catasonarr-browse");
+        Files.createDirectories(root.resolve("Series"));
+        Files.createDirectories(root.resolve("#recycle"));
+
+        JsonNode contents = http.getForObject("/api/v3/filesystem?path={path}", JsonNode.class, root + "/");
+
+        assertThat(contents.path("parent").asText()).isEqualTo(root.getParent() + "/");
+        assertThat(contents.path("directories").findValuesAsText("name")).containsExactly("Series");
+        assertThat(contents.path("directories").get(0).path("type").asText()).isEqualTo("folder");
+        assertThat(contents.path("directories").get(0).path("path").asText()).isEqualTo(root.resolve("Series") + "/");
+        assertThat(http.getForObject("/api/v3/filesystem/type?path={path}", JsonNode.class, root.toString())
+                .path("type").asText()).isEqualTo("folder");
+    }
+
+    @Test
     void addAsOverseerr_changeSeasons_thenDeleteWithItsFolder() throws IOException {
         setup.ensure();
         Path root = Files.createTempDirectory("catasonarr-tv");

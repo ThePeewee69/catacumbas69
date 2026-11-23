@@ -31,6 +31,7 @@ brackets is the one seen running on the date given.
 | Technology | Version | Pinned in | Used for |
 |---|---|---|---|
 | Alpine.js | 3.14.8 | `alpinejs.version` in `apps/catapulsar/pom.xml` (WebJar) | The UI's reactivity, no build step (§6) |
+| Poppins (Light, Bold) | OFL, as outlines | `apps/catasonarr/src/main/resources/static/catasonarr-*.svg` | The letters of Catasonarr's logo (decision 115) |
 | HTML, CSS, JavaScript | plain, no framework or bundler | `apps/catapulsar/src/main/resources/static/`, `apps/catasonarr/src/main/resources/static/` | Catapulsar's and Catasonarr's pages |
 
 ## Data and messaging (meloes)

@@ -270,13 +270,16 @@ before its first Sync:
    ```
    It asks for it twice, without showing it, and writes `catacumbas69-apps/catasonarr-tmdb`.
 6. **The image**: `apps/build/push.sh catasonarr`, commit the new tag, push, and **Sync** `catasonarr` in ArgoCD.
-7. **Quality from Sonarr** (after the Sync): copy `sonarr.db` from Sonarr's `/config` (`/volume1/k3s/media/Sonarr`
-   on the NAS) to the Mac, then:
+7. **Quality from Sonarr** (after the Sync): in Sonarr, **System → Backup → Backup Now**, download the zip and
+   unzip it on the Mac. Its `sonarr.db` is a consistent copy; one copied by hand from Sonarr's `/config` while Sonarr
+   runs can be caught halfway ("database disk image is malformed"). The zip also has `config.xml`, with the API key:
+   keep it out of the repository and delete it afterwards. Then:
    ```
    bash microshift/apps/catacumbas69-apps/catasonarr/catasonarr-import-sonarr.sh ~/Downloads/sonarr.db
    ```
-   It reads the copy only, asks for the API key without showing it, and replaces Catasonarr's quality definitions,
-   custom formats, profiles and folder naming with Sonarr's. Then add the root folders in Catasonarr's
+   It reads a temporary copy of it (Sonarr's database is in WAL mode, which `sqlite3` cannot open read-only), so
+   your copy is never changed; it asks for the API key without showing it, and replaces Catasonarr's quality
+   definitions, custom formats, profiles and folder naming with Sonarr's. Then add the root folders in Catasonarr's
    **Settings** (the same as Sonarr's, e.g. `/data/...`).
 
 Without the API key or the Dex Secret the pod stays in `CreateContainerConfigError`; the TMDB Secret is optional.

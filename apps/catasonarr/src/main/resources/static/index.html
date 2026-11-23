@@ -4,16 +4,26 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Catasonarr</title>
+    <link rel="icon" type="image/svg+xml" href="catasonarr-icon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon.png" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <meta name="theme-color" content="#ede9fe" />
     <link rel="stylesheet" href="catasonarr.css" />
     <script src="catasonarr.js" defer></script>
   </head>
   <body>
     <!-- ══ Top bar: the pages, and the user signed in through Dex with Sign out (orch.md decision 109) ══ -->
     <header class="topbar">
-      <h1 class="topbar-title"><a href="#/">Catasonarr</a></h1>
+      <h1 class="topbar-title">
+        <a class="brand" href="#/" aria-label="Catasonarr">
+          <img src="catasonarr-icon.svg" alt="" width="40" height="40" />
+          <span class="brand-word"><span class="brand-cata">cata</span><span class="brand-sonarr">sonarr</span></span>
+        </a>
+      </h1>
       <nav class="topbar-nav" aria-label="Pages">
         <a href="#/" data-page="series">Series</a>
         <a href="#/add" data-page="add">Add series</a>
+        <a href="#/import" data-page="import">Import library</a>
         <a href="#/settings" data-page="settings">Settings</a>
       </nav>
       <div class="topbar-user" hidden data-testid="user">
@@ -22,7 +32,7 @@
       </div>
     </header>
 
-    <!-- ══ The page shown, drawn by catasonarr.js from the address (#/, #/add, #/series/<id>, #/settings) ══ -->
+    <!-- ══ The page shown, drawn by catasonarr.js from the address (#/, #/add, #/import, #/series/<id>, #/settings) ══ -->
     <main class="content" id="page" aria-live="polite"></main>
 
     <div class="toast" id="toast" role="status" hidden></div>
