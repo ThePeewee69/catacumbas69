@@ -63,6 +63,14 @@ class SecurityConfigTests {
     }
 
     @Test
+    void sonarrApi_pathsInAnyCase_asSonarrs() throws Exception {
+        mvc.perform(get("/api/v3/System/Status").header("X-Api-Key", KEY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.appName").value("Catasonarr"));
+        mvc.perform(get("/API/V3/system/status")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void sonarrApi_withoutTheKey_orWithAnother_is401() throws Exception {
         mvc.perform(get("/api/v3/system/status")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/v3/system/status").header("X-Api-Key", "ffffffffffffffffffffffffffffffff"))

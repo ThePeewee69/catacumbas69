@@ -48,15 +48,18 @@ public class SecurityConfig {
     /** The registration id, also the last segment of the redirect URI registered in Dex. */
     static final String REGISTRATION_ID = "dex";
 
-    /** Sonarr's API v3 called with a key: the first chain. Without a key it is the page's, with its session. */
+    /**
+     * Sonarr's API v3 called with a key: the first chain. Without a key it is the page's, with its session. The path
+     * in any case, as the controllers match it (WebConfig, decision 117).
+     */
     private static final RequestMatcher API_KEY = request ->
-            request.getRequestURI().startsWith(request.getContextPath() + "/api/v3/")
+            startsWithIgnoreCase(request.getRequestURI(), request.getContextPath() + "/api/v3/")
                     && (StringUtils.hasText(request.getHeader(ApiKeyAuthenticationFilter.HEADER))
                     || StringUtils.hasText(request.getParameter(ApiKeyAuthenticationFilter.PARAMETER)));
 
     /** Catasonarr's own JSON API: without a session it answers 401, where a page would be sent to Dex. */
     private static final RequestMatcher API =
-            request -> request.getRequestURI().startsWith(request.getContextPath() + "/api/");
+            request -> startsWithIgnoreCase(request.getRequestURI(), request.getContextPath() + "/api/");
 
     /**
      * Sonarr's API v3 called with a key. Checked first.
@@ -154,5 +157,9 @@ public class SecurityConfig {
                 .providerConfigurationMetadata(Map.of("end_session_endpoint", issuer + "/logout"))
                 .build();
         return new InMemoryClientRegistrationRepository(dex);
+    }
+
+    private static boolean startsWithIgnoreCase(String uri, String prefix) {
+        return uri.regionMatches(true, 0, prefix, 0, prefix.length());
     }
 }

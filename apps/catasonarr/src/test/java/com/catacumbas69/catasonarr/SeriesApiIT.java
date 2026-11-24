@@ -88,6 +88,8 @@ class SeriesApiIT {
                 .getStatusCode()).isEqualTo(HttpStatus.CREATED);
         JsonNode profiles = http.getForObject("/api/v3/qualityprofile", JsonNode.class);
         assertThat(profiles.size()).as("Sonarr's six defaults").isGreaterThanOrEqualTo(1);
+        assertThat(http.getForObject("/api/v3/qualityProfile", JsonNode.class).size())
+                .as("Seerr's spelling, as Sonarr answers it").isEqualTo(profiles.size());
 
         JsonNode found = http.getForObject("/api/v3/series/lookup?term=tvdb:" + TVDB, JsonNode.class);
         assertThat(found.size()).isEqualTo(1);

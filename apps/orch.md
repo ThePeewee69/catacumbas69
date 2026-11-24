@@ -797,6 +797,7 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-24, paths in any case** (decision 117): Seerr's `/api/v3/qualityProfile` now answers, as in Sonarr.
 - **2026-11-23, Seerr** (decision 116): Seerr on meloes in the namespace `media`, with its own login through Plex,
   sending series to Catasonarr through its Route.
 - **2026-11-23, import library and the new look** (decision 115): Sonarr's Library Import, matching folders by
@@ -1694,3 +1695,9 @@ Catasonarr (2026-11-21):
      1000) through its own service account with the SCC `nonroot-v2`. It reaches Catasonarr **through its Route**
      (`https://catasonarr.catacumbas69.com`, port 443, SSL) with Sonarr's API key, trusting our CA through
      `NODE_EXTRA_CA_CERTS` and the ConfigMap `catacumbas69-ca`, which trust-manager now also writes in `media`.
+
+117. **Catasonarr's paths ignore case, as Sonarr's.** Sonarr's routes are ASP.NET's, which match a path in any case,
+     and its clients count on it: Seerr asks for `/api/v3/qualityProfile`, which Spring, matching case, answered
+     with 404, so Seerr's *Test* said "Failed to connect to Sonarr". Spring MVC's path patterns are made
+     case-insensitive for the whole app (`WebConfig`), and the two security chains match `/api/v3/` and `/api/` in
+     any case too, so a path in another case never skips the API key.
