@@ -797,6 +797,8 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-23, Seerr** (decision 116): Seerr on meloes in the namespace `media`, with its own login through Plex,
+  sending series to Catasonarr through its Route.
 - **2026-11-23, import library and the new look** (decision 115): Sonarr's Library Import, matching folders by
   name, year or id; pages in lavender greys with one deep violet, and Catasonarr's logo and icon; the stray "null"
   on Add series is gone.
@@ -1682,3 +1684,13 @@ Catasonarr (2026-11-21):
      sonar for its "o".
      `catasonarr-icon.svg` (top bar, tab; `favicon.png` and `apple-touch-icon.png` from it) and `catasonarr-logo.svg`
      (an empty library), letters as outlines of Poppins (OFL), so they look the same everywhere.
+
+116. **Seerr on meloes, talking to Catasonarr.** Seerr (the merge of Overseerr and Jellyseerr, official image
+     `ghcr.io/seerr-team/seerr`, pinned) takes the requests, with its **own login through Plex accounts** (no Dex in
+     front, so the family signs in as always), at `https://seerr.catacumbas69.com`. **Plain manifests with
+     kustomize** (`microshift/apps/media/seerr`), ArgoCD Application `seerr` with manual Sync, in a **shared
+     namespace `media`** for the media apps that leave K3s. One replica, `Recreate`; **SQLite in `/app/config` on a
+     5 Gi volume on meloes' disk** (topolvm; SQLite on NFS can corrupt). It runs as the image's `node` user (UID
+     1000) through its own service account with the SCC `nonroot-v2`. It reaches Catasonarr **through its Route**
+     (`https://catasonarr.catacumbas69.com`, port 443, SSL) with Sonarr's API key, trusting our CA through
+     `NODE_EXTRA_CA_CERTS` and the ConfigMap `catacumbas69-ca`, which trust-manager now also writes in `media`.

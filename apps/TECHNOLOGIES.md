@@ -63,6 +63,12 @@ brackets is the one seen running on the date given.
 | Grafana Alloy | `*` (v1.22 on 2026-11-17) | `microshift/argocd/alloy.yaml` | Ships pod logs and the journal to Loki, traces to Tempo |
 | OpenTelemetry Java agent | `2` = newest 2.x (2.34.0 on 2026-11-20) | image tag in each app's Deployment (`autoinstrumentation-java:2`) | Traces of HTTP, MongoDB and Pulsar (OBS-11, decision 105) |
 
+## Media apps (meloes)
+
+| Technology | Version | Pinned in | Used for |
+|---|---|---|---|
+| Seerr | v3.5.2 | `microshift/apps/media/seerr/seerr-deployment.yaml` | Requests for series and films, with Plex accounts; sends series to Catasonarr (decision 116) |
+
 ## Build, tests and CI
 
 | Technology | Version | Pinned in | Used for |

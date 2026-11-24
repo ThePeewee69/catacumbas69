@@ -1,0 +1,12 @@
+# Seerr (orch.md decision 116): requests for series and films, the merge of Overseerr and Jellyseerr, at
+# https://seerr.catacumbas69.com with its own login (Plex accounts). In the shared namespace media, where the media
+# apps go when they leave K3s. It sends series to Catasonarr as to a Sonarr, through Catasonarr's Route.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: media
+resources:
+  - seerr-serviceaccount.yaml
+  - seerr-pvc.yaml
+  - seerr-deployment.yaml
+  - seerr-service.yaml
+  - seerr-route.yaml

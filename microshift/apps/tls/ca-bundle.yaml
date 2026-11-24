@@ -1,6 +1,7 @@
-# Our CA for the pods that call Dex over HTTPS (orch.md decision 97). trust-manager writes a ConfigMap
-# catacumbas69-ca with the public CAs (useDefaultCAs) plus ours, as PEM (ca.crt, for Grafana) and as a Java
-# truststore (truststore.p12, for Catapulsar), in the namespaces listed below, and keeps it up to date.
+# Our CA for the pods that call our Routes over HTTPS, Dex among them (orch.md decisions 97 and 116). trust-manager
+# writes a ConfigMap catacumbas69-ca with the public CAs (useDefaultCAs) plus ours, as PEM (ca.crt, for Grafana and
+# Seerr) and as a Java truststore (truststore.p12, for Catapulsar), in the namespaces listed below, and keeps it up
+# to date.
 apiVersion: trust.cert-manager.io/v1alpha1
 kind: Bundle
 metadata:
@@ -27,3 +28,4 @@ spec:
           values:
             - catacumbas69-apps
             - monitoring
+            - media

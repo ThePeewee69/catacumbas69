@@ -18,6 +18,7 @@ the same commit.
 | **Catavigia** | Watches the platform and keeps the history of every alert (8085) |
 | **Catasonarr** | TV series manager that speaks Sonarr's API v3 (8086; decision 109); GPL-3.0 |
 | **Sonarr** | The open-source TV series manager Catasonarr replaces; its API v3 is what Prowlarr, Bazarr, Overseerr, Jellyseerr and Homarr speak |
+| **Seerr** | The request app (merge of Overseerr and Jellyseerr) on meloes; sends series to Catasonarr as to a Sonarr (decision 116) |
 | **TVmaze** | The free series database Catasonarr reads series and episodes from (decision 112); CC BY-SA |
 | **catacommons** | Shared Java library of the apps (not a service) |
 | **meloes** | The NUC that runs MicroShift, where everything in `microshift/` is deployed |

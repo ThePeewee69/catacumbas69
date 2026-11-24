@@ -1,0 +1,12 @@
+# /app/config: settings, the SQLite database and the image cache. On meloes' own disk: SQLite on NFS can corrupt.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: seerr-config
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: topolvm-provisioner

@@ -1,0 +1,16 @@
+# HTTPS with the router's wildcard certificate (orch.md decision 97); http:// is redirected.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: seerr
+spec:
+  host: seerr.catacumbas69.com
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  to:
+    kind: Service
+    name: seerr
+    weight: 100
+  port:
+    targetPort: http
