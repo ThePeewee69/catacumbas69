@@ -12,4 +12,4 @@ resources:
   - catasonarr-route.yaml
 images:
   - name: registry.catacumbas69.com/catasonarr
-    newTag: "0.1.0-SNAPSHOT-fa6f01b"
+    newTag: "0.1.0-SNAPSHOT-c584c22"
