@@ -63,7 +63,9 @@ there is a written reason, **MAY** is optional.
 | Acronym | Stands for | Here |
 |---|---|---|
 | **ADR** | Architecture Decision Record | `apps/docs/adr/NNNN-title.md` (DOC-4) |
+| **ANSI** | American National Standards Institute | Its escape codes colour a terminal's text; Alloy takes them out of Seerr's log lines (decision 120) |
 | **API** | Application Programming Interface | Each app's REST API under `/api/v1` |
+| **ARIA** | Accessible Rich Internet Applications | `aria-label`, `aria-describedby`: what a screen reader says; Catasonarr's tooltips (decision 121) |
 | **BFF** | Backend For Frontend | Catapulsar's API, which forwards to the other apps for its UI (ARCH-2) |
 | **BOM** | Bill Of Materials | The Spring Boot parent that manages library versions |
 | **CA** | Certificate Authority | Our own CA, issued by cert-manager (decision 97) |

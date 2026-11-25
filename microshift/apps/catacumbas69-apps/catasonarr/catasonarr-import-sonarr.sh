@@ -2,12 +2,12 @@
 # Imports what touches quality from Sonarr's database into Catasonarr (orch.md decision 112): quality definitions,
 # custom formats, quality profiles with their scores, and the folder naming. Sonarr's ids are kept.
 #
-#   bash microshift/apps/catacumbas69-apps/catasonarr/catasonarr-import-sonarr.sh ~/Downloads/sonarr.db
+#   bash microshift/apps/catacumbas69-apps/catasonarr/catasonarr-import-sonarr.sh ~/Downloads/sonarr_backup_v4.0.14.2939_2026.11.25_21.00.00.zip
 #
-# Runs on the Mac with macOS's own sqlite3, on the sonarr.db of a Sonarr backup (System → Backup → Backup Now, then
-# unzip): a consistent copy, which one taken by hand from Sonarr's /config while it runs may not be. A sonarr.db-wal
-# next to it is read too. The file is never changed: sqlite3 reads a temporary copy of it, because Sonarr's database
-# is in WAL mode, which sqlite3 cannot open read-only on its own.
+# Runs on the Mac, with macOS's own unzip and sqlite3, on the zip of a Sonarr backup (System → Backup → Backup Now,
+# then download it; orch.md decision 120): its sonarr.db is a consistent copy, which one taken by hand from Sonarr's
+# /config while it runs may not be. The zip is never changed: its sonarr.db is unzipped into a temporary folder,
+# read there and deleted at the end.
 # Asks for Catasonarr's API key (the one of the Sonarr it replaces) without showing it, and sends the rows to
 # Catasonarr's own import, which replaces its quality settings. CATASONARR_URL changes the address (default
 # https://catasonarr.catacumbas69.com; http://localhost:8086 for a Catasonarr in IntelliJ with the profile no-auth,
@@ -25,24 +25,24 @@ fail() {  # a refusal that cannot go unnoticed: red on a terminal, and NOTHING C
 
 rows() {  # a query → its rows as a JSON array; [] when there are none
   local out
-  out="$(sqlite3 -json "$WORK/sonarr.db" "$1")" || fail "sqlite3 could not read $DB: is it a copy of sonarr.db?"
+  out="$(sqlite3 -json "$WORK/sonarr.db" "$1")" || fail "sqlite3 could not read the sonarr.db in $ZIP."
   printf '%s' "${out:-[]}"
 }
 
 [[ $# -eq 1 ]] || { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
-DB="$1"
-[[ -f "$DB" ]] || fail "No file $DB."
+ZIP="$1"
+[[ -f "$ZIP" ]] || fail "No file $ZIP."
+[[ "$ZIP" == *.zip ]] || fail "$ZIP is not a zip: give the zip of a Sonarr backup (System → Backup)."
+command -v unzip >/dev/null || fail "unzip not found (it comes with macOS)."
 command -v sqlite3 >/dev/null || fail "sqlite3 not found (it comes with macOS)."
 command -v curl >/dev/null || fail "curl not found."
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 body="$WORK/body.json"
-cp "$DB" "$WORK/sonarr.db" \
-  || fail "Could not copy $DB (macOS may need Terminal allowed in System Settings → Privacy & Security → Files and Folders)."
-if [[ -f "$DB-wal" ]]; then
-  cp "$DB-wal" "$WORK/sonarr.db-wal" || fail "Could not copy $DB-wal."
-fi
+unzip -l "$ZIP" sonarr.db >/dev/null 2>&1 || fail "$ZIP has no sonarr.db: is it the zip of a Sonarr backup?"
+unzip -q -o "$ZIP" sonarr.db -d "$WORK" \
+  || fail "Could not unzip $ZIP (macOS may need Terminal allowed in System Settings → Privacy & Security → Files and Folders)."
 {
   printf '{"qualityDefinitions":'
   rows 'SELECT Id AS id, Quality AS quality, Title AS title, MinSize AS minSize, MaxSize AS maxSize,
@@ -62,7 +62,7 @@ fi
   printf '}'
 } >"$body"
 
-echo "Read from $DB: $(sqlite3 "$WORK/sonarr.db" 'SELECT COUNT(*) FROM QualityProfiles') quality profiles," \
+echo "Read from $ZIP: $(sqlite3 "$WORK/sonarr.db" 'SELECT COUNT(*) FROM QualityProfiles') quality profiles," \
   "$(sqlite3 "$WORK/sonarr.db" 'SELECT COUNT(*) FROM CustomFormats') custom formats."
 
 key=''

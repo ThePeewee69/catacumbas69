@@ -22,7 +22,7 @@ meloes' journal ──▶ /run/log/journal ─┼─▶ Alloy (DaemonSet) ──
 
 | Stream | Labels | Also |
 |---|---|---|
-| Every container of every namespace | `namespace`, `pod`, `container`, `app` (the pod's `app.kubernetes.io/name`, else its `app`); Loki adds `service_name` and `stream` (`stdout`/`stderr`) | Our five apps (namespace `catacumbas69-apps`) log ECS JSON (OBS-3): their `level` is a label too, and `trace_id` and `span_id` are structured metadata |
+| Every container of every namespace | `namespace`, `pod`, `container`, `app` (the pod's `app.kubernetes.io/name`, else its `app`); Loki adds `service_name` and `stream` (`stdout`/`stderr`) | Our five apps (namespace `catacumbas69-apps`) log ECS JSON (OBS-3): their `level` is a label too, and `trace_id` and `span_id` are structured metadata. Seerr (namespace `media`) has `level` in the same capitals (`INFO`, `WARN`, `ERROR`, `DEBUG`) and `module`, its part of the code (`Jobs`, `Server`, `Notifications`, …), as labels, and its lines lose the terminal's colours |
 | meloes' journal: MicroShift, CRI-O, sshd, the kernel, every systemd unit | `job="journal"`, `host="meloes"`, `unit` (e.g. `microshift.service`; empty for the kernel), `identifier` (the program), `level` (the priority: `err`, `warning`, `info`, …) | The journal is **volatile** on meloes (`/run/log/journal`, lost at each reboot): Loki is the copy that stays. On its first start Alloy reads the last 12 h |
 
 Two dashboards in Grafana's folder **Logs** do this with menus: **pods · logs** (namespace, app, pod, container,
@@ -32,6 +32,8 @@ Loki:
 
 ```
 {namespace="catacumbas69-apps", app="cataponte"} | json | level="ERROR"
+{namespace="media", app="seerr", level="ERROR"}
+{namespace="media", app="seerr", module="Jobs"}
 {job="journal", unit="microshift.service"}
 {job="journal", level=~"err|crit|alert|emerg"}
 {namespace="pulsar"} |= "Exception"

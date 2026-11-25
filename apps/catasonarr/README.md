@@ -9,7 +9,8 @@ topic, `catacumbas69/catasonarr/events`, which Cataudit stores (and any other ap
 GPL-3.0. The rest of the repository keeps its own licence.
 
 Engineering rules: [`../orch.md`](../orch.md). Decisions: orch.md 109 (the app), 112 (phase 1), 114 (browse for
-folders) and 115 (import library, look and logo).
+folders), 115 (import library, look and logo), 117 to 119 (paths in any case, live pages, connections), 120 (the
+empty queue, the import from the backup's zip) and 121 (tooltips).
 
 ## Status
 
@@ -21,7 +22,7 @@ and end *unsuccessful*.
 | Phase | What |
 |---|---|
 | 0 (done) | Skeleton: module, login (Dex for the page, API key for the API v3), `system/status`, deployment |
-| **1 (this)** | Series and episodes (TVmaze, TMDB optional), root folders, quality, tags, commands, the page, import of quality from `sonarr.db` |
+| **1 (this)** | Series and episodes (TVmaze, TMDB optional), root folders, quality, tags, commands, the page, import of quality from a Sonarr backup |
 | 2 | Indexers pushed by Prowlarr (Torznab), RSS sync, automatic and manual search, the release parser |
 | 3 | qBittorrent and Transmission: send, follow the queue, import and rename into the media folder |
 | 4 | Calendar, Wanted and Queue pages; Bazarr, Overseerr, Jellyseerr and Homarr; import of Sonarr's series |
@@ -38,8 +39,9 @@ What phase 1 answers, with Sonarr 4's fields (Swagger UI at `/swagger-ui.html`):
 | `GET /api/v3/filesystem?path=`, `GET /api/v3/filesystem/type?path=` | The folder browser behind **Browse…** (decision 114): the pod's whole file system, as Sonarr's; system folders (`#recycle`, `@eaDir`, …) and dot names hidden |
 | `/api/v3/qualityprofile`, `/api/v3/qualitydefinition`, `/api/v3/customformat` | Quality (also their `schema`) |
 | `/api/v3/tag`, `/api/v3/language`, `/api/v3/languageprofile` | Tags; languages (Sonarr's list; language profiles as Sonarr 4: one, deprecated) |
+| `GET /api/v3/queue`, `GET /api/v3/queue/details`, `GET /api/v3/queue/status` | The download queue, **empty** until phase 3 (decision 120): an empty page, an empty list and every count at zero, so Seerr and other clients do not take the 404 for a broken Sonarr |
 | `GET/POST /api/v3/command`, `GET /api/v3/command/{id}` | `RefreshSeries` runs; the searches and `RescanSeries` end *unsuccessful* until phase 2 |
-| `POST /api/v3/catasonarr/import/sonarr-quality` | Catasonarr's own: the import from `sonarr.db` (below) |
+| `POST /api/v3/catasonarr/import/sonarr-quality` | Catasonarr's own: the import from a Sonarr backup (below) |
 | `GET /api/v1/connections`, `GET /api/v1/connections/pulsar/health`, `GET /api/v1/connections/mongodb/health` | Catasonarr's own, for Settings → Connections (decision 119): Pulsar's addresses and MongoDB's connection without its password, and a health check of each; Dex session only |
 
 **Series data**: [TVmaze](https://www.tvmaze.com/api) (CC BY-SA, credited in the page's footer), found by
@@ -52,21 +54,26 @@ the same 2 s together). Catasonarr's events reach the pages through the system b
 `catacumbas69/catasonarr/pages` (message TTL 1 h), the subscription `catasonarr-pages-<pod>` of each replica (in
 Catapulsar's Consumers panel, `pages`) and the WebSocket `/api/v1/updates`.
 
+**Tooltips** (decision 121): every button, button-like link, tick box and menu says what it does, half a second
+after the mouse rests on it or when the keyboard reaches it. A new control gets one with `tip` in `el()` (or
+`data-tip` in `index.html`).
+
 **Import library** (the page's *Import library*, decision 115): as Sonarr's Library Import, the folders of a root
 folder that are no series yet, matched in TVmaze by name and year (`The Office (2005)`) or by an id in the name
 (`{tvdb-79168}`); check the matches, change the wrong ones, set monitoring and profile, and import. Nothing is
 searched for when importing. **Refresh** reads the NAS again: what was imported leaves, new folders come in, and
 the rows already there keep their choices.
 
-**Import from Sonarr**: everything about quality and the folder naming, from the `sonarr.db` of a Sonarr backup
-(System → Backup → Backup Now, then unzip), on the Mac:
+**Import from Sonarr**: everything about quality and the folder naming, from the zip of a Sonarr backup (System →
+Backup → Backup Now, then download it; decision 120), on the Mac:
 
 ```
-bash microshift/apps/catacumbas69-apps/catasonarr/catasonarr-import-sonarr.sh ~/Downloads/sonarr.db
+bash microshift/apps/catacumbas69-apps/catasonarr/catasonarr-import-sonarr.sh ~/Downloads/sonarr_backup_v4.0.14.2939_2026.11.25_21.00.00.zip
 ```
 
-It asks for the API key without showing it. `CATASONARR_URL=http://localhost:8086` sends it to the Catasonarr in
-IntelliJ instead (profile `no-auth`, no key).
+It reads the zip's `sonarr.db` in a temporary folder, without unzipping anything next to the zip, and asks for the
+API key without showing it. `CATASONARR_URL=http://localhost:8086` sends it to the Catasonarr in IntelliJ instead
+(profile `no-auth`, no key).
 
 ## Two ways in
 

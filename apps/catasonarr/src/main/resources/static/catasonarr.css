@@ -643,3 +643,39 @@ section h2 {
   color: var(--muted);
   text-align: center;
 }
+
+/* ══ Tooltip (orch.md decision 121): one for the page, in the top layer, above or below what it describes ══ */
+.tooltip {
+  position: fixed;
+  inset: auto;
+  max-width: 300px;
+  padding: 0.45rem 0.7rem;
+  margin: 0;
+  overflow: visible;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: #f4f2fa;
+  pointer-events: none;
+  background: var(--text);
+  border: 0;
+  border-radius: 8px;
+  box-shadow: var(--shadow-lift);
+}
+
+.tooltip::after {
+  position: absolute;
+  left: calc(var(--arrow-x, 50%) - 5px);
+  width: 10px;
+  height: 10px;
+  content: '';
+  background: var(--text);
+  transform: rotate(45deg);
+}
+
+.tooltip[data-side='above']::after {
+  bottom: -4px;
+}
+
+.tooltip[data-side='below']::after {
+  top: -4px;
+}

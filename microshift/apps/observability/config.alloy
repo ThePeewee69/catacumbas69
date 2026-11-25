@@ -98,6 +98,31 @@ loki.process "pods" {
       }
     }
   }
+
+  // Seerr (namespace media, orch.md decision 120) writes "<time> [info][Jobs]: <text>", the level coloured for a
+  // terminal. The colours leave the line; the level becomes the label level in capitals, as our apps' (INFO,
+  // WARN, ERROR, DEBUG), and what is between the second brackets, Seerr's part of the code, the label module.
+  stage.match {
+    selector = "{namespace=\"media\", app=\"seerr\"}"
+
+    stage.replace {
+      expression = `(\x1b\[[0-9;]*m)`
+      replace    = ""
+    }
+    stage.regex {
+      expression = `^\S+ \[(?P<level>[a-z]+)\](?:\[(?P<module>[^\]]+)\])?:`
+    }
+    stage.template {
+      source   = "level"
+      template = "{{ ToUpper .Value }}"
+    }
+    stage.labels {
+      values = {
+        level  = "",
+        module = "",
+      }
+    }
+  }
 }
 
 // ---- The host's journal ------------------------------------------------------------------------------------

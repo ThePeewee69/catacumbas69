@@ -15,20 +15,20 @@
     <!-- ══ Top bar: the pages, and the user signed in through Dex with Sign out (orch.md decision 109) ══ -->
     <header class="topbar">
       <h1 class="topbar-title">
-        <a class="brand" href="#/" aria-label="Catasonarr">
+        <a class="brand" href="#/" aria-label="Catasonarr" data-tip="The series in the library">
           <img src="catasonarr-icon.svg" alt="" width="40" height="40" />
           <span class="brand-word"><span class="brand-cata">cata</span><span class="brand-sonarr">sonarr</span></span>
         </a>
       </h1>
       <nav class="topbar-nav" aria-label="Pages">
-        <a href="#/" data-page="series">Series</a>
-        <a href="#/add" data-page="add">Add series</a>
-        <a href="#/import" data-page="import">Import library</a>
-        <a href="#/settings" data-page="settings">Settings</a>
+        <a href="#/" data-page="series" data-tip="Every series in the library, with its episodes on the NAS">Series</a>
+        <a href="#/add" data-page="add" data-tip="Search TVmaze for a new series and add it">Add series</a>
+        <a href="#/import" data-page="import" data-tip="Add the series already on the NAS">Import library</a>
+        <a href="#/settings" data-page="settings" data-tip="Connections, root folders, profiles and tags">Settings</a>
       </nav>
       <div class="topbar-user" hidden data-testid="user">
         <span data-testid="user-name"></span>
-        <button type="button" data-testid="sign-out">Sign out</button>
+        <button type="button" data-testid="sign-out" data-tip="Sign out of Catasonarr and of Dex">Sign out</button>
       </div>
     </header>
 
@@ -36,6 +36,9 @@
     <main class="content" id="page" aria-live="polite"></main>
 
     <div class="toast" id="toast" role="status" hidden></div>
+
+    <!-- ══ The tooltip of every button, link-button, tick box and menu, from its data-tip (orch.md decision 121) ══ -->
+    <div class="tooltip" id="tooltip" role="tooltip" popover="manual"></div>
 
     <!-- ══ Where the data comes from (orch.md decision 112): TVmaze's CC BY-SA and TMDB's terms ask for this ══ -->
     <footer class="footer">

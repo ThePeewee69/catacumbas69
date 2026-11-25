@@ -799,6 +799,10 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-25, tooltips** (decision 121): every button, button-like link, tick box and menu of Catasonarr's page
+  says what it does in a tooltip of its own, with the mouse and with the keyboard.
+- **2026-11-25, small things for Seerr and the import** (decision 120): Catasonarr answers Sonarr's queue, empty
+  until phase 3; Seerr's level and module are labels in Loki; the import from Sonarr takes the backup's zip.
 - **2026-11-24, connections in Settings** (decision 119): Pulsar's and MongoDB's connections (without the
   password), each with a health check.
 - **2026-11-24, live pages** (decision 118): Catasonarr's pages update themselves through a WebSocket, fed by a
@@ -1741,3 +1745,23 @@ Catasonarr (2026-11-21):
      Pulsar's and MongoDB's own protocols, which the Routes do not. Catasonarr's own `GET /api/v1/connections`,
      `/pulsar/health` and `/mongodb/health`, behind the Dex session (Sonarr's API key does not reach them). The section
      shows even with MongoDB down; the rest of the page then says it was not loaded.
+
+120. **Small things around Catasonarr, before phase 2.** (a) **Sonarr's queue, empty**: `GET /api/v3/queue` (an
+     empty page, Sonarr's `PagingResource`, sorted by `timeleft` unless asked otherwise), `/queue/details` (an empty
+     list) and `/queue/status` (every count zero, no errors or warnings) answer until phase 3 brings the download
+     clients; Seerr asked for the queue every minute and logged the 404 as an error. (b) **Seerr's logs in Loki**:
+     Alloy takes the colours out of Seerr's lines (namespace `media`, app `seerr`) and makes its level the label
+     `level`, **in capitals as our apps'** (`INFO`, `WARN`, `ERROR`, `DEBUG`), so one filter serves both, and what
+     is between its second brackets (`Jobs`, `Server`, `Notifications`, …) the label `module`. (c) **The import from
+     Sonarr takes only the backup's zip** (System → Backup → Backup Now, downloaded as it is): the script unzips
+     just `sonarr.db` into a temporary folder, deleted at the end, and refuses anything that is not a zip with a
+     `sonarr.db`; the copy by hand of `sonarr.db` and its WAL is gone.
+
+121. **Every control of Catasonarr's page says what it does.** Every button, button-like link (the top bar, the
+     series' cards, the links in empty pages), tick box and menu has a **tooltip** with what it does, in English as
+     the page, from its `data-tip` (`tip` in `el()`). One tooltip of Catasonarr's own, in the page's colours: it
+     shows half a second after the mouse rests on a control, or when the keyboard reaches it (not after a click),
+     above it or below when there is no room, and goes with the mouse, a click, a scroll, Escape or another page;
+     it is a popover, in the top layer, so it also shows over the folder browser, and the control points to it with
+     `aria-describedby` while it shows. Only Catasonarr; the series' cards lose their browser `title`, as the
+     tooltip has the title too.

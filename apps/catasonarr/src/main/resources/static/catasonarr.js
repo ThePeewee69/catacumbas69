@@ -81,7 +81,7 @@ async function api(method, path, body) {
  * Creates an element.
  *
  * @param {string} tag the tag
- * @param {object} [props] properties, e.g. className, textContent, href
+ * @param {object} [props] properties, e.g. className, textContent, href; tip is the tooltip (orch.md decision 121)
  * @param {Array<Node|string>} [children] what goes inside
  * @returns {HTMLElement} the element
  */
@@ -90,6 +90,8 @@ function el(tag, props = {}, children = []) {
   Object.entries(props).forEach(([key, value]) => {
     if (key === 'dataset') {
       Object.assign(node.dataset, value);
+    } else if (key === 'tip') {
+      node.dataset.tip = value;
     } else if (key.startsWith('on')) {
       node.addEventListener(key.slice(2), value);
     } else if (key.includes('-')) {
@@ -174,10 +176,10 @@ async function seriesPage() {
         .map((s) => {
           const stats = s.statistics || {};
           const percent = stats.episodeCount ? (stats.episodeFileCount * 100) / stats.episodeCount : 0;
-          return el('a', { className: 'card', href: `#/series/${s.id}` }, [
+          return el('a', { className: 'card', href: `#/series/${s.id}`, tip: `${s.title}: its seasons and episodes` }, [
             poster(s.remotePoster, s.title),
             el('div', { className: 'card-body' }, [
-              el('div', { className: 'card-title', title: s.title, textContent: s.title }),
+              el('div', { className: 'card-title', textContent: s.title }),
               el('div', { className: 'muted', textContent: `${s.year || ''} · ${s.network || ''}` }),
               el('div', {
                 className: 'muted',
@@ -203,7 +205,12 @@ async function seriesPage() {
     el('div', { className: 'toolbar' }, [
       filter,
       el('span', { className: 'muted', textContent: `${series.length} series` }),
-      el('button', { type: 'button', textContent: 'Refresh all', onclick: () => refresh() }),
+      el('button', {
+        type: 'button',
+        textContent: 'Refresh all',
+        tip: 'Read every series again from TVmaze (and TMDB): new episodes, dates and pictures. Runs in the background',
+        onclick: () => refresh(),
+      }),
     ]),
     series.length
       ? grid
@@ -211,9 +218,13 @@ async function seriesPage() {
           el('img', { src: 'catasonarr-logo.svg', alt: '' }),
           el('p', {}, [
             'No series yet: ',
-            el('a', { href: '#/add', textContent: 'add one' }),
+            el('a', { href: '#/add', textContent: 'add one', tip: 'Search TVmaze for a series and add it' }),
             ' or ',
-            el('a', { href: '#/import', textContent: 'import the ones on the NAS' }),
+            el('a', {
+              href: '#/import',
+              textContent: 'import the ones on the NAS',
+              tip: 'Add the series already in a root folder on the NAS',
+            }),
             '.',
           ]),
         ]),
@@ -253,7 +264,13 @@ async function addPage() {
   page.replaceChildren(
     el('div', { className: 'toolbar' }, [
       input,
-      el('button', { type: 'button', className: 'primary', textContent: 'Search', onclick: search }),
+      el('button', {
+        type: 'button',
+        className: 'primary',
+        textContent: 'Search',
+        tip: 'Search TVmaze for this name, or by id with tvdb:<id> or imdb:<id>',
+        onclick: search,
+      }),
     ]),
     ...(folders.length ? [] : [el('p', { className: 'muted', textContent: 'Add a root folder in Settings first.' })]),
     results,
@@ -279,13 +296,20 @@ function result(s, folders, profiles) {
     el('p', { textContent: s.overview || '' }),
   ]);
   if (s.id) {
-    body.append(el('a', { href: `#/series/${s.id}`, textContent: 'Already in the library' }));
+    body.append(
+      el('a', {
+        href: `#/series/${s.id}`,
+        textContent: 'Already in the library',
+        tip: 'Open this series in Catasonarr',
+      }),
+    );
   } else {
     body.append(
       el('button', {
         type: 'button',
         className: 'primary',
         textContent: 'Add…',
+        tip: 'Choose where and how to add this series',
         onclick: (e) => e.target.replaceWith(addForm(s, folders, profiles)),
       }),
     );
@@ -304,25 +328,29 @@ function result(s, folders, profiles) {
 function addForm(s, folders, profiles) {
   const folder = el(
     'select',
-    {},
+    { tip: "The root folder on the NAS where the series' folder is made" },
     folders.map((f) => el('option', { value: f.path, textContent: `${f.path} (${size(f.freeSpace)} free)` })),
   );
   const monitor = el(
     'select',
-    {},
+    { tip: 'Which episodes Catasonarr looks out for' },
     MONITOR_OPTIONS.map(([v, t]) => el('option', { value: v, textContent: t })),
   );
   const profile = el(
     'select',
-    {},
+    { tip: 'The qualities Catasonarr may download, and the one it aims for' },
     profiles.map((p) => el('option', { value: p.id, textContent: p.name })),
   );
   const type = el(
     'select',
-    {},
+    { tip: 'How episodes are numbered: standard (S01E01), daily (by date) or anime (absolute numbers)' },
     ['standard', 'daily', 'anime'].map((t) => el('option', { value: t, textContent: t })),
   );
-  const seasonFolder = el('input', { type: 'checkbox', checked: true });
+  const seasonFolder = el('input', {
+    type: 'checkbox',
+    checked: true,
+    tip: 'Keep each season in its own folder (Season 01, Season 02, …)',
+  });
   const add = async () => {
     try {
       const added = await api('POST', '/api/v3/series', {
@@ -356,7 +384,13 @@ function addForm(s, folders, profiles) {
     el('label', { textContent: 'Season folders' }),
     seasonFolder,
     el('span'),
-    el('button', { type: 'button', className: 'primary', textContent: `Add ${s.title}`, onclick: add }),
+    el('button', {
+      type: 'button',
+      className: 'primary',
+      textContent: `Add ${s.title}`,
+      tip: `Add ${s.title} to the library; nothing is searched for yet`,
+      onclick: add,
+    }),
   ]);
 }
 
@@ -395,7 +429,7 @@ async function importPage() {
     page.replaceChildren(
       el('div', { className: 'empty' }, [
         el('p', { textContent: 'Add a root folder first, in ' }, [
-          el('a', { href: '#/settings', textContent: 'Settings' }),
+          el('a', { href: '#/settings', textContent: 'Settings', tip: 'Add a root folder in Settings' }),
         ]),
       ]),
     );
@@ -405,13 +439,22 @@ async function importPage() {
   const rootPick = select(
     folders.map((f) => [f.id, `${f.path} · ${(f.unmappedFolders || []).length} to import`]),
     folders[0].id,
-    { 'aria-label': 'Root folder' },
+    { 'aria-label': 'Root folder', tip: 'The root folder whose folders are listed below' },
   );
-  const allMonitor = select(MONITOR_OPTIONS, 'all', { 'aria-label': 'Monitor, for every row' });
+  const allMonitor = select(MONITOR_OPTIONS, 'all', {
+    'aria-label': 'Monitor, for every row',
+    tip: "Changes every row's Monitor at once",
+  });
   const allProfile = select(profileOptions, profiles[0] && profiles[0].id, {
     'aria-label': 'Quality profile, for every row',
+    tip: "Changes every row's quality profile at once",
   });
-  const importButton = el('button', { type: 'button', className: 'primary', textContent: 'Import' });
+  const importButton = el('button', {
+    type: 'button',
+    className: 'primary',
+    textContent: 'Import',
+    tip: 'Add the ticked folders as series, with their match, monitor and profile; nothing is searched for',
+  });
   const summary = el('span', { className: 'muted' });
   const body = el('tbody');
   let rows = [];
@@ -431,8 +474,17 @@ async function importPage() {
    * @returns {object} the row, with its search
    */
   const row = (folder) => {
-    const tick = el('input', { type: 'checkbox', checked: true, 'aria-label': `Import ${folder.name}` });
-    const choice = el('select', { 'aria-label': `Series for ${folder.name}`, hidden: true });
+    const tick = el('input', {
+      type: 'checkbox',
+      checked: true,
+      'aria-label': `Import ${folder.name}`,
+      tip: 'Import this folder; untick to leave it out',
+    });
+    const choice = el('select', {
+      'aria-label': `Series for ${folder.name}`,
+      hidden: true,
+      tip: 'The series in TVmaze this folder is; pick another if it is wrong, or search again below',
+    });
     const again = el('input', {
       type: 'search',
       placeholder: 'Search again',
@@ -441,8 +493,14 @@ async function importPage() {
     });
     const thumb = el('div', { className: 'thumb' });
     const state = el('span', { className: 'muted', textContent: 'Waiting…' });
-    const monitor = select(MONITOR_OPTIONS, allMonitor.value, { 'aria-label': `Monitor ${folder.name}` });
-    const profile = select(profileOptions, allProfile.value, { 'aria-label': `Quality profile of ${folder.name}` });
+    const monitor = select(MONITOR_OPTIONS, allMonitor.value, {
+      'aria-label': `Monitor ${folder.name}`,
+      tip: 'Which episodes of this series Catasonarr looks out for',
+    });
+    const profile = select(profileOptions, allProfile.value, {
+      'aria-label': `Quality profile of ${folder.name}`,
+      tip: "This series' quality profile",
+    });
     const item = {
       folder,
       tick,
@@ -600,7 +658,7 @@ async function importPage() {
       el('button', {
         type: 'button',
         textContent: 'Refresh',
-        title: 'Read the folders on the NAS again: what was imported leaves, new folders come in',
+        tip: 'Read the folders on the NAS again: what was imported leaves, new folders come in',
         onclick: () => load(true),
       }),
       importButton,
@@ -636,9 +694,13 @@ async function detailPage(id) {
   const monitored = el('input', {
     type: 'checkbox',
     checked: s.monitored,
+    tip: 'Look out for the monitored episodes of this series; off, none is looked out for',
     onchange: (e) => saveSeries(s, { monitored: e.target.checked }),
   });
-  const deleteFiles = el('input', { type: 'checkbox' });
+  const deleteFiles = el('input', {
+    type: 'checkbox',
+    tip: "With Delete, also delete the series' folder on the NAS (cannot be undone)",
+  });
   const head = el('div', { className: 'detail' }, [
     poster(s.remotePoster, s.title),
     el('div', {}, [
@@ -654,12 +716,18 @@ async function detailPage(id) {
       el('div', { textContent: `Quality profile: ${profile ? profile.name : s.qualityProfileId}` }),
       el('div', { className: 'toolbar' }, [
         el('label', {}, [monitored, ' Monitored']),
-        el('button', { type: 'button', textContent: 'Refresh', onclick: () => refresh(s.id) }),
+        el('button', {
+          type: 'button',
+          textContent: 'Refresh',
+          tip: 'Read this series again from TVmaze (and TMDB): new episodes, dates and pictures',
+          onclick: () => refresh(s.id),
+        }),
         el('label', {}, [deleteFiles, ' and its folder on the NAS']),
         el('button', {
           type: 'button',
           className: 'danger',
           textContent: 'Delete',
+          tip: 'Remove this series from Catasonarr, and its folder too if ticked; asks first',
           onclick: () => remove(s, deleteFiles.checked),
         }),
       ]),
@@ -693,6 +761,7 @@ function seasonBlock(s, season, episodes) {
   const toggle = el('input', {
     type: 'checkbox',
     checked: season.monitored,
+    tip: 'Monitor this season (on) or none of it (off)',
     onchange: (e) =>
       saveSeries(
         s,
@@ -712,6 +781,7 @@ function seasonBlock(s, season, episodes) {
           type: 'checkbox',
           checked: e.monitored,
           'aria-label': `Monitor episode ${e.episodeNumber}`,
+          tip: 'Monitor this episode',
           onchange: (ev) => monitorEpisodes([e.id], ev.target.checked),
         }),
       ]),
@@ -861,10 +931,21 @@ function browseFolders(input) {
       folder = path;
       where.textContent = folder;
       const up = contents.parent
-        ? [el('li', {}, [el('button', { type: 'button', textContent: '..', onclick: () => show(contents.parent) })])]
+        ? [
+            el('li', {}, [
+              el('button', {
+                type: 'button',
+                textContent: '..',
+                tip: 'Up to the folder above',
+                onclick: () => show(contents.parent),
+              }),
+            ]),
+          ]
         : [];
       const down = contents.directories.map((d) =>
-        el('li', {}, [el('button', { type: 'button', textContent: d.name, onclick: () => show(d.path) })]),
+        el('li', {}, [
+          el('button', { type: 'button', textContent: d.name, tip: `Open ${d.path}`, onclick: () => show(d.path) }),
+        ]),
       );
       const none = down.length ? [] : [el('li', { className: 'muted', textContent: 'No folders here.' })];
       list.replaceChildren(...up, ...down, ...none);
@@ -881,8 +962,19 @@ function browseFolders(input) {
     where,
     list,
     el('div', { className: 'browser-actions' }, [
-      el('button', { type: 'button', textContent: 'Cancel', onclick: () => dialog.close() }),
-      el('button', { type: 'button', className: 'primary', textContent: 'Select', onclick: select }),
+      el('button', {
+        type: 'button',
+        textContent: 'Cancel',
+        tip: 'Close without choosing',
+        onclick: () => dialog.close(),
+      }),
+      el('button', {
+        type: 'button',
+        className: 'primary',
+        textContent: 'Select',
+        tip: 'Put the folder shown at the top in the field',
+        onclick: select,
+      }),
     ]),
   );
   dialog.addEventListener('close', () => dialog.remove());
@@ -921,7 +1013,12 @@ function connectionCard(title, rows, health) {
     el('div', { className: 'connection-head' }, [
       el('h3', { textContent: title }),
       status,
-      el('button', { type: 'button', textContent: 'Check', onclick: check }),
+      el('button', {
+        type: 'button',
+        textContent: 'Check',
+        tip: `Check the connection to ${title} again`,
+        onclick: check,
+      }),
     ]),
     el(
       'dl',
@@ -1051,6 +1148,7 @@ async function settingsPage() {
                   type: 'button',
                   className: 'danger',
                   textContent: 'Remove',
+                  tip: 'Stop using this root folder; its series and files stay. Asks first',
                   onclick: () => deleteFolder(f),
                 }),
               ]),
@@ -1061,8 +1159,18 @@ async function settingsPage() {
       el('div', { className: 'toolbar' }, [
         path,
         suggestFolders(path),
-        el('button', { type: 'button', textContent: 'Browse…', onclick: () => browseFolders(path) }),
-        el('button', { type: 'button', textContent: 'Add root folder', onclick: addFolder }),
+        el('button', {
+          type: 'button',
+          textContent: 'Browse…',
+          tip: "Choose the folder in Catasonarr's file system",
+          onclick: () => browseFolders(path),
+        }),
+        el('button', {
+          type: 'button',
+          textContent: 'Add root folder',
+          tip: 'Add the path in the field as a root folder',
+          onclick: addFolder,
+        }),
       ]),
     ]),
     el('section', {}, [
@@ -1101,12 +1209,102 @@ async function settingsPage() {
   };
 }
 
+// ── Tooltips (orch.md decision 121) ──────────────────────────────────────────
+
+/** The one tooltip of the page, in the top layer (a popover), so it also shows over the folder browser. */
+const tooltip = document.getElementById('tooltip');
+
+/** What the tooltip describes now, and the timer that shows it. */
+let tipped = null;
+let tipTimer = null;
+
+/**
+ * The control a tooltip describes, for aria-describedby: the element itself, or the field inside its label.
+ *
+ * @param {HTMLElement} node the element with data-tip
+ * @returns {HTMLElement} the control
+ */
+function tipControl(node) {
+  return node.matches('label') ? node.querySelector('input, select') || node : node;
+}
+
+/** Hides the tooltip, and forgets a pending one. */
+function hideTip() {
+  clearTimeout(tipTimer);
+  if (tipped) {
+    tipControl(tipped).removeAttribute('aria-describedby');
+    tipped = null;
+  }
+  if (tooltip.matches(':popover-open')) {
+    tooltip.hidePopover();
+  }
+}
+
+/**
+ * Shows the tooltip of an element after half a second: above it, or below when there is no room above.
+ *
+ * @param {HTMLElement} node the element with data-tip
+ */
+function showTip(node) {
+  if (node === tipped) {
+    return;
+  }
+  hideTip();
+  tipped = node;
+  tipTimer = setTimeout(() => {
+    if (!node.isConnected || !node.dataset.tip) {
+      return;
+    }
+    tooltip.textContent = node.dataset.tip;
+    tooltip.showPopover();
+    const box = node.getBoundingClientRect();
+    const tip = tooltip.getBoundingClientRect();
+    const gap = 8;
+    const below = box.top - tip.height - gap < 4;
+    const left = Math.min(Math.max(4, box.left + box.width / 2 - tip.width / 2), window.innerWidth - tip.width - 4);
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${below ? box.bottom + gap : box.top - tip.height - gap}px`;
+    tooltip.style.setProperty('--arrow-x', `${box.left + box.width / 2 - left}px`);
+    tooltip.dataset.side = below ? 'below' : 'above';
+    tipControl(node).setAttribute('aria-describedby', 'tooltip');
+  }, 500);
+}
+
+document.addEventListener('pointerover', (e) => {
+  const node = e.target.closest('[data-tip]');
+  if (node) {
+    showTip(node);
+  } else if (tipped && !tipped.contains(e.target)) {
+    hideTip();
+  }
+});
+document.addEventListener('pointerout', (e) => {
+  if (tipped && !tipped.contains(e.relatedTarget)) {
+    hideTip();
+  }
+});
+document.addEventListener('focusin', (e) => {
+  const node = e.target.closest('[data-tip]');
+  if (node && e.target.matches(':focus-visible')) {
+    showTip(node);
+  }
+});
+document.addEventListener('focusout', hideTip);
+document.addEventListener('pointerdown', hideTip);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    hideTip();
+  }
+});
+window.addEventListener('scroll', hideTip, true);
+
 // ── Navigation ───────────────────────────────────────────────────────────────
 
 /** Draws the page the address asks for. */
 async function route() {
   generation += 1;
   onChange = null;
+  hideTip();
   const hash = window.location.hash || '#/';
   const detail = hash.match(/^#\/series\/(\d+)$/);
   const name = detail ? 'series' : { '#/add': 'add', '#/import': 'import', '#/settings': 'settings' }[hash] || 'series';
