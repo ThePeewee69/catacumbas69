@@ -13,6 +13,7 @@ brackets is the one seen running on the date given.
 |---|---|---|---|
 | Java (Eclipse Temurin) | 21 | `java.version` in each `pom.xml`; `apps/*/Dockerfile` (`eclipse-temurin:21-jre-alpine`) | Every app and catacommons |
 | Spring Boot | 3.5.0 | `spring-boot-starter-parent` in each `pom.xml` | Web (Tomcat), validation, Data MongoDB, Actuator; manages the versions of Spring, Tomcat, Jackson, Micrometer, the MongoDB driver and Testcontainers |
+| Spring WebSocket | managed by Spring Boot | `apps/catasonarr/pom.xml` | Catasonarr's live pages, `/api/v1/updates` (decision 118) |
 | Spring Security + OAuth2 client | managed by Spring Boot | `apps/catapulsar/pom.xml`, `apps/catasonarr/pom.xml` | Login through Dex (SEC-2) for Catapulsar and Catasonarr's page; Sonarr's API key for Catasonarr's API v3 |
 | Apache Pulsar client and admin client | 4.0.3 | `pulsar.version` in each `pom.xml` | Producers, consumers, TableViews and the admin API |
 | MongoDB Java driver | managed by Spring Boot (5.4) | `spring-boot-starter-data-mongodb` | Every collection (§4.3) |

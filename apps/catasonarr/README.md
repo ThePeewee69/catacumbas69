@@ -40,10 +40,17 @@ What phase 1 answers, with Sonarr 4's fields (Swagger UI at `/swagger-ui.html`):
 | `/api/v3/tag`, `/api/v3/language`, `/api/v3/languageprofile` | Tags; languages (Sonarr's list; language profiles as Sonarr 4: one, deprecated) |
 | `GET/POST /api/v3/command`, `GET /api/v3/command/{id}` | `RefreshSeries` runs; the searches and `RescanSeries` end *unsuccessful* until phase 2 |
 | `POST /api/v3/catasonarr/import/sonarr-quality` | Catasonarr's own: the import from `sonarr.db` (below) |
+| `GET /api/v1/connections`, `GET /api/v1/connections/pulsar/health`, `GET /api/v1/connections/mongodb/health` | Catasonarr's own, for Settings → Connections (decision 119): Pulsar's addresses and MongoDB's connection without its password, and a health check of each; Dex session only |
 
 **Series data**: [TVmaze](https://www.tvmaze.com/api) (CC BY-SA, credited in the page's footer), found by
 TheTVDB's id as the clients send it. With a TMDB token, [TMDB](https://www.themoviedb.org) gives the pictures and
 the summary in pt-PT. Every series is refreshed every 12 hours (only those TVmaze changed, or a week old).
+
+**Live pages** (decision 118): Series, a series' detail, Import library and Settings update themselves when
+something changes, here, through a client (Seerr) or by Catasonarr itself, and a notice says what changed (those of
+the same 2 s together). Catasonarr's events reach the pages through the system bridge `pages-catasonarr`, the topic
+`catacumbas69/catasonarr/pages` (message TTL 1 h), the subscription `catasonarr-pages-<pod>` of each replica (in
+Catapulsar's Consumers panel, `pages`) and the WebSocket `/api/v1/updates`.
 
 **Import library** (the page's *Import library*, decision 115): as Sonarr's Library Import, the folders of a root
 folder that are no series yet, matched in TVmaze by name and year (`The Office (2005)`) or by an id in the name
@@ -86,6 +93,7 @@ checks pass.
 | `CATASONARR_TVMAZE_URL`, `CATASONARR_TMDB_URL` | `https://api.tvmaze.com`, `https://api.themoviedb.org/3` | The tests point TVmaze at a fake |
 | `CATASONARR_METADATA_REFRESHINTERVAL`, `CATASONARR_METADATA_REFRESHINITIALDELAY` | `PT12H`, `PT10M` | The refresh of every series |
 | `CATASONARR_COMMANDS_KEEP` | `7d` | How long finished commands are kept |
+| `CATASONARR_OUTSIDE_PULSAR_SERVICE_URL`, `CATASONARR_OUTSIDE_PULSAR_BROKER_URL`, `CATASONARR_OUTSIDE_MONGODB_HOSTS` | `http://meloes:31080`, `pulsar://meloes:31650`, `meloes:32017` | Shown in Settings → Connections as the way in from outside (IntelliJ, Compass); Catasonarr itself uses the cluster's names |
 | `SPRING_DATA_MONGODB_URI` | the ReplicaSet in the cluster | Secret `catacumbas69-apps-mongodb` (key `uri`) |
 | `PULSAR_SERVICE_URL`, `PULSAR_BROKER_URL`, `PULSAR_LISTENER_NAME` | the cluster's | As the other apps (§2.1) |
 | `CATAPONTE_URL` | `http://cataponte:8082` | Where the `audit-catasonarr` bridge is registered |

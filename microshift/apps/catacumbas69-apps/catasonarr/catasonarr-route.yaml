@@ -2,6 +2,10 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: catasonarr
+  annotations:
+    # The pages' WebSocket (/api/v1/updates, orch.md decision 118) stays open while a page is: up to an hour
+    # without traffic through the router (Catasonarr pings every 25 s), instead of the default
+    haproxy.router.openshift.io/timeout-tunnel: 1h
 spec:
   host: catasonarr.catacumbas69.com
   tls:

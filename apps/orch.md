@@ -132,6 +132,7 @@ versions, layer by layer: [`TECHNOLOGIES.md`](TECHNOLOGIES.md).
 | `CATASONARR_AUTH_CLIENT_SECRET` | Catasonarr | Secret `catasonarr-oidc` (key `client-secret`, `dex-secret.sh`) | *(not used)* |
 | `CATASONARR_INSTANCE_NAME`, `CATASONARR_SONARR_VERSION` | Catasonarr (`GET /api/v3/system/status`) | `Catasonarr`, `4.0.20.0` | same |
 | `CATASONARR_TMDB_TOKEN` (optional) | Catasonarr (TMDB's pictures and Portuguese summary, decision 112) | Secret `catasonarr-tmdb` (key `token`, `catasonarr-secret.sh tmdb`); without it TMDB is off | *(empty: TMDB off)* |
+| `CATASONARR_OUTSIDE_PULSAR_SERVICE_URL`, `CATASONARR_OUTSIDE_PULSAR_BROKER_URL`, `CATASONARR_OUTSIDE_MONGODB_HOSTS` (optional) | Catasonarr (Settings → Connections, from outside, decision 119) | `http://meloes:31080`, `pulsar://meloes:31650`, `meloes:32017` | same |
 | `CATASONARR_TVMAZE_URL` (optional) | Catasonarr (series data, decision 112) | `https://api.tvmaze.com` | same (the tests point it at a fake) |
 | `CATASONARR_METADATA_REFRESHINTERVAL` (optional) | Catasonarr (refresh of every series, decision 112) | `PT12H` | same |
 | `CATAMETRICAS_COLLECT_INTERVAL_SECONDS` | Catapulsar, Catametricas (same value) | `60` | `60` |
@@ -445,7 +446,8 @@ Event catalogue (phase 1):
 System bridges (ADR 0009): `audit-<app>` = `catacumbas69/<app>/events` → `catacumbas69/cataudit/audit`,
 subscription `cataponte-audit-<app>` (`Failover`, ordered), flagged `system` and shown with a badge; otherwise
 ordinary bridges. Registering again keeps an enabled state a user changed; a deleted one comes back at the
-app's next start. Registration events have the app name as actor (`X-Catacumbas69-App`).
+app's next start. Registration events have the app name as actor (`X-Catacumbas69-App`). Catasonarr also registers
+`pages-catasonarr` = `catacumbas69/catasonarr/events` → `catacumbas69/catasonarr/pages` (decision 118).
 
 Settings topic `catacumbas69/catapulsar/settings` (ADR 0011): key = setting key, value `{"value": "<text>"}`,
 empty value (tombstone) = default. Catapulsar publishes on every change and every value (or tombstone) at
@@ -797,6 +799,11 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-24, connections in Settings** (decision 119): Pulsar's and MongoDB's connections (without the
+  password), each with a health check.
+- **2026-11-24, live pages** (decision 118): Catasonarr's pages update themselves through a WebSocket, fed by a
+  system bridge to the topic `pages` and one subscription per replica; Catapulsar and Catavigia find the apps with
+  consumers instead of naming them.
 - **2026-11-24, paths in any case** (decision 117): Seerr's `/api/v3/qualityProfile` now answers, as in Sonarr.
 - **2026-11-23, Seerr** (decision 116): Seerr on meloes in the namespace `media`, with its own login through Plex,
   sending series to Catasonarr through its Route.
@@ -1701,3 +1708,36 @@ Catasonarr (2026-11-21):
      with 404, so Seerr's *Test* said "Failed to connect to Sonarr". Spring MVC's path patterns are made
      case-insensitive for the whole app (`WebConfig`), and the two security chains match `/api/v3/` and `/api/` in
      any case too, so a path in another case never skips the API key.
+
+118. **Catasonarr's pages update themselves.** A change shows at once on every open page, made there, by a client
+     (Seerr) or by Catasonarr itself. Catasonarr's events are copied by a **system bridge `pages-catasonarr`**
+     (registered by Catasonarr at start-up as it registers `audit-catasonarr`; subscription
+     `cataponte-pages-catasonarr`) to its own topic **`catacumbas69/catasonarr/pages`**, which has a **message TTL
+     of 1 hour** (a topic policy: Pulsar has no subscription expiration per topic, and one for the namespace would
+     also reach the bridges' subscriptions on `events`). **Each replica** reads it with its own durable
+     subscription `catasonarr-pages-<pod>` (`Exclusive`, from the newest message), so every replica tells its own
+     pages everything; a subscription left behind by an old pod holds at most an hour of changes and stays listed,
+     empty. A change older than a minute when read (after a restart) is acknowledged without telling anyone; every
+     message is acknowledged. The pages listen on a **WebSocket `/api/v1/updates`** (behind the Dex session; pinged
+     every 25 s; the Route keeps a tunnel open up to an hour) and connect again by themselves, drawing the page
+     again after a reconnection. Series, a series' detail, Import library and Settings draw themselves again
+     (keeping the scroll, the filter and what is being typed), and **every change is told** in a notice, those of
+     the same 2 s together ("41 changes: 40 series refreshed, 1 episode monitored"). The subscription has
+     **consumer control** (`catacommons.consumers.enabled=true`): it shows in Catapulsar's Consumers panel and can
+     be paused there, without a DLQ. **Catapulsar and Catavigia no longer name the apps with consumers**: every
+     minute they look for the namespaces with a `consumers` topic (`ConsumerApps` in catacommons), so Catasonarr,
+     and any new app, is found on its own.
+
+119. **Catasonarr's Settings show its connections.** At the top of Settings, **Connections**: Pulsar's addresses (admin
+     API, broker, listener) and MongoDB's connection string **without its password** (`****`), with what it says (hosts,
+     database, user, authentication database, replica set, TLS, direct connection), each with a **health check** that
+     runs when the page opens and on *Check*: Pulsar's admin API answers with the broker's version, MongoDB answers
+     `ping` and its version, with the time it took, or `DOWN` with why. Read-only: they change in the ConfigMap and the
+     Secret `catacumbas69-apps-mongodb`; changing the database from the page was considered and dropped. Each also shows
+     **the same from outside the cluster** (IntelliJ, Compass), by name through meloes' NodePorts (decision 87):
+     `http://meloes:31080`, `pulsar://meloes:31650` (listener `external`) and
+     `mongodb://<user>:****@meloes:32017/<database>?directConnection=true…` (the replica set's members are named for
+     inside the cluster); Catasonarr itself keeps the cluster's names, which need no router, TLS or home DNS and carry
+     Pulsar's and MongoDB's own protocols, which the Routes do not. Catasonarr's own `GET /api/v1/connections`,
+     `/pulsar/health` and `/mongodb/health`, behind the Dex session (Sonarr's API key does not reach them). The section
+     shows even with MongoDB down; the rest of the page then says it was not loaded.

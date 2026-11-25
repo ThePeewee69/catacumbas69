@@ -15,6 +15,7 @@ import org.springframework.validation.annotation.Validated;
  * @param compat how Catasonarr presents itself to Sonarr's clients
  * @param metadata where series and episodes come from (orch.md decision 112)
  * @param commands how long commands are kept
+ * @param outside how Pulsar and MongoDB are reached from outside the cluster, shown in Settings (decision 119)
  */
 @Validated
 @ConfigurationProperties(prefix = "catasonarr")
@@ -23,7 +24,8 @@ public record CatasonarrProperties(
         @Valid @NotNull Mongo mongo,
         @Valid @NotNull Compat compat,
         @Valid @NotNull Metadata metadata,
-        @Valid @NotNull Commands commands) {
+        @Valid @NotNull Commands commands,
+        @Valid @NotNull Outside outside) {
 
     /**
      * Pulsar clients.
@@ -106,5 +108,18 @@ public record CatasonarrProperties(
      * @param keep how long a command is kept after it arrives
      */
     public record Commands(@NotNull Duration keep) {
+    }
+
+    /**
+     * How Pulsar and MongoDB are reached from outside the cluster (IntelliJ, Compass): their NodePorts on meloes, by
+     * name (orch.md decisions 87 and 119). Only shown in Settings; Catasonarr itself uses the cluster's names.
+     *
+     * @param pulsarServiceUrl Pulsar's admin API, e.g. {@code http://meloes:31080}
+     * @param pulsarBrokerUrl Pulsar's binary protocol, with the listener {@code external}, e.g.
+     *     {@code pulsar://meloes:31650}
+     * @param mongodbHosts MongoDB's NodePort, e.g. {@code meloes:32017}
+     */
+    public record Outside(@NotBlank String pulsarServiceUrl, @NotBlank String pulsarBrokerUrl,
+                          @NotBlank String mongodbHosts) {
     }
 }

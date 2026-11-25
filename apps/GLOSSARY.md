@@ -113,7 +113,8 @@ there is a written reason, **MAY** is optional.
 | **TMDB** | The Movie Database | Catasonarr's pictures and pt-PT summaries, when its token is set (decision 112) |
 | **TVDB** | TheTVDB | The series ids Sonarr's clients send; Catasonarr finds the series by them in TVmaze (decision 112) |
 | **Torznab** | Torrent indexer API in the Newznab style | How Prowlarr's indexers answer searches |
-| **TTL** | Time To Live | MongoDB TTL indexes; claims and status documents that expire |
+| **TTL** | Time To Live | MongoDB TTL indexes; claims and status documents that expire; the 1 h message TTL of `catasonarr/pages` (decision 118) |
+| **WS** / **WebSocket** | A connection that stays open both ways | Catasonarr's `/api/v1/updates`, through which its pages hear about changes (decision 118) |
 | **UI** | User Interface | Catapulsar's web page; the Grafana, Argo CD and Pulsar UIs |
 | **URI** / **URL** | Uniform Resource Identifier / Locator | MongoDB's connection string; the apps' editable URLs |
 | **UUID** | Universally Unique Identifier | The Dex user's ID, and other generated identifiers |

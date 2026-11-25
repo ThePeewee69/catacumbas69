@@ -1,6 +1,7 @@
 package com.catacumbas69.catapulsar.service;
 
 import com.catacumbas69.catacommons.CatacommonsScheduler;
+import com.catacumbas69.catacommons.consumers.ConsumerApps;
 import com.catacumbas69.catacommons.consumers.ConsumerCommand;
 import com.catacumbas69.catacommons.consumers.ConsumerStatus;
 import com.catacumbas69.catacommons.pulsar.CatacumbasTopics;
@@ -14,10 +15,13 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import org.apache.pulsar.client.admin.PulsarAdmin;
+import org.apache.pulsar.client.admin.PulsarAdminException;
 import org.apache.pulsar.client.api.Producer;
 import org.apache.pulsar.client.api.PulsarClient;
 import org.apache.pulsar.client.api.PulsarClientException;
@@ -35,14 +39,16 @@ import org.springframework.web.server.ResponseStatusException;
 /**
  * The apps' consumers for the Consumers panel (ADR 0015, orch.md decision 67): reads each app's compacted
  * {@code catacumbas69/<app>/consumers} with a {@link TableView}, and publishes the panel's commands on
- * {@code catacumbas69/<app>/consumer-commands}. Each request is audited as {@code consumer.<action>-requested};
- * the app records what it did. Everything goes through Pulsar, so it works while MongoDB is down.
+ * {@code catacumbas69/<app>/consumer-commands}. The apps are found, not named: every minute, those whose namespace
+ * has a {@code consumers} topic ({@link ConsumerApps}, decision 118), so a new app appears on its own. Each request
+ * is audited as {@code consumer.<action>-requested}; the app records what it did. Everything goes through Pulsar, so
+ * it works while MongoDB is down.
  */
 @Service
 public class ConsumerStatusService implements ApplicationListener<ApplicationReadyEvent>, DisposableBean {
 
-    /** Apps whose consumers are controlled. */
-    public static final List<String> APPS = List.of("cataudit", "catametricas", "catavigia");
+    /** How often the apps are looked for again. */
+    static final long DISCOVER_SECONDS = 60;
 
     /** A replica that has not reported for this long is shown as gone. */
     static final Duration STALE_AFTER = Duration.ofSeconds(30);
@@ -52,37 +58,65 @@ public class ConsumerStatusService implements ApplicationListener<ApplicationRea
     private static final long RETRY_SECONDS = 10;
 
     private final PulsarClient client;
+    private final PulsarAdmin admin;
     private final CatacommonsScheduler scheduler;
     private final AuditService audit;
     private final Clock clock;
     private final Map<String, TableView<ConsumerStatus>> views = new ConcurrentHashMap<>();
     private final Map<String, Producer<ConsumerCommand>> producers = new ConcurrentHashMap<>();
+    private final Set<String> apps = ConcurrentHashMap.newKeySet();
     private volatile boolean closed;
 
     /**
      * Creates the service.
      *
      * @param client Pulsar client
+     * @param admin Pulsar admin client, to find the apps
      * @param scheduler runs the retries
      * @param audit audit log
      * @param clock time source
      */
-    public ConsumerStatusService(PulsarClient client, CatacommonsScheduler scheduler, AuditService audit,
-                                 Clock clock) {
+    public ConsumerStatusService(PulsarClient client, PulsarAdmin admin, CatacommonsScheduler scheduler,
+                                 AuditService audit, Clock clock) {
         this.client = client;
+        this.admin = admin;
         this.scheduler = scheduler;
         this.audit = audit;
         this.clock = clock;
     }
 
     /**
-     * Opens the status views in the background.
+     * Looks for the apps now and every minute, in the background, and opens the views of new ones.
      *
      * @param event the application is ready
      */
     @Override
     public void onApplicationEvent(ApplicationReadyEvent event) {
-        APPS.forEach(this::open);
+        try {
+            scheduler.executor().scheduleWithFixedDelay(this::discover, 0, DISCOVER_SECONDS, TimeUnit.SECONDS);
+        } catch (RejectedExecutionException e) {
+            LOG.debug("Consumer apps not looked for, shutting down");
+        }
+    }
+
+    /**
+     * Looks for the apps with a consumers topic and opens the views of the new ones. When Pulsar does not answer,
+     * the apps already found stay.
+     */
+    void discover() {
+        if (closed) {
+            return;
+        }
+        try {
+            for (String app : ConsumerApps.discover(admin)) {
+                if (apps.add(app)) {
+                    LOG.info("Consumers of {} found", app);
+                    openOrRetry(app);
+                }
+            }
+        } catch (PulsarAdminException | RuntimeException e) {
+            LOG.warn("Apps with consumers not looked for, retrying in {} s: {}", DISCOVER_SECONDS, e.getMessage());
+        }
     }
 
     /**
@@ -108,10 +142,11 @@ public class ConsumerStatusService implements ApplicationListener<ApplicationRea
      * @param consumer a consumer or {@code *}
      * @param action {@code pause}, {@code resume} or {@code check}
      * @param user who made the change (the signed-in user)
-     * @throws ResponseStatusException {@code 400} for an unknown app or action, {@code 503} if Pulsar refuses
+     * @throws ResponseStatusException {@code 400} for an app not found (yet) or an unknown action, {@code 503} if
+     *     Pulsar refuses
      */
     public void send(String app, String instance, String consumer, String action, String user) {
-        if (!APPS.contains(app)) {
+        if (!apps.contains(app)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown app '" + app + "'");
         }
         AuditAction audited = switch (action) {
@@ -166,6 +201,15 @@ public class ConsumerStatusService implements ApplicationListener<ApplicationRea
                 "Command not sent to " + app + " (Pulsar): " + e.getMessage(), e);
     }
 
+    private void openOrRetry(String app) {
+        try {
+            open(app);
+        } catch (RuntimeException e) {
+            LOG.warn("Consumer status of {} not opened, retrying in {} s: {}", app, RETRY_SECONDS, e.getMessage());
+            later(() -> openOrRetry(app));
+        }
+    }
+
     private void open(String app) {
         if (closed) {
             return;
@@ -177,7 +221,7 @@ public class ConsumerStatusService implements ApplicationListener<ApplicationRea
                     if (error != null) {
                         LOG.warn("Consumer status of {} not read yet, retrying in {} s: {}", app, RETRY_SECONDS,
                                 error.getMessage());
-                        later(() -> open(app));
+                        later(() -> openOrRetry(app));
                         return;
                     }
                     views.put(app, view);

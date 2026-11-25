@@ -4,6 +4,17 @@
 /** Grows on every page change, so work a page left behind (the import's searches) stops. */
 let generation = 0;
 
+/**
+ * What the page shown does when Catasonarr says something changed (orch.md decision 118): set by each page as it is
+ * drawn, cleared on every page change.
+ *
+ * @type {((change: object) => void) | null}
+ */
+let onChange = null;
+
+/** The series page's filter, kept when the page is drawn again. */
+let seriesFilter = '';
+
 /** The cookie Spring Security writes the CSRF token into (SEC-2). */
 const CSRF_COOKIE = 'XSRF-TOKEN';
 
@@ -149,7 +160,12 @@ function date(iso) {
 async function seriesPage() {
   const series = await api('GET', '/api/v3/series');
   const grid = el('div', { className: 'grid' });
-  const filter = el('input', { type: 'search', placeholder: 'Filter', 'aria-label': 'Filter the series' });
+  const filter = el('input', {
+    type: 'search',
+    placeholder: 'Filter',
+    value: seriesFilter,
+    'aria-label': 'Filter the series',
+  });
   const draw = () => {
     const words = filter.value.trim().toLowerCase();
     grid.replaceChildren(
@@ -173,8 +189,16 @@ async function seriesPage() {
         }),
     );
   };
-  filter.addEventListener('input', draw);
+  filter.addEventListener('input', () => {
+    seriesFilter = filter.value;
+    draw();
+  });
   draw();
+  onChange = (change) => {
+    if (change.entity === 'series') {
+      redraw(seriesPage);
+    }
+  };
   page.replaceChildren(
     el('div', { className: 'toolbar' }, [
       filter,
@@ -550,6 +574,14 @@ async function importPage() {
     rows = [];
     load();
   });
+  onChange = (change) => {
+    if (
+      (change.entity === 'series' && ['added', 'deleted'].includes(change.action)) ||
+      change.entity === 'rootfolder'
+    ) {
+      load();
+    }
+  };
 
   page.replaceChildren(
     el('div', { className: 'page-head' }, [
@@ -637,6 +669,13 @@ async function detailPage(id) {
     .sort((a, b) => b.seasonNumber - a.seasonNumber)
     .map((season) => seasonBlock(s, season, episodes));
   page.replaceChildren(head, ...seasons);
+  onChange = (change) => {
+    if (change.entity === 'series' && change.seriesId === id && change.action === 'deleted') {
+      window.location.hash = '#/';
+    } else if ((change.entity === 'series' && change.seriesId === id) || change.entity === 'episode') {
+      redraw(() => detailPage(id));
+    }
+  };
 }
 
 /**
@@ -853,13 +892,113 @@ function browseFolders(input) {
   show(typed ? `${typed.replace(/\/+$/, '')}/` : '/');
 }
 
-/** Root folders, quality profiles and tags. */
-async function settingsPage() {
-  const [folders, profiles, tags] = await Promise.all([
-    api('GET', '/api/v3/rootfolder'),
-    api('GET', '/api/v3/qualityprofile'),
-    api('GET', '/api/v3/tag'),
+/**
+ * One connection with its health check (orch.md decision 119): what it is, and UP or DOWN as the server answers.
+ *
+ * @param {string} title e.g. MongoDB
+ * @param {Array<[string, string|undefined]>} rows label and value; empty values are left out
+ * @param {string} health the health check's address
+ * @returns {HTMLElement} the card, checked once drawn
+ */
+function connectionCard(title, rows, health) {
+  const status = el('span', { className: 'status', textContent: 'Checking…' });
+  const check = async () => {
+    status.className = 'status';
+    status.textContent = 'Checking…';
+    try {
+      const h = await api('GET', health);
+      const up = h.status === 'UP';
+      status.className = `status ${up ? 'up' : 'down'}`;
+      status.textContent = up
+        ? `UP · ${h.latencyMs} ms${h.version ? ` · v${h.version}` : ''}`
+        : `DOWN · ${h.error || 'no answer'}`;
+    } catch (e) {
+      status.className = 'status down';
+      status.textContent = `DOWN · ${e.message}`;
+    }
+  };
+  const card = el('div', { className: 'connection' }, [
+    el('div', { className: 'connection-head' }, [
+      el('h3', { textContent: title }),
+      status,
+      el('button', { type: 'button', textContent: 'Check', onclick: check }),
+    ]),
+    el(
+      'dl',
+      {},
+      rows
+        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+        .flatMap(([k, v]) => [el('dt', { textContent: k }), el('dd', { textContent: String(v) })]),
+    ),
   ]);
+  check();
+  return card;
+}
+
+/**
+ * Pulsar's addresses and MongoDB's connection (without its password), each with a health check.
+ *
+ * @param {object} c the connections, from /api/v1/connections
+ * @returns {HTMLElement} the section
+ */
+function connectionsSection(c) {
+  const m = c.mongodb || {};
+  const yes = (b) => (b ? 'yes' : 'no');
+  return el('section', {}, [
+    el('h2', { textContent: 'Connections' }),
+    el('p', {
+      className: 'muted',
+      textContent:
+        'Where Catasonarr connects, inside the cluster, and the same from outside it (IntelliJ, Compass) through ' +
+        "meloes' NodePorts. They change in its ConfigMap and in the Secret catacumbas69-apps-mongodb.",
+    }),
+    el('div', { className: 'connections' }, [
+      connectionCard(
+        'Pulsar',
+        [
+          ['Admin API', c.pulsar.serviceUrl],
+          ['Broker', c.pulsar.brokerUrl],
+          ['Listener', c.pulsar.listenerName],
+          ['Admin API, from outside', c.pulsar.outsideServiceUrl],
+          ['Broker, from outside', c.pulsar.outsideBrokerUrl && `${c.pulsar.outsideBrokerUrl} (listener external)`],
+        ],
+        '/api/v1/connections/pulsar/health',
+      ),
+      connectionCard(
+        'MongoDB',
+        [
+          ['Connection', m.uri],
+          ['Hosts', (m.hosts || []).join(', ')],
+          ['Database', m.database],
+          ['User', m.username],
+          ['Auth database', m.authSource],
+          ['Replica set', m.replicaSet],
+          ['TLS', yes(m.tls)],
+          ['Direct connection', m.directConnection === undefined ? undefined : yes(m.directConnection)],
+          ['From outside', m.outsideUri],
+        ],
+        '/api/v1/connections/mongodb/health',
+      ),
+    ]),
+  ]);
+}
+
+/** Connections, root folders, quality profiles and tags. */
+async function settingsPage() {
+  const connections = await api('GET', '/api/v1/connections');
+  let folders = [];
+  let profiles = [];
+  let tags = [];
+  let notLoaded = null;
+  try {
+    [folders, profiles, tags] = await Promise.all([
+      api('GET', '/api/v3/rootfolder'),
+      api('GET', '/api/v3/qualityprofile'),
+      api('GET', '/api/v3/tag'),
+    ]);
+  } catch (e) {
+    notLoaded = e.message; // MongoDB down, most likely: the connections still show, with their checks
+  }
   const path = el('input', {
     id: 'root-folder-path',
     placeholder: '/data/Series',
@@ -887,6 +1026,8 @@ async function settingsPage() {
     }
   };
   page.replaceChildren(
+    connectionsSection(connections),
+    ...(notLoaded ? [el('p', { className: 'empty', textContent: `The rest is not loaded: ${notLoaded}` })] : []),
     el('section', {}, [
       el('h2', { textContent: 'Root folders' }),
       el('p', {
@@ -950,6 +1091,14 @@ async function settingsPage() {
         : el('p', { className: 'muted', textContent: 'No tags.' }),
     ]),
   );
+  onChange = (change) => {
+    const settings = ['rootfolder', 'qualityprofile', 'qualitydefinition', 'customformat', 'tag', 'import'];
+    const editing =
+      document.activeElement === path || path.value.trim() !== '' || document.querySelector('dialog[open]');
+    if (!editing && (settings.includes(change.entity) || change.entity === 'series')) {
+      redraw(settingsPage);
+    }
+  };
 }
 
 // ── Navigation ───────────────────────────────────────────────────────────────
@@ -957,6 +1106,7 @@ async function settingsPage() {
 /** Draws the page the address asks for. */
 async function route() {
   generation += 1;
+  onChange = null;
   const hash = window.location.hash || '#/';
   const detail = hash.match(/^#\/series\/(\d+)$/);
   const name = detail ? 'series' : { '#/add': 'add', '#/import': 'import', '#/settings': 'settings' }[hash] || 'series';
@@ -979,6 +1129,104 @@ async function route() {
   } catch (e) {
     page.replaceChildren(el('p', { className: 'empty', textContent: `Not loaded: ${e.message}` }));
   }
+}
+
+// ── Live updates (orch.md decision 118) ─────────────────────────────────────────
+
+/** Changes waiting to be told in one notice; told every 2 s. */
+const pendingNotices = [];
+
+/** When the page is drawn again after a change: once the burst is over, at most every 2 s. */
+let redrawTimer = null;
+
+/**
+ * Draws the page shown again after a change, keeping where it was scrolled; a burst of changes (the 12-hourly
+ * refresh) draws it once.
+ *
+ * @param {() => Promise<void>} draw the page's own drawing
+ */
+function redraw(draw) {
+  clearTimeout(redrawTimer);
+  const mine = generation;
+  redrawTimer = setTimeout(async () => {
+    if (mine !== generation) {
+      return; // another page by now
+    }
+    const y = window.scrollY;
+    try {
+      await draw();
+      window.scrollTo(0, y);
+    } catch (e) {
+      toast(`Not updated: ${e.message}`, true);
+    }
+  }, 500);
+}
+
+/**
+ * Who made a change, as a person reads it.
+ *
+ * @param {string} [actor] a user, api-key@<address>, an address, or catasonarr
+ * @returns {string} e.g. "API key (10.0.0.5)"
+ */
+function actorName(actor) {
+  if (!actor) {
+    return 'someone';
+  }
+  if (actor === 'catasonarr') {
+    return 'Catasonarr';
+  }
+  const key = actor.match(/^api-key@(.+)$/);
+  return key ? `API key (${key[1]})` : actor;
+}
+
+/** Tells the changes of the last 2 s in one notice: one by one when few, counted when many. */
+function tellChanges() {
+  if (!pendingNotices.length) {
+    return;
+  }
+  const changes = pendingNotices.splice(0);
+  if (changes.length <= 3) {
+    toast(changes.map((c) => `${c.subject || c.entity} ${c.action} by ${actorName(c.actor)}`).join(' · '));
+    return;
+  }
+  const counts = new Map();
+  changes.forEach((c) => {
+    const key = `${c.entity} ${c.action}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  toast(`${changes.length} changes: ${[...counts].map(([k, n]) => `${n} ${k}`).join(', ')}`);
+}
+
+/**
+ * Listens to Catasonarr's changes through the WebSocket /api/v1/updates, and connects again when it closes,
+ * waiting a little longer each time; after a reconnection the page is drawn again, for what it missed.
+ *
+ * @param {number} [wait] seconds before the next attempt
+ * @param {boolean} [missed] whether changes may have been missed
+ */
+function listen(wait = 1, missed = false) {
+  const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const socket = new WebSocket(`${scheme}://${window.location.host}/api/v1/updates`);
+  socket.addEventListener('open', () => {
+    if (missed) {
+      route();
+    }
+  });
+  socket.addEventListener('message', (message) => {
+    let change;
+    try {
+      change = JSON.parse(message.data);
+    } catch {
+      return;
+    }
+    pendingNotices.push(change);
+    if (onChange) {
+      onChange(change);
+    }
+  });
+  socket.addEventListener('close', () => {
+    setTimeout(() => listen(Math.min(wait * 2, 30), true), wait * 1000);
+  });
 }
 
 /** Posts the logout form, which ends Catasonarr's session and Dex's. */
@@ -1015,3 +1263,5 @@ async function showUser() {
 window.addEventListener('hashchange', route);
 showUser();
 route();
+listen();
+setInterval(tellChanges, 2000);
