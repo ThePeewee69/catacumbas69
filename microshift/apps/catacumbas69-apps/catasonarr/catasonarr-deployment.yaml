@@ -93,6 +93,14 @@ spec:
                   name: catasonarr-tmdb
                   key: token
                   optional: true
+            # Plex's token (decision 122), made by catasonarr-secret.sh plex; without it Plex is not told of imports.
+            # Plex's address is in Settings → Plex (MongoDB)
+            - name: CATASONARR_PLEX_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: catasonarr-plex
+                  key: token
+                  optional: true
             - name: SPRING_DATA_MONGODB_URI
               valueFrom:
                 secretKeyRef:

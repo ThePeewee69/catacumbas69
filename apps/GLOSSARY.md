@@ -76,13 +76,16 @@ there is a written reason, **MAY** is optional.
 | **CRI-O** | Container Runtime Interface, OCI implementation | MicroShift's container runtime |
 | **CRUD** | Create, Read, Update, Delete | The bridges' API in Cataponte |
 | **CC BY-SA** | Creative Commons Attribution-ShareAlike | TVmaze's data licence: credited in Catasonarr's page |
+| **CF** | Custom Format | Sonarr's scored release traits; Catasonarr scores releases and files with them (decision 122) |
 | **CSRF** / **XSRF** | Cross-Site Request Forgery | Catapulsar's and Catasonarr's token in the `XSRF-TOKEN` cookie (SEC-2) |
 | **DLQ** | Dead-Letter Queue | The topic a message goes to after too many failed deliveries (decision 68) |
 | **DNS** | Domain Name System | The records that point `*.catacumbas69.com` at meloes |
 | **DOM** | Document Object Model | The page Alpine.js updates |
 | **DTO** | Data Transfer Object | The records the REST APIs read and write |
+| **DV** / **HDR** | Dolby Vision / High Dynamic Range | Video kinds ffprobe finds (`DV HDR10`, `HDR10Plus`, `HLG`, `PQ`); Sonarr's `{MediaInfo VideoDynamicRangeType}` (decision 122) |
 | **ECDSA** | Elliptic Curve Digital Signature Algorithm | The key type of our CA (P-256) |
 | **ECS** | Elastic Common Schema | The JSON layout of the apps' logs (OBS-3) |
+| **ffprobe** | FFmpeg's media prober | Reads each episode file's codecs, languages, HDR and runtime, as Sonarr (decision 122) |
 | **GitOps** | Git as the source of truth for what runs | Argo CD on meloes, Flux on K3s |
 | **GPL** | GNU General Public License | Sonarr's licence, so also Catasonarr's (`apps/catasonarr/LICENSE`, GPL-3.0) |
 | **HTTP(S)** | HyperText Transfer Protocol (Secure) | Every Route is HTTPS (SEC-8) |
@@ -107,14 +110,15 @@ there is a written reason, **MAY** is optional.
 | **REST** | Representational State Transfer | The apps' HTTP APIs |
 | **RHEL** | Red Hat Enterprise Linux | meloes' operating system |
 | **RPM** | RPM Package Manager | How MicroShift is installed on meloes |
-| **RSS** | Really Simple Syndication | The indexers' feeds of new releases, read on every RSS sync |
+| **RSS** | Really Simple Syndication | The indexers' feeds of new releases, read on every RSS sync (every 15 min in Catasonarr, decision 122) |
 | **SCC** | Security Context Constraints | OpenShift's pod security; granted by RoleBindings in git (`nonroot-v2` for Catasonarr's user 1000) |
 | **SHA** | Secure Hash Algorithm (here: a commit's hash) | The image tag `<version>-<short sha>` (OPS-2) |
 | **SSO** | Single Sign-On | One Dex session for Catapulsar, Grafana and Argo CD |
+| **qBittorrent** / **Transmission** | Torrent clients | Catasonarr's download clients, each with the category `catasonarr` (decision 122) |
 | **TLS** | Transport Layer Security | Ended at the router with the wildcard certificate (`termination: edge`) |
 | **TMDB** | The Movie Database | Catasonarr's pictures and pt-PT summaries, when its token is set (decision 112) |
 | **TVDB** | TheTVDB | The series ids Sonarr's clients send; Catasonarr finds the series by them in TVmaze (decision 112) |
-| **Torznab** | Torrent indexer API in the Newznab style | How Prowlarr's indexers answer searches |
+| **Torznab** | Torrent indexer API in the Newznab style | How Prowlarr's indexers answer Catasonarr's searches and RSS (decision 122) |
 | **TTL** | Time To Live | MongoDB TTL indexes; claims and status documents that expire; the 1 h message TTL of `catasonarr/pages` (decision 118) |
 | **WS** / **WebSocket** | A connection that stays open both ways | Catasonarr's `/api/v1/updates`, through which its pages hear about changes (decision 118) |
 | **UI** | User Interface | Catapulsar's web page; the Grafana, Argo CD and Pulsar UIs |

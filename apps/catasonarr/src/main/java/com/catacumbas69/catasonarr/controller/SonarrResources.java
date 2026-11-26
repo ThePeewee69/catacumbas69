@@ -122,9 +122,22 @@ public final class SonarrResources {
      * @return the resource
      */
     public static EpisodeResource episode(Episode e, SeriesResource series) {
+        return episode(e, series, 0);
+    }
+
+    /**
+     * An episode with its file.
+     *
+     * @param e the episode
+     * @param series its series, when asked for, or {@code null}
+     * @param episodeFileId its file's id, or 0
+     * @return the resource
+     */
+    public static EpisodeResource episode(Episode e, SeriesResource series, int episodeFileId) {
         Instant end = e.airDateUtc() == null ? null : e.airDateUtc().plusSeconds(e.runtime() * 60L);
-        return new EpisodeResource(e.id(), e.seriesId(), 0, 0, e.seasonNumber(), e.episodeNumber(), e.title(),
-                e.airDate(), e.airDateUtc(), null, e.runtime(), null, e.overview(), false, e.monitored(),
+        return new EpisodeResource(e.id(), e.seriesId(), 0, episodeFileId, e.seasonNumber(), e.episodeNumber(),
+                e.title(), e.airDate(), e.airDateUtc(), null, e.runtime(), null, e.overview(), episodeFileId > 0,
+                e.monitored(),
                 e.absoluteEpisodeNumber(), null, null, null, false, end, null, series, images(e.images()));
     }
 

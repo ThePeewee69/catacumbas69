@@ -1,9 +1,13 @@
 package com.catacumbas69.catasonarr.service;
 
 import com.catacumbas69.catasonarr.config.CatasonarrProperties;
+import com.catacumbas69.catasonarr.model.Blocklist;
 import com.catacumbas69.catasonarr.model.Command;
 import com.catacumbas69.catasonarr.model.CustomFormat;
 import com.catacumbas69.catasonarr.model.Episode;
+import com.catacumbas69.catasonarr.model.EpisodeFile;
+import com.catacumbas69.catasonarr.model.History;
+import com.catacumbas69.catasonarr.model.PendingRelease;
 import com.catacumbas69.catasonarr.model.QualityDefinition;
 import com.catacumbas69.catasonarr.model.QualityProfile;
 import com.catacumbas69.catasonarr.model.RootFolder;
@@ -24,8 +28,9 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Component;
 
 /**
- * Prepares Catasonarr's collections when the app is ready (MONGO-3, orch.md decision 112): the indexes, and Sonarr's
- * default quality definitions and profiles while there are none (the import from Sonarr's database replaces them).
+ * Prepares Catasonarr's collections when the app is ready (MONGO-3, orch.md decisions 112 and 122): the indexes,
+ * and Sonarr's default quality definitions and profiles while there are none (the import from Sonarr's database
+ * replaces them).
  * Tried in the background; a failure is logged and tried again at the next start or by {@link #ensure()}.
  */
 @Component
@@ -82,6 +87,15 @@ public class CatasonarrSetup implements ApplicationListener<ApplicationReadyEven
         mongo.indexOps(CustomFormat.class).createIndex(asc("name").unique().named("customformats_name"));
         mongo.indexOps(Tag.class).createIndex(asc("label").unique().named("tags_label"));
         mongo.indexOps(Command.class).createIndex(asc("queued").expire(commandKeep).named("commands_ttl"));
+        mongo.indexOps(EpisodeFile.class).createIndex(asc("seriesId").named("episodefiles_series"));
+        mongo.indexOps(EpisodeFile.class).createIndex(asc("episodeIds").named("episodefiles_episodes"));
+        mongo.indexOps(History.class).createIndex(new Index().on("date", Sort.Direction.DESC).named("history_date"));
+        mongo.indexOps(History.class).createIndex(asc("seriesId").named("history_series"));
+        mongo.indexOps(History.class).createIndex(asc("episodeId").named("history_episode"));
+        mongo.indexOps(History.class).createIndex(asc("downloadId").named("history_download"));
+        mongo.indexOps(Blocklist.class).createIndex(asc("seriesId").named("blocklist_series"));
+        mongo.indexOps(Blocklist.class).createIndex(asc("torrentInfoHash").named("blocklist_hash"));
+        mongo.indexOps(PendingRelease.class).createIndex(asc("seriesId").named("pending_series"));
         seedDefaults();
         done = true;
         LOG.info("Catasonarr collections ready (commands kept for {} h)", commandKeep.toHours());

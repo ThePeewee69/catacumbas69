@@ -27,15 +27,15 @@ public final class FolderNames {
     public record Names(String title, int year, int tvdbId, int tvMazeId, int tmdbId, String imdbId) {
     }
 
-    private static final Pattern TOKEN = Pattern.compile("(?<escaped>\\{\\{|\\}\\})|\\{(?<prefix>[- ._\\[(]*)"
+    static final Pattern TOKEN = Pattern.compile("(?<escaped>\\{\\{|\\}\\})|\\{(?<prefix>[- ._\\[(]*)"
             + "(?<token>(?:[a-z0-9]+)(?:(?<separator>[- ._]+)(?:[a-z0-9]+))?)(?::(?<customFormat>[ ,a-z0-9+-]+"
             + "(?<![- ])))?(?<suffix>[- ._)\\]]*)\\}", Pattern.CASE_INSENSITIVE);
-    private static final Pattern SIMPLE_TOKEN = Pattern.compile("\\s|_|\\W");
-    private static final Pattern CLEANUP = Pattern.compile("([- ._])(\\1)+");
+    static final Pattern SIMPLE_TOKEN = Pattern.compile("\\s|_|\\W");
+    static final Pattern CLEANUP = Pattern.compile("([- ._])(\\1)+");
     private static final Pattern TITLE_PREFIX =
             Pattern.compile("^(The|An|A) (.*?)((?: *\\([^)]+\\))*)$", Pattern.CASE_INSENSITIVE);
     private static final Pattern YEAR = Pattern.compile("\\(\\d{4}\\)$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern RESERVED =
+    static final Pattern RESERVED =
             Pattern.compile("^(?:aux|com[1-9]|con|lpt[1-9]|nul|prn)\\.", Pattern.CASE_INSENSITIVE);
     private static final Pattern SCENIFY_REMOVE = Pattern.compile("(?<=\\s)(,|<|>|\\/|\\\\|;|:|'|\"|\\||`|’|~|!|\\?|@|$"
             + "|%|^|\\*|-|_|=){1}(?=\\s)|('|`|’|:|\\?|,)(?=(?:(?:s|m|t|ve|ll|d|re)\\s)|\\s|$)"
@@ -111,7 +111,7 @@ public final class FolderNames {
         return title + " (" + year + ")";
     }
 
-    private static Map<String, Function<String, String>> seriesTokens(Names s) {
+    static Map<String, Function<String, String>> seriesTokens(Names s) {
         Map<String, Function<String, String>> t = new HashMap<>();
         String title = s.title();
         t.put("seriestitle", f -> truncate(title, f));
@@ -180,7 +180,7 @@ public final class FolderNames {
         return text;
     }
 
-    private static String cleanFileName(String name, NamingConfig naming) {
+    static String cleanFileName(String name, NamingConfig naming) {
         String result = name;
         if (naming.replaceIllegalCharacters()) {
             if (naming.colonReplacementFormat() == 4) {
@@ -206,7 +206,7 @@ public final class FolderNames {
         return trim(result, " ", false, true);
     }
 
-    private static String truncate(String input, String format) {
+    static String truncate(String input, String format) {
         if (input == null || input.isBlank()) {
             return "";
         }
@@ -228,7 +228,7 @@ public final class FolderNames {
         return trim(input.substring(0, max - 3), " .", false, true) + "{ellipsis}";
     }
 
-    private static String number(int value, String format) {
+    static String number(int value, String format) {
         if (format != null && format.matches("0+")) {
             return String.format(Locale.ROOT, "%0" + format.length() + "d", value);
         }
@@ -268,7 +268,7 @@ public final class FolderNames {
         return "_";
     }
 
-    private static String trim(String s, String chars, boolean start, boolean end) {
+    static String trim(String s, String chars, boolean start, boolean end) {
         int from = 0;
         int to = s.length();
         while (start && from < to && chars.indexOf(s.charAt(from)) >= 0) {

@@ -109,8 +109,8 @@ public class SeriesController {
     }
 
     /**
-     * Adds a series. A search asked in {@code addOptions} is kept as a {@code SeriesSearch} command, which ends
-     * unsuccessful until searching exists (phase 2).
+     * Adds a series. Its folder is then scanned and the search asked in {@code addOptions} runs, as in Sonarr
+     * (orch.md decision 122).
      *
      * @param body Sonarr's series, with {@code tvdbId}, {@code qualityProfileId}, {@code rootFolderPath} or
      *             {@code path}, the seasons and {@code addOptions}
@@ -126,11 +126,7 @@ public class SeriesController {
                 body.rootFolderPath(), body.seasonFolder(), body.monitored(), body.monitorNewItems(),
                 body.seriesType(), body.tags(), SonarrResources.seasons(body.seasons()), body.addOptions()),
                 RequestActor.of(principal, request));
-        if (body.addOptions() != null && (body.addOptions().searchForMissingEpisodes()
-                || body.addOptions().searchForCutoffUnmetEpisodes())) {
-            commands.submit(Map.of("name", "SeriesSearch", "seriesId", added.id()), RequestActor.of(principal,
-                    request));
-        }
+        commands.seriesAdded(added, body.addOptions(), RequestActor.of(principal, request));
         return ResponseEntity.status(HttpStatus.CREATED).body(resource(added));
     }
 

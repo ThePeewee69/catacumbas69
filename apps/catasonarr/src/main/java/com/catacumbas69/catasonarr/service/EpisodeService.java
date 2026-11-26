@@ -1,6 +1,7 @@
 package com.catacumbas69.catasonarr.service;
 
 import com.catacumbas69.catasonarr.model.Episode;
+import com.catacumbas69.catasonarr.model.EpisodeFile;
 import com.mongodb.client.model.Accumulators;
 import com.mongodb.client.model.Aggregates;
 import com.mongodb.client.model.Filters;
@@ -121,8 +122,17 @@ public class EpisodeService {
      */
     public Map<Integer, Map<Integer, Statistics>> statistics(Collection<Integer> seriesIds) {
         Date now = Date.from(clock.instant());
+        Query fileQuery = seriesIds == null ? new Query() : Query.query(Criteria.where("seriesId").in(seriesIds));
+        List<EpisodeFile> files = mongo.find(fileQuery, EpisodeFile.class);
+        List<Integer> withFiles = files.stream().flatMap(f -> f.episodeIds().stream()).distinct().toList();
+        Map<Integer, Map<Integer, Long>> sizes = new HashMap<>();
+        for (EpisodeFile f : files) {
+            sizes.computeIfAbsent(f.seriesId(), k -> new HashMap<>()).merge(f.seasonNumber(), f.size(), Long::sum);
+        }
+        Bson hasFile = new Document("$in", Arrays.asList("$_id", withFiles));
         Bson aired = new Document("$and", List.of("$monitored", new Document("$ne", Arrays.asList("$airDateUtc", null)),
                 new Document("$lte", List.of("$airDateUtc", now))));
+        Bson counted = new Document("$or", List.of(aired, hasFile));
         Bson upcoming = new Document("$and", List.of("$monitored", new Document("$gt", List.of("$airDateUtc", now))));
         List<Bson> pipeline = new ArrayList<>();
         if (seriesIds != null) {
@@ -131,7 +141,8 @@ public class EpisodeService {
         pipeline.add(Aggregates.group(
                 new Document("series", "$seriesId").append("season", "$seasonNumber"),
                 Accumulators.sum("total", 1),
-                Accumulators.sum("aired", new Document("$cond", List.of(aired, 1, 0))),
+                Accumulators.sum("aired", new Document("$cond", List.of(counted, 1, 0))),
+                Accumulators.sum("files", new Document("$cond", List.of(hasFile, 1, 0))),
                 Accumulators.min("next", new Document("$cond", Arrays.asList(upcoming, "$airDateUtc", null))),
                 Accumulators.max("previous", new Document("$cond", Arrays.asList(aired, "$airDateUtc", null)))));
         Map<Integer, Map<Integer, Statistics>> result = new HashMap<>();
@@ -139,9 +150,10 @@ public class EpisodeService {
             Document key = d.get("_id", Document.class);
             int series = key.getInteger("series");
             int season = key.getInteger("season");
+            long size = sizes.getOrDefault(series, Map.of()).getOrDefault(season, 0L);
             result.computeIfAbsent(series, s -> new HashMap<>()).put(season, new Statistics(season,
-                    d.getInteger("total"), d.getInteger("aired"), 0, 0, instant(d.getDate("next")),
-                    instant(d.getDate("previous"))));
+                    d.getInteger("total"), d.getInteger("aired"), d.getInteger("files"), size,
+                    instant(d.getDate("next")), instant(d.getDate("previous"))));
         }
         return result;
     }

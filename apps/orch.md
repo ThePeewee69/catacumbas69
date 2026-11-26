@@ -799,6 +799,10 @@ Closed on 2026-10-30:
   violations): per-topic traffic counts in MongoDB (OBS-7, PERF-8,
   MONGO-5), loop blocking (RES-13, ADR 0005), audit of every configuration change by its owner (OBS-6,
   ADR 0006), runtime-editable Cataponte URL, clear backlog per subscription in Overview.
+- **2026-11-25, Catasonarr searches, downloads and imports** (decision 122, phases 2 and 3): all of Sonarr's parser
+  with its 1409 test cases, Torznab indexers (Prowlarr), Sonarr's decision rules, qBittorrent and Transmission in
+  the category `catasonarr`, import with Sonarr's file names, ffprobe, the recycle bin and Plex; Activity, the
+  interactive search and the settings' sections on the page.
 - **2026-11-25, tooltips** (decision 121): every button, button-like link, tick box and menu of Catasonarr's page
   says what it does in a tooltip of its own, with the mouse and with the keyboard.
 - **2026-11-25, small things for Seerr and the import** (decision 120): Catasonarr answers Sonarr's queue, empty
@@ -1765,3 +1769,58 @@ Catasonarr (2026-11-21):
      it is a popover, in the top layer, so it also shows over the folder browser, and the control points to it with
      `aria-describedby` while it shows. Only Catasonarr; the series' cards lose their browser `title`, as the
      tooltip has the title too.
+
+122. **Catasonarr searches, downloads and imports, as Sonarr (phases 2 and 3 together).**
+     (a) **Parser**: all of Sonarr 4.0.20's `Parser`, `QualityParser`, `LanguageParser` and `SceneChecker`,
+     translated, with **Sonarr's own test cases** (1409, from its fixtures, in `src/test/resources/sonarr`). Sonarr's
+     .NET regexes run on Java's engine through **`NetRegex`**: repeated groups keep every capture, names may repeat
+     or hold `_`, look-behinds are bounded, .NET's character-class and Unicode names are translated.
+     (b) **Indexers**: Torznab only (torrents), `/api/v3/indexer` as Sonarr's, so **Prowlarr, which stays on K3s,
+     adds and updates them** (Prowlarr → Apps → Sonarr with Catasonarr's address and API key; Catasonarr's https
+     Route may need Prowlarr's certificate validation off, or our CA). Catasonarr reaches Prowlarr and qBittorrent
+     **by name over http** (`http://prowlarr.catacumbas69.com`, `http://qbittorrent.catacumbas69.com`). Capabilities
+     cached a day; searches by TheTVDB/IMDb/TVmaze/TMDB ids, then by title; daily by date; anime by absolute number.
+     (c) **Decisions**: Sonarr's rules: quality profile, cutoff and **custom format scores** (minimum, cutoff,
+     upgrade), **size** from the quality definitions per minute, **minimum seeders**, **minimum age** (Sonarr applies
+     it only to usenet; here to torrents too), maximum size, release profiles, **blocklist**, already in the queue,
+     grabbed or imported, propers and repacks, delay profiles (held back as pending releases). Releases are ranked
+     with Sonarr's comparer. **RSS sync every 15 minutes** (Settings; 0 turns it off, else at least 10); held-back
+     releases are looked at again at each sync and dropped after 14 days. Searches: episode, season, series, missing,
+     cutoff unmet; **search on add** as Sonarr (the folder is rescanned first, then missing, cutoff or both).
+     (d) **Download clients**: **qBittorrent and Transmission**, `/api/v3/downloadclient` as Sonarr's, picked by the
+     indexer's own client, then tags, then priority. **Catasonarr has its own category, `catasonarr`**: it only
+     reads and touches its own torrents, so it runs next to Sonarr in the same clients. Torrents are added as
+     magnets or .torrent files (the hash from the magnet or the `info` dictionary); a redirect to a magnet is caught.
+     **Remote path mappings** as Sonarr's.
+     (e) **Queue**: every minute each client's torrents in `catasonarr` are read and matched to their grab (or to a
+     series by name). A **finished** download is **imported**: each video file is matched to its episodes, read with
+     **ffprobe** (in the image: Alpine's `ffmpeg`) and judged by Sonarr's import rules (not a sample by its
+     runtime, free space, an upgrade of the file there, not imported before, an episode title for 48 h when the
+     format needs one, the same episodes as the file it replaces); accepted files are **moved** (not copied) into the
+     series' folder under **Sonarr's file name** (`FileNameBuilder` translated: every token, the six multi-episode
+     styles, titles shortened to 255 bytes), with their **subtitles and extras** (`srt,ass,ssa,sub,idx,nfo` by
+     default, a subtitle keeping its language and tags); then the **torrent is removed from its client** with its
+     data (it stops seeding; the client's *Remove completed*). A file replaced by an upgrade, or deleted from the
+     page, goes to the **recycle bin `/data/.recycle`**, kept **7 days**. A **failed** download is recorded,
+     **blocklisted**, removed and **searched again** (not when grabbed by hand, unless Settings say so). The queue
+     is `/api/v3/queue` as Sonarr's (one item per episode, held-back releases too, remove with *blocklist* and
+     *skip redownload*, grab a held-back one now); history (`/api/v3/history`, also *mark as failed*), blocklist and
+     episode files (`/api/v3/episodefile`, with MediaInfo, for Bazarr) as Sonarr's.
+     (f) **Rescan**: `RescanSeries` reads a series' folder: files that left are forgotten (and their episodes
+     unmonitored when Settings say so), changed ones read again, new ones added where they are; nothing is done when
+     the root folder is missing or empty, so a NAS not mounted never empties the library. Every series is rescanned
+     after the 12-hourly refresh, and after `RefreshSeries`.
+     (g) **Plex**: after an import Plex is asked to **scan the series' folder** (its TV libraries holding it, or all
+     of them). The address, the switch and a path mapping are in Settings → Plex; the **token** is in the Secret
+     `catasonarr-plex` (`catasonarr-secret.sh plex`, asked with `read -s`), never in MongoDB or on the page.
+     (h) **Secrets**: the clients' passwords and the indexers' API keys are kept in MongoDB, as Sonarr keeps them in
+     its database, and the API shows them as `********` (sent back unchanged, they are kept); never in events.
+     (i) **Import from Sonarr**: the script also brings Sonarr's general settings (not the recycle bin), its
+     **qBittorrent and Transmission clients with their passwords** (the category becomes `catasonarr`; a host inside
+     K3s becomes its name in `catacumbas69.com`, port 80, http), release and delay profiles, remote path mappings, the
+     episode naming and the tags they use (matched by label); `POST /api/v3/catasonarr/import/sonarr`.
+     (j) **Page**: **Activity** (Queue, History, Blocklist), the **interactive search** of an episode or a season
+     (every release, its score and why it was rejected; any can be grabbed), a series' files with search buttons,
+     and Settings in sections: General, Indexers (and RSS), Download clients (and finished/failed downloads),
+     Profiles (release, delay, remote path mappings), Media management (naming, recycle bin, extras) and Plex; every
+     control with its tooltip (decision 121).

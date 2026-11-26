@@ -52,6 +52,51 @@ public final class Qualities {
 
     private static final Map<Integer, Default> BY_ID = index();
 
+    /** Unknown. */
+    public static final Quality UNKNOWN = quality(0);
+    /** SDTV. */
+    public static final Quality SDTV = quality(1);
+    /** DVD. */
+    public static final Quality DVD = quality(2);
+    /** WEBDL-1080p. */
+    public static final Quality WEBDL_1080P = quality(3);
+    /** HDTV-720p. */
+    public static final Quality HDTV_720P = quality(4);
+    /** WEBDL-720p. */
+    public static final Quality WEBDL_720P = quality(5);
+    /** Bluray-720p. */
+    public static final Quality BLURAY_720P = quality(6);
+    /** Bluray-1080p. */
+    public static final Quality BLURAY_1080P = quality(7);
+    /** WEBDL-480p. */
+    public static final Quality WEBDL_480P = quality(8);
+    /** HDTV-1080p. */
+    public static final Quality HDTV_1080P = quality(9);
+    /** Raw-HD. */
+    public static final Quality RAWHD = quality(10);
+    /** WEBRip-480p. */
+    public static final Quality WEBRIP_480P = quality(12);
+    /** Bluray-480p. */
+    public static final Quality BLURAY_480P = quality(13);
+    /** WEBRip-720p. */
+    public static final Quality WEBRIP_720P = quality(14);
+    /** WEBRip-1080p. */
+    public static final Quality WEBRIP_1080P = quality(15);
+    /** HDTV-2160p. */
+    public static final Quality HDTV_2160P = quality(16);
+    /** WEBRip-2160p. */
+    public static final Quality WEBRIP_2160P = quality(17);
+    /** WEBDL-2160p. */
+    public static final Quality WEBDL_2160P = quality(18);
+    /** Bluray-2160p. */
+    public static final Quality BLURAY_2160P = quality(19);
+    /** Bluray-1080p Remux. */
+    public static final Quality BLURAY_1080P_REMUX = quality(20);
+    /** Bluray-2160p Remux. */
+    public static final Quality BLURAY_2160P_REMUX = quality(21);
+    /** Bluray-576p. */
+    public static final Quality BLURAY_576P = quality(22);
+
     private Qualities() {
     }
 
@@ -75,6 +120,47 @@ public final class Qualities {
     public static Quality quality(int id) {
         return byId(id).map(Default::quality)
                 .orElseThrow(() -> new IllegalArgumentException("ID does not match a known quality: " + id));
+    }
+
+    /**
+     * A quality's weight, from worst to best; qualities of a group share it.
+     *
+     * @param quality the quality
+     * @return its weight
+     */
+    public static int weight(Quality quality) {
+        return byId(quality.id()).map(Default::weight).orElse(0);
+    }
+
+    /**
+     * The quality of a source and a resolution, or the nearest, as Sonarr's {@code QualityFinder}.
+     *
+     * @param source the source
+     * @param resolution the resolution, e.g. 1080
+     * @return the quality
+     */
+    public static Quality findBySourceAndResolution(QualitySource source, int resolution) {
+        for (Default d : DEFAULTS) {
+            if (QualitySource.of(d.quality()) == source && d.quality().resolution() == resolution) {
+                return d.quality();
+            }
+        }
+        if (resolution < 720) {
+            switch (source) {
+                case TELEVISION:
+                    return SDTV;
+                case WEB:
+                    return WEBDL_480P;
+                case WEB_RIP:
+                    return WEBRIP_480P;
+                default:
+                    break;
+            }
+        }
+        return DEFAULTS.stream().map(Default::quality).filter(q -> q.resolution() == resolution)
+                .sorted(java.util.Comparator.comparing(QualitySource::of))
+                .filter(q -> QualitySource.of(q).compareTo(source) >= 0)
+                .findFirst().orElse(UNKNOWN);
     }
 
     private static Default def(int id, String name, String source, int resolution, int weight, double min,

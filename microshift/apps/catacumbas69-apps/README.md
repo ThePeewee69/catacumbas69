@@ -239,7 +239,7 @@ Cataponte, Catametricas, Cataudit and Catavigia (Catavigia also reads the first 
 
 ### 8. Catasonarr
 
-Catasonarr (orch.md decisions 109 and 112, [`apps/catasonarr/README.md`](../../../apps/catasonarr/README.md)) needs,
+Catasonarr (orch.md decisions 109, 112 and 122, [`apps/catasonarr/README.md`](../../../apps/catasonarr/README.md)) needs,
 before its first Sync:
 
 1. **DNS**: `catasonarr.catacumbas69.com` pointing at meloes, like the other Routes.
@@ -270,19 +270,34 @@ before its first Sync:
    ```
    It asks for it twice, without showing it, and writes `catacumbas69-apps/catasonarr-tmdb`.
 6. **The image**: `apps/build/push.sh catasonarr`, commit the new tag, push, and **Sync** `catasonarr` in ArgoCD.
-7. **Quality from Sonarr** (after the Sync): in Sonarr, **System → Backup → Backup Now**, and download the zip. Its
+7. **Settings from Sonarr** (after the Sync): in Sonarr, **System → Backup → Backup Now**, and download the zip. Its
    `sonarr.db` is a consistent copy; one copied by hand from Sonarr's `/config` while Sonarr runs can be caught
    halfway ("database disk image is malformed"). Then, with the zip as it came (decision 120):
    ```
    bash microshift/apps/catacumbas69-apps/catasonarr/catasonarr-import-sonarr.sh ~/Downloads/sonarr_backup_v4.0.14.2939_2026.11.25_21.00.00.zip
    ```
    It unzips only `sonarr.db`, into a temporary folder deleted at the end, so the zip is never changed; it asks for
-   the API key without showing it, and replaces Catasonarr's quality definitions, custom formats, profiles and folder
-   naming with Sonarr's. The zip also has `config.xml`, with the API key: keep it out of the repository and delete
-   the zip afterwards. Then add the root folders in Catasonarr's
-   **Settings** (the same as Sonarr's, e.g. `/data/...`).
+   the API key without showing it, and replaces Catasonarr's quality definitions, custom formats, profiles, naming,
+   general settings, download clients (qBittorrent and Transmission, with their passwords; category `catasonarr`, a
+   host inside K3s becoming `<name>.catacumbas69.com` over http), release and delay profiles and remote path
+   mappings with Sonarr's (decision 122). The zip also has `config.xml`, with the API key, and `sonarr.db` has the
+   clients' passwords: keep it out of the repository and delete the zip afterwards. Then add the root folders in
+   Catasonarr's **Settings** (the same as Sonarr's, e.g. `/data/...`).
+8. **Prowlarr** (on K3s, decision 122): **Settings → Apps → + → Sonarr**: *Prowlarr Server*
+   `http://prowlarr.catacumbas69.com`, *Sonarr Server* `https://catasonarr.catacumbas69.com`, the API key, then
+   *Test* and *Save*; Prowlarr pushes its indexers to Catasonarr as to Sonarr. If the test fails on the certificate,
+   our CA is not trusted by Prowlarr: turn its certificate validation off for local addresses (**Settings → General
+   → Certificate Validation**) or give it our CA.
+9. **Plex** (optional, decision 122): Plex's token (Plex Web → any item → ⋯ → **Get Info → View XML**, the
+   `X-Plex-Token=` at the end of the address). On the Mac:
+   ```
+   bash microshift/apps/catacumbas69-apps/catasonarr/catasonarr-secret.sh plex
+   ```
+   It asks for it twice, without showing it, writes `catacumbas69-apps/catasonarr-plex` and restarts Catasonarr.
+   Then in Catasonarr's **Settings → Plex**: tick *Tell Plex*, Plex's address, *Test*, *Save*.
 
-Without the API key or the Dex Secret the pod stays in `CreateContainerConfigError`; the TMDB Secret is optional.
+Without the API key or the Dex Secret the pod stays in `CreateContainerConfigError`; the TMDB and Plex Secrets are
+optional.
 
 ## Every release (after changing code)
 

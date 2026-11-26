@@ -1,5 +1,6 @@
 package com.catacumbas69.catasonarr.service;
 
+import com.catacumbas69.catasonarr.media.DiskScan;
 import com.catacumbas69.catasonarr.metadata.MetadataUnavailableException;
 import com.catacumbas69.catasonarr.metadata.TvMazeClient;
 import com.catacumbas69.catasonarr.model.Series;
@@ -18,7 +19,8 @@ import org.springframework.stereotype.Component;
 /**
  * Refreshes the series' metadata every {@code catasonarr.metadata.refresh-interval} (12 h, as Sonarr), in this pod
  * (orch.md decision 109: one replica, {@code @Scheduled}). TVmaze's list of changed shows lets it skip the series
- * that did not change, so a refresh costs a few calls, not three per series.
+ * that did not change, so a refresh costs a few calls, not three per series. Every series' folder is rescanned
+ * afterwards (orch.md decision 122).
  */
 @Component
 public class SeriesRefresher {
@@ -28,6 +30,7 @@ public class SeriesRefresher {
 
     private final SeriesService series;
     private final TvMazeClient tvmaze;
+    private final DiskScan disk;
     private final Clock clock;
     private final ReentrantLock running = new ReentrantLock();
 
@@ -36,11 +39,13 @@ public class SeriesRefresher {
      *
      * @param series the series
      * @param tvmaze TVmaze, for its list of changed shows
+     * @param disk the rescan of every series' folder after the refresh, as Sonarr's "rescan after refresh: always"
      * @param clock the time
      */
-    public SeriesRefresher(SeriesService series, TvMazeClient tvmaze, Clock clock) {
+    public SeriesRefresher(SeriesService series, TvMazeClient tvmaze, DiskScan disk, Clock clock) {
         this.series = series;
         this.tvmaze = tvmaze;
+        this.disk = disk;
         this.clock = clock;
     }
 
@@ -88,6 +93,13 @@ public class SeriesRefresher {
                 }
             }
             LOG.info("Refresh done: {} of {} series refreshed, {} failed", done, all.size(), failed);
+            for (Series s : all) {
+                try {
+                    disk.rescan(series.get(s.id()), actor);
+                } catch (RuntimeException e) {
+                    LOG.warn("Series {} ({}) not rescanned: {}", s.title(), s.id(), e.getMessage());
+                }
+            }
             return done;
         } catch (MetadataUnavailableException | DataAccessException e) {
             LOG.warn("Refresh not done, trying again at the next one: {}", e.getMessage());

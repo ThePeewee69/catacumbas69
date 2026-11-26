@@ -29,7 +29,17 @@ public class NamingService {
      */
     public NamingConfig get() {
         NamingConfig naming = mongo.findById(NamingConfig.ID, NamingConfig.class);
-        return naming == null ? NamingConfig.DEFAULT : naming;
+        if (naming == null) {
+            return NamingConfig.DEFAULT;
+        }
+        if (naming.standardEpisodeFormat() == null) {
+            NamingConfig d = NamingConfig.DEFAULT;
+            return new NamingConfig(naming.id(), naming.seriesFolderFormat(), naming.seasonFolderFormat(),
+                    naming.specialsFolderFormat(), naming.replaceIllegalCharacters(), naming.colonReplacementFormat(),
+                    naming.customColonReplacementFormat(), false, d.standardEpisodeFormat(), d.dailyEpisodeFormat(),
+                    d.animeEpisodeFormat(), d.multiEpisodeStyle());
+        }
+        return naming;
     }
 
     /**

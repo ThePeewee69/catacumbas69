@@ -4,7 +4,9 @@ import com.catacumbas69.catasonarr.dto.EpisodeResource;
 import com.catacumbas69.catasonarr.dto.EpisodesMonitoredResource;
 import com.catacumbas69.catasonarr.dto.SeriesResource;
 import com.catacumbas69.catasonarr.model.Episode;
+import com.catacumbas69.catasonarr.model.EpisodeFile;
 import com.catacumbas69.catasonarr.service.BadRequestException;
+import com.catacumbas69.catasonarr.service.EpisodeFileService;
 import com.catacumbas69.catasonarr.service.EpisodeService;
 import com.catacumbas69.catasonarr.service.SeriesService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,16 +36,19 @@ public class EpisodeController {
 
     private final EpisodeService episodes;
     private final SeriesService series;
+    private final EpisodeFileService files;
 
     /**
      * Creates the controller.
      *
      * @param episodes episodes
      * @param series the series, for {@code includeSeries}
+     * @param files the episodes' files ({@code hasFile}, {@code episodeFileId})
      */
-    public EpisodeController(EpisodeService episodes, SeriesService series) {
+    public EpisodeController(EpisodeService episodes, SeriesService series, EpisodeFileService files) {
         this.episodes = episodes;
         this.series = series;
+        this.files = files;
     }
 
     /**
@@ -71,9 +76,11 @@ public class EpisodeController {
             throw new BadRequestException("seriesId", "seriesId or episodeIds must be provided");
         }
         Map<Integer, SeriesResource> seriesById = new HashMap<>();
+        Map<Integer, EpisodeFile> fileByEpisode = files.byEpisode(found.stream().map(Episode::seriesId).distinct()
+                .toList());
         return found.stream().map(e -> SonarrResources.episode(e, includeSeries
                 ? seriesById.computeIfAbsent(e.seriesId(), id -> SonarrResources.series(series.get(id), null))
-                : null)).toList();
+                : null, fileId(fileByEpisode.get(e.id())))).toList();
     }
 
     /**
@@ -85,7 +92,7 @@ public class EpisodeController {
     @Operation(summary = "One episode")
     @GetMapping("/{id}")
     public EpisodeResource get(@PathVariable int id) {
-        return SonarrResources.episode(episodes.get(id), null);
+        return SonarrResources.episode(episodes.get(id), null, files.ofEpisode(id).map(EpisodeFile::id).orElse(0));
     }
 
     /**
@@ -104,7 +111,8 @@ public class EpisodeController {
         episodes.get(id);
         Episode saved = episodes.setMonitored(List.of(id), body.monitored(), RequestActor.of(principal, request))
                 .get(0);
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(SonarrResources.episode(saved, null));
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(SonarrResources.episode(saved, null,
+                files.ofEpisode(id).map(EpisodeFile::id).orElse(0)));
     }
 
     /**
@@ -120,8 +128,15 @@ public class EpisodeController {
     public ResponseEntity<List<EpisodeResource>> monitor(@RequestBody EpisodesMonitoredResource body,
                                                          Principal principal, HttpServletRequest request) {
         List<Integer> ids = body.episodeIds() == null ? List.of() : body.episodeIds();
-        List<EpisodeResource> saved = episodes.setMonitored(ids, body.monitored(), RequestActor.of(principal, request))
-                .stream().map(e -> SonarrResources.episode(e, null)).toList();
+        List<Episode> changed = episodes.setMonitored(ids, body.monitored(), RequestActor.of(principal, request));
+        Map<Integer, EpisodeFile> fileByEpisode = files.byEpisode(changed.stream().map(Episode::seriesId).distinct()
+                .toList());
+        List<EpisodeResource> saved = changed.stream()
+                .map(e -> SonarrResources.episode(e, null, fileId(fileByEpisode.get(e.id())))).toList();
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(saved);
+    }
+
+    private static int fileId(EpisodeFile file) {
+        return file == null ? 0 : file.id();
     }
 }

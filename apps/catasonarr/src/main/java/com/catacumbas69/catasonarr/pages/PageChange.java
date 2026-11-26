@@ -17,7 +17,8 @@ import java.util.regex.Pattern;
  * @param action e.g. {@code added}, {@code updated}, {@code deleted}, {@code refreshed}
  * @param subject what it is about, e.g. {@code Andor (12)}
  * @param actor who did it: a user, {@code api-key@<address>}, an address, or {@code catasonarr} itself
- * @param seriesId the series it is about, when it is about one
+ * @param seriesId the series it is about, when it is about one (a series, or another entity whose details name
+ *                 one, such as an imported file or a grab: orch.md decision 122)
  * @param time when it happened
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -44,7 +45,8 @@ public record PageChange(String entity, String action, String subject, String ac
         String entity = type.group(1);
         EventData data = event.data();
         String actor = data == null ? null : data.actor();
-        Integer seriesId = "series".equals(entity) ? seriesId(event.subject(), data) : null;
+        Integer seriesId = "series".equals(entity) ? seriesId(event.subject(), data)
+                : data == null || data.details() == null ? null : parse(data.details().get("seriesId"));
         return Optional.of(new PageChange(entity, type.group(2), event.subject(), actor, seriesId, event.time()));
     }
 

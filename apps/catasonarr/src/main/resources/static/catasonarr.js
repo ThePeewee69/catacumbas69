@@ -1,5 +1,6 @@
-// Catasonarr's pages (orch.md decisions 109, 112, 114 and 115): the series, adding a series, importing the series
-// already on the NAS, a series with its episodes, and the settings. They use Sonarr's API v3 with the Dex session and the CSRF token, as Sonarr's own page uses it.
+// Catasonarr's pages (orch.md decisions 109, 112, 114, 115 and 122): the series, adding a series, importing the series
+// already on the NAS, a series with its episodes, files and searches, the activity (queue, history, blocklist) and
+// the settings. They use Sonarr's API v3 with the Dex session and the CSRF token, as Sonarr's own page uses it.
 
 /** Grows on every page change, so work a page left behind (the import's searches) stops. */
 let generation = 0;
@@ -685,11 +686,13 @@ async function importPage() {
  * @param {number} id the series
  */
 async function detailPage(id) {
-  const [s, episodes, profiles] = await Promise.all([
+  const [s, episodes, profiles, files] = await Promise.all([
     api('GET', `/api/v3/series/${id}`),
     api('GET', `/api/v3/episode?seriesId=${id}`),
     api('GET', '/api/v3/qualityprofile'),
+    api('GET', `/api/v3/episodefile?seriesId=${id}`),
   ]);
+  const fileById = new Map(files.map((f) => [f.id, f]));
   const profile = profiles.find((p) => p.id === s.qualityProfileId);
   const monitored = el('input', {
     type: 'checkbox',
@@ -722,6 +725,12 @@ async function detailPage(id) {
           tip: 'Read this series again from TVmaze (and TMDB): new episodes, dates and pictures',
           onclick: () => refresh(s.id),
         }),
+        button('Search monitored', 'Search the indexers for every monitored episode missing or below the cutoff', () =>
+          command({ name: 'SeriesSearch', seriesId: s.id }, `Search for ${s.title}`),
+        ),
+        button('Rescan', "Read the series' folder again: new, changed and missing files", () =>
+          command({ name: 'RescanSeries', seriesId: s.id }, `Rescan of ${s.title}`),
+        ),
         el('label', {}, [deleteFiles, ' and its folder on the NAS']),
         el('button', {
           type: 'button',
@@ -735,12 +744,16 @@ async function detailPage(id) {
   ]);
   const seasons = [...s.seasons]
     .sort((a, b) => b.seasonNumber - a.seasonNumber)
-    .map((season) => seasonBlock(s, season, episodes));
+    .map((season) => seasonBlock(s, season, episodes, fileById));
   page.replaceChildren(head, ...seasons);
   onChange = (change) => {
     if (change.entity === 'series' && change.seriesId === id && change.action === 'deleted') {
       window.location.hash = '#/';
-    } else if ((change.entity === 'series' && change.seriesId === id) || change.entity === 'episode') {
+    } else if (
+      (change.entity === 'series' && change.seriesId === id) ||
+      change.entity === 'episode' ||
+      (['episodefile', 'release', 'download'].includes(change.entity) && change.seriesId === id)
+    ) {
       redraw(() => detailPage(id));
     }
   };
@@ -752,9 +765,10 @@ async function detailPage(id) {
  * @param {object} s the series
  * @param {object} season the season
  * @param {Array<object>} episodes every episode of the series
+ * @param {Map<number, object>} fileById the series' files by id
  * @returns {HTMLElement} the block
  */
-function seasonBlock(s, season, episodes) {
+function seasonBlock(s, season, episodes, fileById) {
   const mine = episodes
     .filter((e) => e.seasonNumber === season.seasonNumber)
     .sort((a, b) => b.episodeNumber - a.episodeNumber);
@@ -788,6 +802,15 @@ function seasonBlock(s, season, episodes) {
       el('td', { textContent: e.episodeNumber }),
       el('td', { textContent: e.title || 'TBA' }),
       el('td', { textContent: date(e.airDateUtc) }),
+      episodeFileCell(s, e, fileById.get(e.episodeFileId)),
+      el('td', { className: 'actions' }, [
+        button('Search', 'Search the indexers for this episode and grab the best release', () =>
+          command({ name: 'EpisodeSearch', episodeIds: [e.id] }, `Search for ${episodeCode(e)}`),
+        ),
+        button('Interactive…', 'See every release the indexers have for this episode, and pick one', () =>
+          interactiveSearch(`episodeId=${e.id}`, `${s.title} ${episodeCode(e)}`),
+        ),
+      ]),
     ]),
   );
   return el('div', { className: 'season' }, [
@@ -796,19 +819,61 @@ function seasonBlock(s, season, episodes) {
       el('strong', { textContent: season.seasonNumber === 0 ? 'Specials' : `Season ${season.seasonNumber}` }),
       el('span', {
         className: 'muted',
-        textContent: `${stats.episodeFileCount || 0}/${stats.episodeCount || 0} · ${stats.totalEpisodeCount || 0} episodes`,
+        textContent: `${stats.episodeFileCount || 0}/${stats.episodeCount || 0} · ${stats.totalEpisodeCount || 0} episodes${stats.sizeOnDisk ? ` · ${bytes(stats.sizeOnDisk)}` : ''}`,
       }),
+      button('Search season', 'Search the indexers for this season’s monitored episodes', () =>
+        command(
+          { name: 'SeasonSearch', seriesId: s.id, seasonNumber: season.seasonNumber },
+          `Search for season ${season.seasonNumber}`,
+        ),
+      ),
+      button('Interactive…', 'See every release the indexers have for this season, and pick one', () =>
+        interactiveSearch(
+          `seriesId=${s.id}&seasonNumber=${season.seasonNumber}`,
+          `${s.title} season ${season.seasonNumber}`,
+        ),
+      ),
     ]),
     el('table', {}, [
       el('thead', {}, [
         el(
           'tr',
           {},
-          ['', '#', 'Title', 'Air date'].map((t) => el('th', { textContent: t })),
+          ['', '#', 'Title', 'Air date', 'File', ''].map((t) => el('th', { textContent: t })),
         ),
       ]),
       el('tbody', {}, rows),
     ]),
+  ]);
+}
+
+/**
+ * An episode's file: its quality and size, and a button to delete it; or that it is missing.
+ *
+ * @param {object} s the series
+ * @param {object} e the episode
+ * @param {object} [f] its file
+ * @returns {HTMLElement} the cell
+ */
+function episodeFileCell(s, e, f) {
+  if (!f) {
+    const aired = e.airDateUtc && new Date(e.airDateUtc) < new Date();
+    return el('td', { className: 'muted', textContent: aired && e.monitored ? 'Missing' : '—' });
+  }
+  const cut = f.qualityCutoffNotMet ? ' (below the cutoff)' : '';
+  return el('td', {}, [
+    el('span', {
+      className: `badge ${f.qualityCutoffNotMet ? '' : 'on'}`,
+      textContent: qualityName(f.quality),
+      title: `${f.relativePath}${cut}`,
+    }),
+    ` ${bytes(f.size)} `,
+    button(
+      '✕',
+      'Delete this file (to the recycle bin); asks first',
+      () => deleteAfterAsking(`/api/v3/episodefile/${f.id}`, `the file of ${episodeCode(e)}, ${f.relativePath}`),
+      'danger',
+    ),
   ]);
 }
 
@@ -1080,8 +1145,34 @@ function connectionsSection(c) {
   ]);
 }
 
-/** Connections, root folders, quality profiles and tags. */
-async function settingsPage() {
+/**
+ * The settings: General (connections, root folders, quality profiles and tags), Indexers, Download clients,
+ * Profiles, Media management and Plex.
+ *
+ * @param {string} [section] which one: general, indexers, clients, profiles, media or plex
+ */
+async function settingsPage(section = 'general') {
+  const tabs = tabBar(SETTINGS_TABS, section);
+  if (section === 'indexers') {
+    await indexersSettings(tabs);
+    return;
+  }
+  if (section === 'clients') {
+    await clientsSettings(tabs);
+    return;
+  }
+  if (section === 'profiles') {
+    await profilesSettings(tabs);
+    return;
+  }
+  if (section === 'media') {
+    await mediaSettings(tabs);
+    return;
+  }
+  if (section === 'plex') {
+    await plexSettings(tabs);
+    return;
+  }
   const connections = await api('GET', '/api/v1/connections');
   let folders = [];
   let profiles = [];
@@ -1123,6 +1214,7 @@ async function settingsPage() {
     }
   };
   page.replaceChildren(
+    tabs,
     connectionsSection(connections),
     ...(notLoaded ? [el('p', { className: 'empty', textContent: `The rest is not loaded: ${notLoaded}` })] : []),
     el('section', {}, [
@@ -1204,9 +1296,1538 @@ async function settingsPage() {
     const editing =
       document.activeElement === path || path.value.trim() !== '' || document.querySelector('dialog[open]');
     if (!editing && (settings.includes(change.entity) || change.entity === 'series')) {
-      redraw(settingsPage);
+      redraw(() => settingsPage());
     }
   };
+}
+
+// ── Downloads: helpers (orch.md decision 122) ────────────────────────────────
+
+/**
+ * A button with its tooltip.
+ *
+ * @param {string} text what it says
+ * @param {string} tip what it does
+ * @param {() => void} onclick what happens on a click
+ * @param {string} [className] e.g. primary or danger
+ * @returns {HTMLElement} the button
+ */
+function button(text, tip, onclick, className = '') {
+  return el('button', { type: 'button', textContent: text, tip, onclick, className });
+}
+
+/**
+ * A label and its field, for a form's grid.
+ *
+ * @param {string} label the label
+ * @param {HTMLElement} control the field
+ * @returns {Array<HTMLElement>} the label and the field
+ */
+function formRow(label, control) {
+  if (!control.id) {
+    control.id = `f-${Math.random().toString(36).slice(2, 9)}`;
+  }
+  return [el('label', { htmlFor: control.id, textContent: label }), control];
+}
+
+/**
+ * A text field.
+ *
+ * @param {string|number} value its value
+ * @param {string} tip what it is for
+ * @param {object} [props] more properties, e.g. type or placeholder
+ * @returns {HTMLInputElement} the field
+ */
+function textField(value, tip, props = {}) {
+  return el('input', { value: value == null ? '' : value, tip, size: 40, autocomplete: 'off', ...props });
+}
+
+/**
+ * A tick box.
+ *
+ * @param {boolean} checked whether it is ticked
+ * @param {string} tip what it does
+ * @returns {HTMLInputElement} the box
+ */
+function tickBox(checked, tip) {
+  return el('input', { type: 'checkbox', checked: Boolean(checked), tip });
+}
+
+/**
+ * A quality's name.
+ *
+ * @param {object} [q] Sonarr's quality ({quality, revision})
+ * @returns {string} e.g. WEBDL-1080p, or WEBDL-1080p v2
+ */
+function qualityName(q) {
+  if (!q || !q.quality) {
+    return '—';
+  }
+  const v = q.revision && q.revision.version > 1 ? ` v${q.revision.version}` : '';
+  return `${q.quality.name}${v}`;
+}
+
+/**
+ * An episode's number.
+ *
+ * @param {object} [e] the episode
+ * @returns {string} e.g. S01E02
+ */
+function episodeCode(e) {
+  if (!e) {
+    return '';
+  }
+  const two = (n) => String(n).padStart(2, '0');
+  return `S${two(e.seasonNumber)}E${two(e.episodeNumber)}`;
+}
+
+/**
+ * Bytes as MB, GB or TB.
+ *
+ * @param {number} bytes the bytes
+ * @returns {string} e.g. 850 MB
+ */
+function bytes(bytes) {
+  if (bytes == null) {
+    return '?';
+  }
+  return bytes < 1024 ** 3 ? `${Math.round(bytes / 1024 ** 2)} MB` : size(bytes);
+}
+
+/**
+ * A date and time in the user's format.
+ *
+ * @param {string} [iso] the time
+ * @returns {string} the time, or a dash
+ */
+function dateTime(iso) {
+  return iso ? new Date(iso).toLocaleString() : '—';
+}
+
+/**
+ * Tabs that are links to pages.
+ *
+ * @param {Array<[string, string, string, string]>} tabs key, label, address and tooltip of each
+ * @param {string} current the key shown
+ * @returns {HTMLElement} the tabs
+ */
+function tabBar(tabs, current) {
+  return el(
+    'nav',
+    { className: 'tabs', 'aria-label': 'Sections' },
+    tabs.map(([key, label, href, tip]) =>
+      el('a', { href, textContent: label, tip, className: key === current ? 'tab active' : 'tab' }),
+    ),
+  );
+}
+
+/**
+ * Runs a command and tells the user.
+ *
+ * @param {object} body the command, e.g. {name: 'EpisodeSearch', episodeIds: [1]}
+ * @param {string} what what it does, for the message
+ */
+async function command(body, what) {
+  try {
+    await api('POST', '/api/v3/command', body);
+    toast(`${what} started; it runs in the background`);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+/**
+ * A modal dialog, removed when closed.
+ *
+ * @param {string} title its title
+ * @param {Array<Node>} content what is inside
+ * @param {string} [className] more classes, e.g. wide
+ * @returns {HTMLDialogElement} the dialog, shown
+ */
+function modal(title, content, className = '') {
+  const dialog = el('dialog', { className: `browser ${className}`, 'aria-label': title }, [
+    el('h2', { textContent: title }),
+    ...content,
+  ]);
+  dialog.addEventListener('close', () => dialog.remove());
+  document.body.append(dialog);
+  dialog.showModal();
+  return dialog;
+}
+
+// ── Activity: queue, history, blocklist (orch.md decision 122) ──────────────
+
+/** The history page shown, kept when the page is drawn again. */
+let historyPageNumber = 1;
+
+/** The history's event filter. */
+let historyEvent = '';
+
+/** Sonarr's history events, by its numbers. */
+const HISTORY_EVENTS = [
+  ['', 'All events'],
+  ['1', 'Grabbed'],
+  ['3', 'Imported'],
+  ['4', 'Download failed'],
+  ['5', 'File deleted'],
+];
+
+/**
+ * The activity: what is downloading, what happened, what is blocked.
+ *
+ * @param {string} tab queue, history or blocklist
+ */
+async function activityPage(tab) {
+  const tabs = tabBar(
+    [
+      ['queue', 'Queue', '#/activity', 'What is downloading now, and the releases held back'],
+      ['history', 'History', '#/activity/history', 'Grabs, imports, failures and deleted files'],
+      ['blocklist', 'Blocklist', '#/activity/blocklist', 'Releases that failed: never grabbed again'],
+    ],
+    tab,
+  );
+  if (tab === 'history') {
+    await historyView(tabs);
+  } else if (tab === 'blocklist') {
+    await blocklistView(tabs);
+  } else {
+    await queueView(tabs);
+  }
+}
+
+/**
+ * The queue: each download's episodes, with its progress, state and messages; held-back releases too.
+ *
+ * @param {HTMLElement} tabs the tabs
+ */
+async function queueView(tabs) {
+  const mine = generation;
+  const data = await api(
+    'GET',
+    '/api/v3/queue?page=1&pageSize=500&includeSeries=true&includeEpisode=true&includeUnknownSeriesItems=true',
+  );
+  const rows = data.records.map((q) => {
+    const done = q.size ? Math.round(((q.size - q.sizeleft) / q.size) * 100) : 0;
+    const messages = (q.statusMessages || []).flatMap((m) => m.messages.map((text) => `${m.title}: ${text}`));
+    const state = q.status === 'delay' ? 'held back (delay profile)' : q.trackedDownloadState || q.status;
+    return el('tr', { className: q.trackedDownloadStatus === 'ok' ? '' : q.trackedDownloadStatus }, [
+      el('td', {}, [
+        q.series
+          ? el('a', { href: `#/series/${q.seriesId}`, textContent: q.series.title, tip: 'Open the series' })
+          : '?',
+      ]),
+      el('td', { textContent: q.episode ? `${episodeCode(q.episode)} ${q.episode.title || ''}` : '' }),
+      el('td', { className: 'release-title', textContent: q.title }),
+      el('td', { textContent: qualityName(q.quality) }),
+      el('td', {}, [
+        el('div', { textContent: state }),
+        ...messages.map((m) => el('div', { className: 'muted small', textContent: m })),
+      ]),
+      el('td', {}, [
+        el('div', { className: 'progress', title: `${done}%` }, [el('span', { style: `width:${done}%` })]),
+        el('div', { className: 'muted small', textContent: `${done}% of ${bytes(q.size)}` }),
+      ]),
+      el('td', { textContent: q.timeleft || '—' }),
+      el('td', { textContent: [q.downloadClient, q.indexer].filter(Boolean).join(' · ') }),
+      el('td', { className: 'actions' }, [
+        q.downloadId
+          ? null
+          : button('Grab now', 'Grab this held-back release now, without waiting', async () => {
+              try {
+                await api('POST', `/api/v3/queue/grab/${q.id}`);
+                toast('Grabbed');
+                route();
+              } catch (e) {
+                toast(e.message, true);
+              }
+            }),
+        button(
+          'Remove…',
+          'Remove this download (all its episodes) from the queue; asks what else to do',
+          () => removeFromQueue(q),
+          'danger',
+        ),
+      ]),
+    ]);
+  });
+  page.replaceChildren(
+    tabs,
+    el('div', { className: 'toolbar' }, [
+      button('Refresh', 'Read the download clients now (done every minute anyway)', async () => {
+        await command({ name: 'RefreshMonitoredDownloads' }, 'Reading the clients');
+        setTimeout(route, 2000);
+      }),
+      button('RSS sync', 'Read every indexer’s newest releases now and grab what is wanted', () =>
+        command({ name: 'RssSync' }, 'RSS sync'),
+      ),
+      el('span', { className: 'muted', textContent: `${data.totalRecords} items` }),
+    ]),
+    rows.length
+      ? el('table', { className: 'activity' }, [
+          el('thead', {}, [
+            el(
+              'tr',
+              {},
+              ['Series', 'Episode', 'Release', 'Quality', 'State', 'Progress', 'Time left', 'Client', ''].map((t) =>
+                el('th', { textContent: t }),
+              ),
+            ),
+          ]),
+          el('tbody', {}, rows),
+        ])
+      : el('p', { className: 'empty', textContent: 'Nothing is downloading.' }),
+  );
+  onChange = (change) => {
+    if (['download', 'queue', 'release', 'episodefile', 'blocklist'].includes(change.entity)) {
+      redraw(() => queueView(tabs));
+    }
+  };
+  const tick = () => {
+    if (mine !== generation) {
+      return; // another page by now
+    }
+    if (document.querySelector('dialog[open]')) {
+      setTimeout(tick, 20000);
+    } else {
+      redraw(() => queueView(tabs));
+    }
+  };
+  setTimeout(tick, 20000);
+}
+
+/**
+ * Asks how to remove a queue item, and removes it.
+ *
+ * @param {object} q the queue item
+ */
+function removeFromQueue(q) {
+  const fromClient = tickBox(true, 'Also remove the torrent and its data from the download client');
+  const block = tickBox(false, 'Blocklist the release, so it is never grabbed again');
+  const skip = tickBox(false, 'With the blocklist, do not search for another release');
+  const go = async () => {
+    try {
+      const query = `removeFromClient=${fromClient.checked}&blocklist=${block.checked}&skipRedownload=${skip.checked}`;
+      await api('DELETE', `/api/v3/queue/${q.id}?${query}`);
+      dialog.close();
+      toast('Removed');
+      route();
+    } catch (e) {
+      toast(e.message, true);
+    }
+  };
+  const dialog = modal(`Remove ${q.title}?`, [
+    el('div', { className: 'form' }, [
+      ...formRow('Remove from the client', fromClient),
+      ...formRow('Blocklist the release', block),
+      ...formRow('Do not search again', skip),
+    ]),
+    el('div', { className: 'browser-actions' }, [
+      button('Cancel', 'Close without removing', () => dialog.close()),
+      button('Remove', 'Remove it from the queue as ticked', go, 'danger'),
+    ]),
+  ]);
+}
+
+/**
+ * What a history record says beyond its title.
+ *
+ * @param {object} h the record
+ * @returns {string} e.g. the message, or where it was imported
+ */
+function historyDetail(h) {
+  const d = h.data || {};
+  if (h.eventType === 'downloadFolderImported') {
+    return d.importedPath || '';
+  }
+  if (h.eventType === 'episodeFileDeleted') {
+    return d.reason || '';
+  }
+  if (h.eventType === 'grabbed') {
+    return [d.indexer, d.downloadClientName].filter(Boolean).join(' · ');
+  }
+  return d.message || '';
+}
+
+/**
+ * The history, a page at a time.
+ *
+ * @param {HTMLElement} tabs the tabs
+ */
+async function historyView(tabs) {
+  const pageSize = 50;
+  const query = `page=${historyPageNumber}&pageSize=${pageSize}&includeSeries=true&includeEpisode=true`;
+  const data = await api('GET', `/api/v3/history?${query}${historyEvent ? `&eventType=${historyEvent}` : ''}`);
+  const pages = Math.max(1, Math.ceil(data.totalRecords / pageSize));
+  const filter = select(HISTORY_EVENTS, historyEvent, { tip: 'Show only one kind of event' });
+  filter.addEventListener('change', () => {
+    historyEvent = filter.value;
+    historyPageNumber = 1;
+    route();
+  });
+  const rows = data.records.map((h) =>
+    el('tr', {}, [
+      el('td', { textContent: dateTime(h.date) }),
+      el('td', { textContent: h.eventType }),
+      el('td', {}, [
+        h.series
+          ? el('a', { href: `#/series/${h.seriesId}`, textContent: h.series.title, tip: 'Open the series' })
+          : '',
+      ]),
+      el('td', { textContent: h.episode ? episodeCode(h.episode) : '' }),
+      el('td', { className: 'release-title', textContent: h.sourceTitle }),
+      el('td', { textContent: qualityName(h.quality) }),
+      el('td', { className: 'muted small', textContent: historyDetail(h) }),
+      el('td', {}, [
+        h.eventType === 'grabbed'
+          ? button(
+              'Mark as failed',
+              'Blocklist this release and search for another one; asks first',
+              async () => {
+                if (!window.confirm(`Mark ${h.sourceTitle} as failed?`)) {
+                  return;
+                }
+                try {
+                  await api('POST', `/api/v3/history/failed/${h.id}`);
+                  toast('Marked as failed');
+                  route();
+                } catch (e) {
+                  toast(e.message, true);
+                }
+              },
+              'danger',
+            )
+          : null,
+      ]),
+    ]),
+  );
+  const go = (n) => {
+    historyPageNumber = n;
+    route();
+  };
+  page.replaceChildren(
+    tabs,
+    el('div', { className: 'toolbar' }, [
+      filter,
+      button('‹ Newer', 'The previous page', () => go(historyPageNumber - 1)),
+      el('span', { className: 'muted', textContent: `Page ${historyPageNumber} of ${pages} (${data.totalRecords})` }),
+      button('Older ›', 'The next page', () => go(historyPageNumber + 1)),
+    ]),
+    rows.length
+      ? el('table', { className: 'activity' }, [
+          el('thead', {}, [
+            el(
+              'tr',
+              {},
+              ['Date', 'Event', 'Series', 'Episode', 'Source', 'Quality', 'Details', ''].map((t) =>
+                el('th', { textContent: t }),
+              ),
+            ),
+          ]),
+          el('tbody', {}, rows),
+        ])
+      : el('p', { className: 'empty', textContent: 'No history yet.' }),
+  );
+  page.querySelectorAll('.toolbar button')[0].disabled = historyPageNumber <= 1;
+  page.querySelectorAll('.toolbar button')[1].disabled = historyPageNumber >= pages;
+  onChange = (change) => {
+    if (historyPageNumber === 1 && ['download', 'release', 'episodefile', 'blocklist'].includes(change.entity)) {
+      redraw(() => historyView(tabs));
+    }
+  };
+}
+
+/**
+ * The blocklist.
+ *
+ * @param {HTMLElement} tabs the tabs
+ */
+async function blocklistView(tabs) {
+  const data = await api('GET', '/api/v3/blocklist?page=1&pageSize=500&includeSeries=true');
+  const unblock = async (ids) => {
+    try {
+      await api('DELETE', '/api/v3/blocklist/bulk', { ids });
+      toast('Removed from the blocklist');
+      route();
+    } catch (e) {
+      toast(e.message, true);
+    }
+  };
+  const rows = data.records.map((b) =>
+    el('tr', {}, [
+      el('td', { textContent: dateTime(b.date) }),
+      el('td', {}, [
+        b.series
+          ? el('a', { href: `#/series/${b.seriesId}`, textContent: b.series.title, tip: 'Open the series' })
+          : '',
+      ]),
+      el('td', { className: 'release-title', textContent: b.sourceTitle }),
+      el('td', { textContent: qualityName(b.quality) }),
+      el('td', { textContent: b.indexer || '' }),
+      el('td', { className: 'muted small', textContent: b.message || '' }),
+      el('td', {}, [button('Remove', 'Let this release be grabbed again', () => unblock([b.id]), 'danger')]),
+    ]),
+  );
+  page.replaceChildren(
+    tabs,
+    el('div', { className: 'toolbar' }, [
+      el('span', { className: 'muted', textContent: `${data.totalRecords} releases blocked` }),
+      rows.length
+        ? button(
+            'Clear the blocklist',
+            'Let every release on the blocklist be grabbed again; asks first',
+            () => window.confirm('Clear the whole blocklist?') && unblock(data.records.map((b) => b.id)),
+            'danger',
+          )
+        : null,
+    ]),
+    rows.length
+      ? el('table', { className: 'activity' }, [
+          el('thead', {}, [
+            el(
+              'tr',
+              {},
+              ['Date', 'Series', 'Source', 'Quality', 'Indexer', 'Why', ''].map((t) => el('th', { textContent: t })),
+            ),
+          ]),
+          el('tbody', {}, rows),
+        ])
+      : el('p', { className: 'empty', textContent: 'The blocklist is empty.' }),
+  );
+  onChange = (change) => {
+    if (change.entity === 'blocklist') {
+      redraw(() => blocklistView(tabs));
+    }
+  };
+}
+
+// ── Interactive search (orch.md decision 122) ───────────────────────────────
+
+/**
+ * Searches every indexer with interactive search on and shows every release found, best first, with why a release
+ * was rejected; any can be grabbed.
+ *
+ * @param {string} query episodeId=… or seriesId=…&seasonNumber=…
+ * @param {string} label what is searched, for the title
+ */
+async function interactiveSearch(query, label) {
+  const body = el('div', { className: 'search-results' }, [
+    el('p', { className: 'muted', textContent: 'Searching the indexers…' }),
+  ]);
+  const dialog = modal(
+    `Interactive search: ${label}`,
+    [body, el('div', { className: 'browser-actions' }, [button('Close', 'Close the search', () => dialog.close())])],
+    'wide',
+  );
+  let releases;
+  try {
+    releases = await api('GET', `/api/v3/release?${query}`);
+  } catch (e) {
+    body.replaceChildren(el('p', { className: 'empty', textContent: `Search failed: ${e.message}` }));
+    return;
+  }
+  if (!releases.length) {
+    body.replaceChildren(el('p', { className: 'empty', textContent: 'No releases found.' }));
+    return;
+  }
+  const grab = async (r, row) => {
+    if (r.rejections.length && !window.confirm(`Grab it anyway?\n\n${r.rejections.join('\n')}`)) {
+      return;
+    }
+    try {
+      await api('POST', '/api/v3/release', { guid: r.guid, indexerId: r.indexerId });
+      row.classList.add('grabbed');
+      toast(`Grabbed ${r.title}`);
+    } catch (e) {
+      toast(e.message, true);
+    }
+  };
+  const rows = releases.map((r) => {
+    const row = el('tr', { className: r.approved ? '' : 'rejected' });
+    row.append(
+      el('td', { textContent: r.age < 1 ? `${Math.round(r.ageHours)} h` : `${r.age} d` }),
+      el('td', { className: 'release-title' }, [
+        el('div', { textContent: r.title }),
+        ...r.rejections.map((x) => el('div', { className: 'muted small', textContent: `✘ ${x}` })),
+      ]),
+      el('td', { textContent: r.indexer }),
+      el('td', { textContent: bytes(r.size) }),
+      el('td', { textContent: r.seeders == null ? '?' : `${r.seeders}/${r.leechers == null ? '?' : r.leechers}` }),
+      el('td', { textContent: qualityName(r.quality) }),
+      el('td', { textContent: (r.languages || []).map((l) => l.name).join(', ') }),
+      el('td', {
+        textContent: `${r.customFormatScore >= 0 ? '+' : ''}${r.customFormatScore}`,
+        title: r.customFormats.map((c) => c.name).join(', '),
+      }),
+      el('td', {}, [
+        button(
+          'Grab',
+          r.approved ? 'Send this release to the download client' : 'Send it anyway; it was rejected (asks first)',
+          () => grab(r, row),
+          r.approved ? 'primary' : '',
+        ),
+      ]),
+    );
+    return row;
+  });
+  body.replaceChildren(
+    el('table', { className: 'activity' }, [
+      el('thead', {}, [
+        el(
+          'tr',
+          {},
+          ['Age', 'Release', 'Indexer', 'Size', 'Peers', 'Quality', 'Languages', 'Score', ''].map((t) =>
+            el('th', { textContent: t }),
+          ),
+        ),
+      ]),
+      el('tbody', {}, rows),
+    ]),
+  );
+}
+
+// ── Settings: indexers, clients, profiles, media management, Plex (orch.md decision 122) ──
+
+/** The settings' sections. */
+const SETTINGS_TABS = [
+  ['general', 'General', '#/settings', 'Connections, root folders, quality profiles and tags'],
+  ['indexers', 'Indexers', '#/settings/indexers', 'Torznab indexers (Prowlarr adds them) and the RSS sync'],
+  [
+    'clients',
+    'Download clients',
+    '#/settings/clients',
+    'qBittorrent and Transmission, and finished or failed downloads',
+  ],
+  ['profiles', 'Profiles', '#/settings/profiles', 'Release and delay profiles, remote path mappings'],
+  ['media', 'Media management', '#/settings/media', 'Episode file names, the recycle bin, subtitles and extras'],
+  ['plex', 'Plex', '#/settings/plex', 'Tell Plex to scan a series after each import'],
+];
+
+/**
+ * A form over one of the settings' addresses: what is shown is read from it, and Save sends it back.
+ *
+ * @param {string} title the section's title
+ * @param {string} intro what it is about
+ * @param {string} path e.g. /api/v3/config/indexer
+ * @param {Array<object>} spec each field: key, label, type (bool, number, text or select), tip and options
+ * @returns {Promise<HTMLElement>} the section
+ */
+async function settingsForm(title, intro, path, spec) {
+  const values = await api('GET', path);
+  const controls = new Map();
+  const rows = spec.flatMap((f) => {
+    let control;
+    if (f.type === 'bool') {
+      control = tickBox(values[f.key], f.tip);
+    } else if (f.type === 'select') {
+      control = select(f.options, values[f.key], { tip: f.tip });
+    } else {
+      control = textField(values[f.key], f.tip, f.type === 'number' ? { type: 'number', size: 8 } : {});
+    }
+    controls.set(f.key, control);
+    return formRow(f.label, control);
+  });
+  const save = async () => {
+    const body = { ...values };
+    spec.forEach((f) => {
+      const c = controls.get(f.key);
+      body[f.key] = f.type === 'bool' ? c.checked : f.type === 'number' ? Number(c.value) : c.value;
+      if (f.type === 'select' && typeof values[f.key] === 'number') {
+        body[f.key] = Number(c.value);
+      }
+    });
+    try {
+      await api('PUT', path, body);
+      toast(`${title} saved`);
+    } catch (e) {
+      toast(e.message, true);
+    }
+  };
+  return el('section', {}, [
+    el('h2', { textContent: title }),
+    el('p', { className: 'muted', textContent: intro }),
+    el('div', { className: 'form' }, rows),
+    el('div', { className: 'toolbar' }, [button('Save', `Save the ${title.toLowerCase()}`, save, 'primary')]),
+  ]);
+}
+
+/**
+ * Tick boxes for the tags.
+ *
+ * @param {Array<object>} tags every tag
+ * @param {Array<number>} chosen the ones ticked
+ * @returns {{node: HTMLElement, value: () => Array<number>}} the boxes, and what is ticked
+ */
+function tagPicker(tags, chosen) {
+  const boxes = tags.map((t) => [
+    t.id,
+    tickBox((chosen || []).includes(t.id), `Only for series with the tag ${t.label}`),
+  ]);
+  const node = el(
+    'div',
+    { className: 'inline' },
+    boxes.length
+      ? boxes.map(([id, box]) => el('label', {}, [box, ` ${tags.find((t) => t.id === id).label}`]))
+      : [el('span', { className: 'muted', textContent: 'No tags: for every series' })],
+  );
+  return { node, value: () => boxes.filter(([, box]) => box.checked).map(([id]) => id) };
+}
+
+/**
+ * The field of a provider's setting (Sonarr's fields), by its type.
+ *
+ * @param {object} f the field
+ * @returns {HTMLElement} the control
+ */
+function providerField(f) {
+  const tip = `${f.label}${f.advanced ? ' (advanced)' : ''}`;
+  if (f.type === 'checkbox') {
+    return tickBox(f.value, tip);
+  }
+  if (f.type === 'password' || f.privacy === 'apiKey' || f.privacy === 'password') {
+    return textField(f.value, `${tip}; ******** keeps the one saved`, { type: 'password' });
+  }
+  if (Array.isArray(f.value)) {
+    return textField(f.value.join(','), `${tip}, separated by commas`);
+  }
+  return textField(f.value, tip, f.type === 'number' ? { type: 'number', size: 10 } : {});
+}
+
+/**
+ * The value a provider's field holds.
+ *
+ * @param {object} f the field as it was
+ * @param {HTMLInputElement} control its control
+ * @returns {any} the value to send
+ */
+function providerValue(f, control) {
+  if (f.type === 'checkbox') {
+    return control.checked;
+  }
+  if (Array.isArray(f.value)) {
+    return control.value
+      .split(',')
+      .map((v) => v.trim())
+      .filter(Boolean)
+      .map((v) => (Number.isNaN(Number(v)) ? v : Number(v)));
+  }
+  if (f.type === 'number' || typeof f.value === 'number') {
+    return control.value === '' ? null : Number(control.value);
+  }
+  return control.value;
+}
+
+/**
+ * Adds or edits an indexer or a download client: it is tested when saved, and can be saved anyway.
+ *
+ * @param {string} kind indexer or downloadclient
+ * @param {object} resource the resource (from the schema, for a new one)
+ * @param {Array<object>} tags every tag
+ * @param {Array<object>} clients the download clients, for an indexer's own client
+ */
+function providerDialog(kind, resource, tags, clients) {
+  const isIndexer = kind === 'indexer';
+  const name = textField(resource.name, 'The name shown in Catasonarr');
+  const priority = textField(resource.priority, 'Lower comes first, 1 to 50', { type: 'number', size: 6 });
+  const flags = isIndexer
+    ? [
+        ['enableRss', 'RSS', 'Read its newest releases at each RSS sync'],
+        ['enableAutomaticSearch', 'Automatic search', 'Use it when Catasonarr searches by itself'],
+        ['enableInteractiveSearch', 'Interactive search', 'Use it in the interactive search'],
+      ]
+    : [
+        ['enable', 'Enabled', 'Send downloads to this client'],
+        ['removeCompletedDownloads', 'Remove completed', 'Remove the torrent once imported (it stops seeding)'],
+        ['removeFailedDownloads', 'Remove failed', 'Remove a failed torrent and its data'],
+      ];
+  const boxes = flags.map(([key, label, tip]) => [key, label, tickBox(resource[key], tip)]);
+  const ownClient = isIndexer
+    ? select([[0, 'Any'], ...clients.map((c) => [c.id, c.name])], resource.downloadClientId || 0, {
+        tip: 'The client its releases go to; Any picks by tags and priority',
+      })
+    : null;
+  const controls = resource.fields.map((f) => [f, providerField(f)]);
+  const picker = tagPicker(tags, resource.tags);
+  const body = () => ({
+    ...resource,
+    name: name.value.trim(),
+    priority: Number(priority.value),
+    ...Object.fromEntries(boxes.map(([key, , box]) => [key, box.checked])),
+    ...(ownClient ? { downloadClientId: Number(ownClient.value) } : {}),
+    fields: controls.map(([f, c]) => ({ ...f, value: providerValue(f, c) })),
+    tags: picker.value(),
+  });
+  const save = async () => {
+    const path = resource.id ? `/api/v3/${kind}/${resource.id}` : `/api/v3/${kind}`;
+    const method = resource.id ? 'PUT' : 'POST';
+    try {
+      await api(method, path, body());
+    } catch (e) {
+      if (!window.confirm(`The test failed: ${e.message}\n\nSave anyway?`)) {
+        return;
+      }
+      try {
+        await api(method, `${path}?forceSave=true`, body());
+      } catch (again) {
+        toast(again.message, true);
+        return;
+      }
+    }
+    dialog.close();
+    toast(`${body().name} saved`);
+    route();
+  };
+  const test = async () => {
+    try {
+      await api('POST', `/api/v3/${kind}/test`, body());
+      toast('The test passed');
+    } catch (e) {
+      toast(`The test failed: ${e.message}`, true);
+    }
+  };
+  const dialog = modal(
+    `${resource.id ? 'Edit' : 'Add'} ${resource.implementationName || resource.implementation}`,
+    [
+      el('div', { className: 'form' }, [
+        ...formRow('Name', name),
+        ...boxes.flatMap(([, label, box]) => formRow(label, box)),
+        ...formRow('Priority', priority),
+        ...(ownClient ? formRow('Download client', ownClient) : []),
+        ...controls.flatMap(([f, c]) => formRow(f.label, c)),
+        el('span', { textContent: 'Tags' }),
+        picker.node,
+      ]),
+      el('div', { className: 'browser-actions' }, [
+        button('Cancel', 'Close without saving', () => dialog.close()),
+        button('Test', 'Check that it answers, without saving', test),
+        button('Save', 'Test it and save it', save, 'primary'),
+      ]),
+    ],
+    'wide',
+  );
+}
+
+/**
+ * Deletes something after asking.
+ *
+ * @param {string} path its address
+ * @param {string} what its name, for the question
+ */
+async function deleteAfterAsking(path, what) {
+  if (!window.confirm(`Delete ${what}?`)) {
+    return;
+  }
+  try {
+    await api('DELETE', path);
+    toast(`${what} deleted`);
+    route();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+/**
+ * The indexers, and the RSS sync's settings.
+ *
+ * @param {HTMLElement} tabs the tabs
+ */
+async function indexersSettings(tabs) {
+  const [indexers, schema, tags, clients] = await Promise.all([
+    api('GET', '/api/v3/indexer'),
+    api('GET', '/api/v3/indexer/schema'),
+    api('GET', '/api/v3/tag'),
+    api('GET', '/api/v3/downloadclient'),
+  ]);
+  const rows = indexers.map((i) =>
+    el('tr', {}, [
+      el('td', { textContent: i.name }),
+      el(
+        'td',
+        {},
+        [
+          ['enableRss', 'RSS'],
+          ['enableAutomaticSearch', 'Automatic'],
+          ['enableInteractiveSearch', 'Interactive'],
+        ].map(([k, t]) => el('span', { className: `badge ${i[k] ? 'on' : ''}`, textContent: t })),
+      ),
+      el('td', { textContent: `Priority ${i.priority}` }),
+      el('td', { className: 'actions' }, [
+        button('Edit', 'Change this indexer', () => providerDialog('indexer', i, tags, clients)),
+        button(
+          'Delete',
+          'Delete this indexer; asks first',
+          () => deleteAfterAsking(`/api/v3/indexer/${i.id}`, i.name),
+          'danger',
+        ),
+      ]),
+    ]),
+  );
+  const testAll = async () => {
+    try {
+      const results = await api('POST', '/api/v3/indexer/testall');
+      const bad = results.filter((r) => !r.isValid);
+      toast(
+        bad.length
+          ? `${bad.length} failed: ${bad.map((r) => r.validationFailures[0].errorMessage).join('; ')}`
+          : 'Every indexer works',
+        bad.length > 0,
+      );
+    } catch (e) {
+      toast(e.message, true);
+    }
+  };
+  page.replaceChildren(
+    tabs,
+    el('section', {}, [
+      el('h2', { textContent: 'Indexers' }),
+      el('p', {
+        className: 'muted',
+        textContent:
+          'Torznab only. Prowlarr adds and updates them here as it does in Sonarr (Prowlarr → Apps → Sonarr, with Catasonarr’s address and API key).',
+      }),
+      rows.length
+        ? el('table', {}, [el('tbody', {}, rows)])
+        : el('p', { className: 'empty', textContent: 'No indexers yet.' }),
+      el('div', { className: 'toolbar' }, [
+        button(
+          'Add Torznab',
+          'Add a Torznab indexer by hand',
+          () => providerDialog('indexer', { ...schema[0], name: '' }, tags, clients),
+          'primary',
+        ),
+        indexers.length ? button('Test all', 'Check that every indexer answers', testAll) : null,
+      ]),
+    ]),
+    await settingsForm(
+      'RSS and releases',
+      'How often the indexers’ newest releases are read, and which are too new or too big.',
+      '/api/v3/config/indexer',
+      [
+        {
+          key: 'rssSyncInterval',
+          label: 'RSS sync interval (minutes)',
+          type: 'number',
+          tip: 'Every how many minutes; 0 turns it off, else at least 10',
+        },
+        {
+          key: 'minimumAge',
+          label: 'Minimum age (minutes)',
+          type: 'number',
+          tip: 'Wait until a release is this old before grabbing it',
+        },
+        {
+          key: 'maximumSize',
+          label: 'Maximum size (MB)',
+          type: 'number',
+          tip: 'Never grab a release bigger than this; 0 for no limit',
+        },
+      ],
+    ),
+  );
+  onChange = (change) => {
+    if (['indexer', 'settings'].includes(change.entity) && !document.querySelector('dialog[open]')) {
+      redraw(() => indexersSettings(tabs));
+    }
+  };
+}
+
+/**
+ * The download clients, and what happens to finished and failed downloads.
+ *
+ * @param {HTMLElement} tabs the tabs
+ */
+async function clientsSettings(tabs) {
+  const [clients, schema, tags] = await Promise.all([
+    api('GET', '/api/v3/downloadclient'),
+    api('GET', '/api/v3/downloadclient/schema'),
+    api('GET', '/api/v3/tag'),
+  ]);
+  const value = (c, name) => (c.fields.find((f) => f.name === name) || {}).value;
+  const rows = clients.map((c) =>
+    el('tr', {}, [
+      el('td', { textContent: c.name }),
+      el('td', { textContent: c.implementationName }),
+      el('td', { textContent: `${value(c, 'useSsl') ? 'https' : 'http'}://${value(c, 'host')}:${value(c, 'port')}` }),
+      el('td', { textContent: `Category ${value(c, 'tvCategory')}` }),
+      el('td', {}, [
+        el('span', { className: `badge ${c.enable ? 'on' : ''}`, textContent: c.enable ? 'Enabled' : 'Off' }),
+      ]),
+      el('td', { className: 'actions' }, [
+        button('Edit', 'Change this client', () => providerDialog('downloadclient', c, tags, [])),
+        button(
+          'Delete',
+          'Delete this client; asks first',
+          () => deleteAfterAsking(`/api/v3/downloadclient/${c.id}`, c.name),
+          'danger',
+        ),
+      ]),
+    ]),
+  );
+  page.replaceChildren(
+    tabs,
+    el('section', {}, [
+      el('h2', { textContent: 'Download clients' }),
+      el('p', {
+        className: 'muted',
+        textContent:
+          'Catasonarr only touches the torrents of its own category (catasonarr), so it lives next to Sonarr in the same client.',
+      }),
+      rows.length
+        ? el('table', {}, [el('tbody', {}, rows)])
+        : el('p', { className: 'empty', textContent: 'No download clients yet.' }),
+      el(
+        'div',
+        { className: 'toolbar' },
+        schema.map((s) =>
+          button(`Add ${s.implementationName}`, `Add a ${s.implementationName} client`, () =>
+            providerDialog('downloadclient', { ...s, name: s.implementationName }, tags, []),
+          ),
+        ),
+      ),
+    ]),
+    await settingsForm(
+      'Finished and failed downloads',
+      'What Catasonarr does when a download ends.',
+      '/api/v3/config/downloadclient',
+      [
+        {
+          key: 'enableCompletedDownloadHandling',
+          label: 'Import finished downloads',
+          type: 'bool',
+          tip: 'Move finished downloads into the series’ folders',
+        },
+        {
+          key: 'autoRedownloadFailed',
+          label: 'Search again after a failure',
+          type: 'bool',
+          tip: 'Blocklist a failed release and search for another',
+        },
+        {
+          key: 'autoRedownloadFailedFromInteractiveSearch',
+          label: '… also when grabbed by hand',
+          type: 'bool',
+          tip: 'Search again even for a release grabbed in the interactive search',
+        },
+      ],
+    ),
+  );
+  onChange = (change) => {
+    if (['downloadclient', 'settings'].includes(change.entity) && !document.querySelector('dialog[open]')) {
+      redraw(() => clientsSettings(tabs));
+    }
+  };
+}
+
+/**
+ * Edits a release profile, a delay profile or a remote path mapping in a dialog.
+ *
+ * @param {string} path e.g. /api/v3/releaseprofile
+ * @param {object} item the item (id 0 for a new one)
+ * @param {string} title the dialog's title
+ * @param {Array<[string, string, HTMLElement, (control: HTMLElement) => any]>} fields key, label, control, reader
+ */
+function itemDialog(path, item, title, fields) {
+  const save = async () => {
+    const body = { ...item };
+    fields.forEach(([key, , control, read]) => {
+      body[key] = read(control);
+    });
+    try {
+      await api(item.id ? 'PUT' : 'POST', item.id ? `${path}/${item.id}` : path, body);
+      dialog.close();
+      toast('Saved');
+      route();
+    } catch (e) {
+      toast(e.message, true);
+    }
+  };
+  const dialog = modal(title, [
+    el(
+      'div',
+      { className: 'form' },
+      fields.flatMap(([, label, control]) => formRow(label, control)),
+    ),
+    el('div', { className: 'browser-actions' }, [
+      button('Cancel', 'Close without saving', () => dialog.close()),
+      button('Save', 'Save it', save, 'primary'),
+    ]),
+  ]);
+}
+
+/**
+ * Release and delay profiles, and remote path mappings.
+ *
+ * @param {HTMLElement} tabs the tabs
+ */
+async function profilesSettings(tabs) {
+  const [release, delay, mappings, tags] = await Promise.all([
+    api('GET', '/api/v3/releaseprofile'),
+    api('GET', '/api/v3/delayprofile'),
+    api('GET', '/api/v3/remotepathmapping'),
+    api('GET', '/api/v3/tag'),
+  ]);
+  const tagNames = (ids) =>
+    (ids || [])
+      .map((id) => (tags.find((t) => t.id === id) || {}).label)
+      .filter(Boolean)
+      .join(', ') || 'every series';
+  const lines = (c) =>
+    c.value
+      .split('\n')
+      .map((t) => t.trim())
+      .filter(Boolean);
+  const tagsField = (chosen) => {
+    const picker = tagPicker(tags, chosen);
+    picker.node.value = picker.value;
+    return picker.node;
+  };
+  const editRelease = (p) =>
+    itemDialog('/api/v3/releaseprofile', p, p.id ? `Edit ${p.name || 'release profile'}` : 'Add a release profile', [
+      ['name', 'Name', textField(p.name, 'A name, for you'), (c) => c.value],
+      ['enabled', 'Enabled', tickBox(p.enabled !== false, 'Use this profile'), (c) => c.checked],
+      [
+        'required',
+        'Must contain',
+        el('textarea', {
+          value: (p.required || []).join('\n'),
+          rows: 3,
+          tip: 'One term or /regex/ per line: a release needs one of them',
+        }),
+        lines,
+      ],
+      [
+        'ignored',
+        'Must not contain',
+        el('textarea', {
+          value: (p.ignored || []).join('\n'),
+          rows: 3,
+          tip: 'One term or /regex/ per line: a release with any is rejected',
+        }),
+        lines,
+      ],
+      ['tags', 'Tags', tagsField(p.tags), (c) => c.value()],
+    ]);
+  const editDelay = (p) =>
+    itemDialog('/api/v3/delayprofile', p, p.id ? 'Edit the delay profile' : 'Add a delay profile', [
+      [
+        'torrentDelay',
+        'Torrent delay (minutes)',
+        textField(p.torrentDelay || 0, 'Wait this long after a release appears, for a better one', {
+          type: 'number',
+          size: 8,
+        }),
+        (c) => Number(c.value),
+      ],
+      [
+        'bypassIfHighestQuality',
+        'Skip the wait for the best quality',
+        tickBox(p.bypassIfHighestQuality, 'Grab at once a release of the profile’s best quality'),
+        (c) => c.checked,
+      ],
+      [
+        'bypassIfAboveCustomFormatScore',
+        'Skip the wait above a score',
+        tickBox(p.bypassIfAboveCustomFormatScore, 'Grab at once a release with a custom format score high enough'),
+        (c) => c.checked,
+      ],
+      [
+        'minimumCustomFormatScore',
+        'Minimum score',
+        textField(p.minimumCustomFormatScore || 0, 'The score that skips the wait', { type: 'number', size: 8 }),
+        (c) => Number(c.value),
+      ],
+      ...(p.id === 1 ? [] : [['tags', 'Tags', tagsField(p.tags), (c) => c.value()]]),
+    ]);
+  const editMapping = (m) =>
+    itemDialog('/api/v3/remotepathmapping', m, m.id ? 'Edit the mapping' : 'Add a remote path mapping', [
+      ['host', 'Host', textField(m.host, 'The download client’s host, as in its settings'), (c) => c.value.trim()],
+      [
+        'remotePath',
+        'Remote path',
+        textField(m.remotePath, 'The folder as the client sees it, e.g. /downloads/'),
+        (c) => c.value.trim(),
+      ],
+      [
+        'localPath',
+        'Local path',
+        textField(m.localPath, 'The same folder as Catasonarr sees it'),
+        (c) => c.value.trim(),
+      ],
+    ]);
+  const table = (rows, empty) =>
+    rows.length ? el('table', {}, [el('tbody', {}, rows)]) : el('p', { className: 'empty', textContent: empty });
+  page.replaceChildren(
+    tabs,
+    el('section', {}, [
+      el('h2', { textContent: 'Release profiles' }),
+      el('p', { className: 'muted', textContent: 'Terms a release must or must not have, per tag.' }),
+      table(
+        release.map((p) =>
+          el('tr', {}, [
+            el('td', { textContent: p.name || '(no name)' }),
+            el('td', {
+              textContent: `Must: ${(p.required || []).join(', ') || '—'} · Not: ${(p.ignored || []).join(', ') || '—'}`,
+            }),
+            el('td', { textContent: tagNames(p.tags) }),
+            el('td', {}, [
+              el('span', { className: `badge ${p.enabled ? 'on' : ''}`, textContent: p.enabled ? 'On' : 'Off' }),
+            ]),
+            el('td', { className: 'actions' }, [
+              button('Edit', 'Change this profile', () => editRelease(p)),
+              button(
+                'Delete',
+                'Delete this profile; asks first',
+                () => deleteAfterAsking(`/api/v3/releaseprofile/${p.id}`, p.name || 'the profile'),
+                'danger',
+              ),
+            ]),
+          ]),
+        ),
+        'No release profiles.',
+      ),
+      el('div', { className: 'toolbar' }, [
+        button(
+          'Add',
+          'Add a release profile',
+          () => editRelease({ id: 0, enabled: true, required: [], ignored: [], indexerId: 0, tags: [] }),
+          'primary',
+        ),
+      ]),
+    ]),
+    el('section', {}, [
+      el('h2', { textContent: 'Delay profiles' }),
+      el('p', {
+        className: 'muted',
+        textContent: 'How long to wait for a better release; the first one whose tags match wins, the default last.',
+      }),
+      table(
+        delay.map((p, i) =>
+          el('tr', {}, [
+            el('td', { textContent: `${p.torrentDelay} min` }),
+            el('td', {
+              textContent: [
+                p.bypassIfHighestQuality ? 'not for the best quality' : '',
+                p.bypassIfAboveCustomFormatScore ? `not above ${p.minimumCustomFormatScore}` : '',
+              ]
+                .filter(Boolean)
+                .join(', '),
+            }),
+            el('td', { textContent: p.id === 1 ? 'default' : tagNames(p.tags) }),
+            el('td', { className: 'actions' }, [
+              p.id !== 1 && i > 0
+                ? button('↑', 'Check this profile before the one above', async () => {
+                    try {
+                      const above = delay[i - 2];
+                      await api('PUT', `/api/v3/delayprofile/reorder/${p.id}${above ? `?after=${above.id}` : ''}`);
+                      route();
+                    } catch (e) {
+                      toast(e.message, true);
+                    }
+                  })
+                : null,
+              button('Edit', 'Change this profile', () => editDelay(p)),
+              p.id === 1
+                ? null
+                : button(
+                    'Delete',
+                    'Delete this profile; asks first',
+                    () => deleteAfterAsking(`/api/v3/delayprofile/${p.id}`, 'the delay profile'),
+                    'danger',
+                  ),
+            ]),
+          ]),
+        ),
+        'No delay profiles.',
+      ),
+      el('div', { className: 'toolbar' }, [
+        button(
+          'Add',
+          'Add a delay profile for some tags',
+          () =>
+            editDelay({
+              id: 0,
+              enableUsenet: false,
+              enableTorrent: true,
+              preferredProtocol: 'torrent',
+              usenetDelay: 0,
+              torrentDelay: 0,
+              tags: [],
+            }),
+          'primary',
+        ),
+      ]),
+    ]),
+    el('section', {}, [
+      el('h2', { textContent: 'Remote path mappings' }),
+      el('p', {
+        className: 'muted',
+        textContent: 'When a client sees its downloads under another path than Catasonarr does.',
+      }),
+      table(
+        mappings.map((m) =>
+          el('tr', {}, [
+            el('td', { textContent: m.host }),
+            el('td', { textContent: `${m.remotePath} → ${m.localPath}` }),
+            el('td', { className: 'actions' }, [
+              button('Edit', 'Change this mapping', () => editMapping(m)),
+              button(
+                'Delete',
+                'Delete this mapping; asks first',
+                () => deleteAfterAsking(`/api/v3/remotepathmapping/${m.id}`, 'the mapping'),
+                'danger',
+              ),
+            ]),
+          ]),
+        ),
+        'No mappings: the clients see /downloads as Catasonarr does.',
+      ),
+      el('div', { className: 'toolbar' }, [
+        button(
+          'Add',
+          'Add a remote path mapping',
+          () => editMapping({ id: 0, host: '', remotePath: '', localPath: '' }),
+          'primary',
+        ),
+      ]),
+    ]),
+  );
+  onChange = (change) => {
+    if (
+      ['releaseprofile', 'delayprofile', 'remotepathmapping'].includes(change.entity) &&
+      !document.querySelector('dialog[open]')
+    ) {
+      redraw(() => profilesSettings(tabs));
+    }
+  };
+}
+
+/**
+ * The naming of episode files and folders, and the media management settings.
+ *
+ * @param {HTMLElement} tabs the tabs
+ */
+async function mediaSettings(tabs) {
+  page.replaceChildren(
+    tabs,
+    await settingsForm(
+      'Episode naming',
+      'Sonarr’s tokens, e.g. {Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}.',
+      '/api/v3/config/naming',
+      [
+        {
+          key: 'renameEpisodes',
+          label: 'Rename episodes',
+          type: 'bool',
+          tip: 'Name imported files with the formats below; off keeps the release’s name',
+        },
+        {
+          key: 'standardEpisodeFormat',
+          label: 'Standard episode format',
+          type: 'text',
+          tip: 'The name of a standard series’ episode file',
+        },
+        {
+          key: 'dailyEpisodeFormat',
+          label: 'Daily episode format',
+          type: 'text',
+          tip: 'The name of a daily series’ episode file',
+        },
+        {
+          key: 'animeEpisodeFormat',
+          label: 'Anime episode format',
+          type: 'text',
+          tip: 'The name of an anime episode file',
+        },
+        {
+          key: 'multiEpisodeStyle',
+          label: 'Multi-episode style',
+          type: 'select',
+          tip: 'How a file of several episodes is numbered',
+          options: [
+            [0, 'Extend: S01E01-02-03'],
+            [1, 'Duplicate: S01E01.S01E02'],
+            [2, 'Repeat: S01E01E02E03'],
+            [3, 'Scene: S01E01-E02-E03'],
+            [4, 'Range: S01E01-03'],
+            [5, 'Prefixed range: S01E01-E03'],
+          ],
+        },
+        {
+          key: 'seriesFolderFormat',
+          label: 'Series folder format',
+          type: 'text',
+          tip: 'The name of a new series’ folder',
+        },
+        {
+          key: 'seasonFolderFormat',
+          label: 'Season folder format',
+          type: 'text',
+          tip: 'The name of a season’s folder',
+        },
+        {
+          key: 'specialsFolderFormat',
+          label: 'Specials folder format',
+          type: 'text',
+          tip: 'The name of the specials’ folder',
+        },
+        {
+          key: 'replaceIllegalCharacters',
+          label: 'Replace illegal characters',
+          type: 'bool',
+          tip: 'Replace characters a file name cannot hold; off deletes them',
+        },
+        {
+          key: 'colonReplacementFormat',
+          label: 'Colon replacement',
+          type: 'select',
+          tip: 'What a colon in a title becomes',
+          options: [
+            [0, 'Delete'],
+            [1, 'Dash'],
+            [2, 'Space dash'],
+            [3, 'Space dash space'],
+            [4, 'Smart'],
+            [5, 'Custom'],
+          ],
+        },
+        {
+          key: 'customColonReplacementFormat',
+          label: 'Custom colon replacement',
+          type: 'text',
+          tip: 'With Custom, what a colon becomes',
+        },
+      ],
+    ),
+    await settingsForm(
+      'Importing',
+      'What happens when files are imported, replaced or go missing.',
+      '/api/v3/config/mediamanagement',
+      [
+        {
+          key: 'recycleBin',
+          label: 'Recycle bin',
+          type: 'text',
+          tip: 'Where replaced and deleted files go (/data/.recycle); empty deletes them at once',
+        },
+        {
+          key: 'recycleBinCleanupDays',
+          label: 'Recycle bin days',
+          type: 'number',
+          tip: 'Days a file stays in the recycle bin; 0 keeps it for ever',
+        },
+        {
+          key: 'downloadPropersAndRepacks',
+          label: 'Propers and repacks',
+          type: 'select',
+          tip: 'Whether a proper or repack replaces the file',
+          options: [
+            ['preferAndUpgrade', 'Prefer and upgrade'],
+            ['doNotUpgrade', 'Do not upgrade automatically'],
+            ['doNotPrefer', 'Do not prefer'],
+          ],
+        },
+        {
+          key: 'episodeTitleRequired',
+          label: 'Episode title required',
+          type: 'select',
+          tip: 'Wait for the episode’s title before importing (for 48 h after it airs)',
+          options: [
+            ['always', 'Always'],
+            ['bulkSeasonReleases', 'Only for bulk season releases'],
+            ['never', 'Never'],
+          ],
+        },
+        {
+          key: 'importExtraFiles',
+          label: 'Import extra files',
+          type: 'bool',
+          tip: 'Import the subtitles and other files next to the episode',
+        },
+        {
+          key: 'extraFileExtensions',
+          label: 'Extra file extensions',
+          type: 'text',
+          tip: 'Which extras, separated by commas, e.g. srt,ass,nfo',
+        },
+        {
+          key: 'skipFreeSpaceCheckWhenImporting',
+          label: 'Skip the free space check',
+          type: 'bool',
+          tip: 'Import even when the disk looks full',
+        },
+        {
+          key: 'minimumFreeSpaceWhenImporting',
+          label: 'Minimum free space (MB)',
+          type: 'number',
+          tip: 'Do not import when less than this would be left',
+        },
+        {
+          key: 'autoUnmonitorPreviouslyDownloadedEpisodes',
+          label: 'Unmonitor deleted episodes',
+          type: 'bool',
+          tip: 'Stop looking for an episode whose file was deleted outside Catasonarr',
+        },
+        {
+          key: 'createEmptySeriesFolders',
+          label: 'Create empty series folders',
+          type: 'bool',
+          tip: 'Create a series’ folder at the rescan, even with no files',
+        },
+        {
+          key: 'deleteEmptyFolders',
+          label: 'Delete empty folders',
+          type: 'bool',
+          tip: 'Delete empty season folders at the rescan',
+        },
+      ],
+    ),
+  );
+  onChange = null;
+}
+
+/**
+ * Plex: told to scan a series' folder after each import; the token is in a Secret, never here.
+ *
+ * @param {HTMLElement} tabs the tabs
+ */
+async function plexSettings(tabs) {
+  const s = await api('GET', '/api/v3/catasonarr/settings');
+  const form = await settingsForm(
+    'Plex',
+    'After each import Plex scans the series’ folder.',
+    '/api/v3/catasonarr/settings',
+    [
+      { key: 'plexEnabled', label: 'Tell Plex', type: 'bool', tip: 'Ask Plex to scan the series after each import' },
+      { key: 'plexUrl', label: 'Plex’s address', type: 'text', tip: 'e.g. http://plex.example:32400' },
+      {
+        key: 'plexMapFrom',
+        label: 'Path in Catasonarr',
+        type: 'text',
+        tip: 'When Plex sees the library under another path: Catasonarr’s, e.g. /data',
+      },
+      { key: 'plexMapTo', label: 'Same path in Plex', type: 'text', tip: 'And Plex’s, e.g. /media' },
+    ],
+  );
+  const url = form.querySelector('input:not([type=checkbox])');
+  const test = async () => {
+    try {
+      const answer = await api('POST', '/api/v3/catasonarr/plex/test', { plexUrl: url.value });
+      toast(`Plex answered; TV libraries: ${answer.libraries.join(', ') || 'none'}`);
+    } catch (e) {
+      toast(e.message, true);
+    }
+  };
+  form.querySelector('.toolbar').append(button('Test', 'Check that Plex answers with the token', test));
+  form.insertBefore(
+    el('p', {
+      className: s.plexTokenSet ? 'muted' : 'empty',
+      textContent: s.plexTokenSet
+        ? 'The token is set (Secret catasonarr-plex).'
+        : 'No token yet: run microshift/apps/catacumbas69-apps/catasonarr/catasonarr-secret.sh plex on the Mac.',
+    }),
+    form.querySelector('.form'),
+  );
+  page.replaceChildren(tabs, form);
+  onChange = null;
 }
 
 // ── Tooltips (orch.md decision 121) ──────────────────────────────────────────
@@ -1307,7 +2928,8 @@ async function route() {
   hideTip();
   const hash = window.location.hash || '#/';
   const detail = hash.match(/^#\/series\/(\d+)$/);
-  const name = detail ? 'series' : { '#/add': 'add', '#/import': 'import', '#/settings': 'settings' }[hash] || 'series';
+  const sub = hash.match(/^#\/(activity|settings)(?:\/([a-z]+))?$/);
+  const name = detail ? 'series' : sub ? sub[1] : { '#/add': 'add', '#/import': 'import' }[hash] || 'series';
   document
     .querySelectorAll('.topbar-nav a')
     .forEach((a) => a.classList.toggle('active', a.dataset.page === name && !detail));
@@ -1320,7 +2942,9 @@ async function route() {
     } else if (name === 'import') {
       await importPage();
     } else if (name === 'settings') {
-      await settingsPage();
+      await settingsPage(sub[2] || 'general');
+    } else if (name === 'activity') {
+      await activityPage(sub[2] || 'queue');
     } else {
       await seriesPage();
     }
@@ -1382,7 +3006,12 @@ function tellChanges() {
   if (!pendingNotices.length) {
     return;
   }
-  const changes = pendingNotices.splice(0);
+  const changes = pendingNotices
+    .splice(0)
+    .filter((c) => !(c.actor === 'catasonarr' && ['rss', 'recyclebin', 'command'].includes(c.entity)));
+  if (!changes.length) {
+    return;
+  }
   if (changes.length <= 3) {
     toast(changes.map((c) => `${c.subject || c.entity} ${c.action} by ${actorName(c.actor)}`).join(' · '));
     return;

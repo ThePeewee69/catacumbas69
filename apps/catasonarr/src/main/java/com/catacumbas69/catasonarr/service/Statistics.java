@@ -6,7 +6,8 @@ import java.util.Comparator;
 import java.util.Objects;
 
 /**
- * Sonarr's statistics of a season or a series (orch.md decision 112). Until files are imported none has a file.
+ * Sonarr's statistics of a season or a series (orch.md decisions 112 and 122): files and their sizes count from the
+ * episode files.
  *
  * @param seasonNumber the season, or -1 for a whole series
  * @param totalEpisodeCount every episode

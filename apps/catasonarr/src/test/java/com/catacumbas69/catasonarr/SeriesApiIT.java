@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterAll;
@@ -114,7 +115,8 @@ class SeriesApiIT {
 
         assertThat(monitored(id)).containsExactly("2x1");
         assertThat(http.getForObject("/api/v3/command", JsonNode.class).findValuesAsText("name"))
-                .as("the search asked is kept").contains("SeriesSearch");
+                .as("the folder rescanned, then the search asked, as Sonarr").contains("RescanSeries",
+                        "MissingEpisodeSearch");
         assertThat(http.getForObject("/api/v3/series/lookup?term=tvdb:" + TVDB, JsonNode.class).get(0).path("id")
                 .asInt()).as("now in the library").isEqualTo(id);
         assertThat(http.postForEntity("/api/v3/series", add, JsonNode.class).getStatusCode())
@@ -143,10 +145,12 @@ class SeriesApiIT {
         try (InputStream in = SeriesApiIT.class.getResourceAsStream("/sonarr/quality-rows.json")) {
             rows = JSON.readTree(in);
         }
-        ResponseEntity<JsonNode> result = http.postForEntity("/api/v3/catasonarr/import/sonarr-quality", rows,
+        ResponseEntity<JsonNode> result = http.postForEntity("/api/v3/catasonarr/import/sonarr", rows,
                 JsonNode.class);
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(result.getBody().path("qualityProfiles").asInt()).isEqualTo(1);
+        assertThat(result.getBody().path("quality").path("qualityProfiles").asInt()).isEqualTo(1);
+        assertThat(result.getBody().path("settings").path("downloadClients").get(0).asText()).isEqualTo("qBit");
+        assertThat(result.getBody().path("settings").path("downloadClientsSkipped").size()).isEqualTo(1);
 
         JsonNode profile = http.getForObject("/api/v3/qualityprofile/7", JsonNode.class);
         assertThat(profile.path("name").asText()).isEqualTo("Mine 1080p");
@@ -164,6 +168,21 @@ class SeriesApiIT {
         JsonNode lookup = http.getForObject("/api/v3/series/lookup?term=tvdb:" + TVDB, JsonNode.class);
         assertThat(lookup.get(0).path("folder").asText()).as("the naming imported")
                 .isEqualTo("Andor (2022) [tvdbid-393189]");
+        JsonNode client = http.getForObject("/api/v3/downloadclient/2", JsonNode.class);
+        Map<String, String> fields = new HashMap<>();
+        client.path("fields").forEach(f -> fields.put(f.path("name").asText(), f.path("value").asText()));
+        assertThat(fields).as("its own category, by name over http, the password masked")
+                .containsEntry("tvCategory", "catasonarr").containsEntry("host", "qbittorrent.catacumbas69.com")
+                .containsEntry("port", "80").containsEntry("password", "********");
+        assertThat(client.path("tags").size()).isEqualTo(1);
+        assertThat(http.getForObject("/api/v3/config/indexer", JsonNode.class).path("rssSyncInterval").asInt())
+                .isEqualTo(30);
+        JsonNode media = http.getForObject("/api/v3/config/mediamanagement", JsonNode.class);
+        assertThat(media.path("downloadPropersAndRepacks").asText()).isEqualTo("doNotPrefer");
+        assertThat(media.path("recycleBin").asText()).as("not Sonarr's").isEqualTo("/data/.recycle");
+        JsonNode release = http.getForObject("/api/v3/releaseprofile/1", JsonNode.class);
+        assertThat(release.path("ignored").get(0).asText()).isEqualTo("x265");
+        assertThat(http.getForObject("/api/v3/remotepathmapping", JsonNode.class).size()).isEqualTo(1);
     }
 
     private List<String> monitored(int seriesId) {

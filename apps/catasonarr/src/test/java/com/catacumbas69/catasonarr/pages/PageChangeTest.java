@@ -32,6 +32,13 @@ class PageChangeTest {
                 .isEmpty();
     }
 
+    @Test
+    void of_otherEntities_takeTheSeriesFromTheirDetails() {
+        assertThat(PageChange.of(event("episodefile.imported", "Season 01/Andor - S01E01.mkv",
+                new EventData("catasonarr", null, null, Map.of("seriesId", "12")))).orElseThrow().seriesId())
+                .isEqualTo(12);
+    }
+
     private static CloudEvent event(String type, String subject, EventData data) {
         return new CloudEvent("1.0", "id", "catasonarr", "com.catacumbas69.catasonarr." + type + ".v1", subject,
                 "2026-11-24T22:00:00Z", "application/json", data);

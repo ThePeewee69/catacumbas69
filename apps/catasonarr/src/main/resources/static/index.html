@@ -24,7 +24,13 @@
         <a href="#/" data-page="series" data-tip="Every series in the library, with its episodes on the NAS">Series</a>
         <a href="#/add" data-page="add" data-tip="Search TVmaze for a new series and add it">Add series</a>
         <a href="#/import" data-page="import" data-tip="Add the series already on the NAS">Import library</a>
-        <a href="#/settings" data-page="settings" data-tip="Connections, root folders, profiles and tags">Settings</a>
+        <a href="#/activity" data-page="activity" data-tip="The queue, the history and the blocklist">Activity</a>
+        <a
+          href="#/settings"
+          data-page="settings"
+          data-tip="Connections, indexers, download clients, profiles, naming and Plex"
+          >Settings</a
+        >
       </nav>
       <div class="topbar-user" hidden data-testid="user">
         <span data-testid="user-name"></span>
@@ -32,7 +38,8 @@
       </div>
     </header>
 
-    <!-- ══ The page shown, drawn by catasonarr.js from the address (#/, #/add, #/import, #/series/<id>, #/settings) ══ -->
+    <!-- ══ The page shown, drawn by catasonarr.js from the address (#/, #/add, #/import, #/series/<id>, #/activity…,
+         #/settings…) ══ -->
     <main class="content" id="page" aria-live="polite"></main>
 
     <div class="toast" id="toast" role="status" hidden></div>

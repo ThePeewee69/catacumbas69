@@ -19,6 +19,8 @@ RUN --mount=type=cache,target=/root/.m2 \
 
 # ── Stage 2: runtime ────────────────────────────────────────────────────────
 FROM eclipse-temurin:21-jre-alpine
+# ffprobe (Alpine's ffmpeg package) reads the episode files' MediaInfo, as Sonarr does (orch.md decision 122)
+RUN apk add --no-cache ffmpeg
 WORKDIR /app
 COPY --from=build /build/catasonarr/target/extracted/dependencies/ ./
 COPY --from=build /build/catasonarr/target/extracted/spring-boot-loader/ ./

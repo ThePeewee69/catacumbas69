@@ -424,6 +424,90 @@ tbody tr:hover {
   background: var(--panel-soft);
 }
 
+/* ══ Activity, interactive search and the settings' sections (orch.md decision 122) ══ */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  padding: 0.45rem 0.9rem;
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab.active {
+  font-weight: 600;
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+table.activity {
+  overflow: hidden;
+  font-size: 14px;
+  background: var(--panel);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+table.activity td {
+  vertical-align: top;
+}
+
+.release-title {
+  max-width: 28rem;
+  overflow-wrap: anywhere;
+}
+
+.small {
+  font-size: 12px;
+}
+
+td.actions {
+  white-space: nowrap;
+}
+
+td.actions > * + * {
+  margin-left: 0.4rem;
+}
+
+tr.warning > :first-child {
+  box-shadow: inset 3px 0 0 #d97706;
+}
+
+tr.error > :first-child {
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+
+tr.rejected {
+  color: var(--muted);
+}
+
+tr.grabbed {
+  background: var(--success-soft);
+}
+
+.browser.wide {
+  width: min(1200px, 96vw);
+}
+
+.search-results {
+  max-height: 70vh;
+  overflow: auto;
+}
+
+textarea {
+  font: inherit;
+}
+
 /* ══ Import library (orch.md decision 115) ══ */
 table.import {
   overflow: hidden;

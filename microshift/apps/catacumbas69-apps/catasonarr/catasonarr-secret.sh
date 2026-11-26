@@ -5,13 +5,17 @@
 #
 #   bash microshift/apps/catacumbas69-apps/catasonarr/catasonarr-secret.sh api-key
 #   bash microshift/apps/catacumbas69-apps/catasonarr/catasonarr-secret.sh tmdb
+#   bash microshift/apps/catacumbas69-apps/catasonarr/catasonarr-secret.sh plex
 #
 # api-key: asks for the API key of the Sonarr that Catasonarr replaces (Sonarr → Settings → General → Security →
 #   API Key), twice and without showing it, into the Secret catacumbas69-apps/catasonarr-api-key (key api-key).
 #   Prowlarr, Bazarr, Overseerr, Jellyseerr and Homarr then only change Sonarr's address to Catasonarr's.
 # tmdb: asks for TMDB's API Read Access Token (themoviedb.org → Settings → API), twice and without showing it, into
 #   the Secret catacumbas69-apps/catasonarr-tmdb (key token); orch.md decision 112.
-# Both restart Catasonarr, which reads the Secrets only when it starts.
+# plex: asks for Plex's token (X-Plex-Token: Plex Web → a library item → ⋯ → Get Info → View XML, the end of the
+#   address), twice and without showing it, into the Secret catacumbas69-apps/catasonarr-plex (key token); Catasonarr
+#   tells Plex to scan a series after each import (orch.md decision 122). Plex's address is in Settings → Plex.
+# Each restarts Catasonarr, which reads the Secrets only when it starts.
 set -euo pipefail
 
 MELOES="${MELOES:-meloes}"
@@ -45,6 +49,15 @@ ask_tmdb() {  # → the token on stdout; TMDB's read access tokens are JWTs: eyJ
   printf '%s' "$t1"
 }
 
+ask_plex() {  # → the token on stdout; Plex's tokens are about 20 letters, digits, - and _
+  local t1 t2
+  read -r -s -p "Plex's token (X-Plex-Token): " t1 </dev/tty; echo >&2
+  read -r -s -p "Again: " t2 </dev/tty; echo >&2
+  [[ "$t1" == "$t2" ]] || fail "The two tokens do not match."
+  [[ "$t1" =~ ^[A-Za-z0-9_-]{15,64}$ ]] || fail "Not a Plex token: letters, digits, - and _ only, about 20 of them."
+  printf '%s' "$t1"
+}
+
 write_secret() {  # name, key, value: the Secret goes to meloes on stdin, then Catasonarr restarts
   on_meloes "oc create namespace $NS --dry-run=client -o yaml | oc apply -f -" >/dev/null
   printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: %s\n  namespace: %s\ntype: Opaque\nstringData:\n  %s: %s\n' \
@@ -67,8 +80,12 @@ case "${1:-}" in
     token="$(ask_tmdb)"
     write_secret catasonarr-tmdb token "$token"
     ;;
+  plex)
+    token="$(ask_plex)"
+    write_secret catasonarr-plex token "$token"
+    ;;
   *)
-    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
     exit 1
     ;;
 esac

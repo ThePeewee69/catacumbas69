@@ -1,8 +1,29 @@
 {
   "qualityDefinitions": [
-    { "id": 1, "quality": 0, "title": "Unknown", "minSize": 1, "maxSize": 199.9, "preferredSize": 95 },
-    { "id": 2, "quality": 1, "title": "SDTV", "minSize": 2, "maxSize": 100, "preferredSize": 95 },
-    { "id": 15, "quality": 3, "title": "WEB-DL 1080p", "minSize": 5, "maxSize": 120, "preferredSize": 60 }
+    {
+      "id": 1,
+      "quality": 0,
+      "title": "Unknown",
+      "minSize": 1,
+      "maxSize": 199.9,
+      "preferredSize": 95
+    },
+    {
+      "id": 2,
+      "quality": 1,
+      "title": "SDTV",
+      "minSize": 2,
+      "maxSize": 100,
+      "preferredSize": 95
+    },
+    {
+      "id": 15,
+      "quality": 3,
+      "title": "WEB-DL 1080p",
+      "minSize": 5,
+      "maxSize": 120,
+      "preferredSize": 60
+    }
   ],
   "customFormats": [
     {
@@ -33,6 +54,86 @@
       "replaceIllegalCharacters": 1,
       "colonReplacementFormat": 4,
       "customColonReplacementFormat": ""
+    }
+  ],
+  "config": [
+    {
+      "key": "rsssyncinterval",
+      "value": "30"
+    },
+    {
+      "key": "DownloadPropersAndRepacks",
+      "value": "DoNotPrefer"
+    },
+    {
+      "key": "recyclebin",
+      "value": "/config/recycle"
+    },
+    {
+      "key": "importextrafiles",
+      "value": "True"
+    }
+  ],
+  "tags": [
+    {
+      "id": 3,
+      "label": "Anime"
+    }
+  ],
+  "downloadClients": [
+    {
+      "Id": 2,
+      "Enable": 1,
+      "Name": "qBit",
+      "Implementation": "QBittorrent",
+      "Settings": "{\"host\": \"qbittorrent\", \"port\": 8080, \"username\": \"admin\", \"password\": \"not-a-real-password\", \"tvCategory\": \"tv-sonarr\"}",
+      "ConfigContract": "QBittorrentSettings",
+      "Priority": 1,
+      "RemoveCompletedDownloads": 1,
+      "RemoveFailedDownloads": 1,
+      "Tags": "[3]"
+    },
+    {
+      "Id": 3,
+      "Enable": 1,
+      "Name": "SAB",
+      "Implementation": "Sabnzbd",
+      "Settings": "{}",
+      "ConfigContract": "SabnzbdSettings",
+      "Priority": 1,
+      "Tags": "[]"
+    }
+  ],
+  "releaseProfiles": [
+    {
+      "Id": 1,
+      "Name": "No x265",
+      "Enabled": 1,
+      "Required": "[]",
+      "Ignored": "[\"x265\"]",
+      "IndexerId": 0,
+      "Tags": "[3]"
+    }
+  ],
+  "delayProfiles": [
+    {
+      "Id": 1,
+      "EnableUsenet": 1,
+      "EnableTorrent": 1,
+      "PreferredProtocol": 1,
+      "UsenetDelay": 0,
+      "TorrentDelay": 0,
+      "Order": 2147483647,
+      "Tags": "[]",
+      "BypassIfHighestQuality": 0
+    }
+  ],
+  "remotePathMappings": [
+    {
+      "Id": 1,
+      "Host": "qbittorrent",
+      "RemotePath": "/downloads/",
+      "LocalPath": "/downloads/"
     }
   ]
 }

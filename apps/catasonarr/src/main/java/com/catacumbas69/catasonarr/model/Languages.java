@@ -14,6 +14,9 @@ public final class Languages {
     /** The unknown language. */
     public static final Language UNKNOWN = new Language(0, "Unknown");
 
+    /** The series' original language, as a custom format or a German DL release says it (Sonarr's -2). */
+    public static final Language ORIGINAL = new Language(-2, "Original");
+
     /** Every language, by Sonarr's id. */
     public static final List<Language> ALL = List.of(UNKNOWN,
             new Language(1, "English"), new Language(2, "French"), new Language(3, "Spanish"),
@@ -31,12 +34,22 @@ public final class Languages {
             new Language(37, "Persian"), new Language(38, "Catalan"), new Language(39, "Croatian"),
             new Language(40, "Serbian"), new Language(41, "Bosnian"), new Language(42, "Estonian"),
             new Language(43, "Tamil"), new Language(44, "Indonesian"), new Language(45, "Macedonian"),
-            new Language(46, "Slovenian"));
+            new Language(46, "Slovenian"), ORIGINAL);
 
     private static final Map<String, Language> BY_NAME = ALL.stream()
             .collect(Collectors.toUnmodifiableMap(l -> l.name().toLowerCase(Locale.ROOT), Function.identity()));
 
     private Languages() {
+    }
+
+    /**
+     * Finds a language by Sonarr's id.
+     *
+     * @param id the id
+     * @return the language, or {@link #UNKNOWN}
+     */
+    public static Language byId(int id) {
+        return ALL.stream().filter(l -> l.id() == id).findFirst().orElse(UNKNOWN);
     }
 
     /**

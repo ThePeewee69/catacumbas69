@@ -4,7 +4,11 @@ import com.catacumbas69.catasonarr.metadata.EpisodeInfo;
 import com.catacumbas69.catasonarr.metadata.MetadataService;
 import com.catacumbas69.catasonarr.metadata.SeriesInfo;
 import com.catacumbas69.catasonarr.model.AddOptions;
+import com.catacumbas69.catasonarr.model.Blocklist;
 import com.catacumbas69.catasonarr.model.Episode;
+import com.catacumbas69.catasonarr.model.EpisodeFile;
+import com.catacumbas69.catasonarr.model.History;
+import com.catacumbas69.catasonarr.model.PendingRelease;
 import com.catacumbas69.catasonarr.model.RootFolder;
 import com.catacumbas69.catasonarr.model.Season;
 import com.catacumbas69.catasonarr.model.Series;
@@ -254,7 +258,8 @@ public class SeriesService {
     }
 
     /**
-     * Deletes a series and its episodes; with {@code deleteFiles}, its folder too, as Sonarr does (orch.md decision
+     * Deletes a series, its episodes, files, history, blocklist and held-back releases (orch.md decision 122); with
+     * {@code deleteFiles}, its folder too, as Sonarr does (orch.md decision
      * 112: the user chose to). The folder must be inside a root folder and not be one.
      *
      * @param id the series
@@ -267,7 +272,12 @@ public class SeriesService {
         if (deleteFiles && series.path() != null) {
             deleted = deleteFolder(series.path());
         }
-        mongo.remove(Query.query(Criteria.where("seriesId").is(id)), Episode.class);
+        Query ofSeries = Query.query(Criteria.where("seriesId").is(id));
+        mongo.remove(ofSeries, Episode.class);
+        mongo.remove(ofSeries, EpisodeFile.class);
+        mongo.remove(ofSeries, History.class);
+        mongo.remove(ofSeries, Blocklist.class);
+        mongo.remove(ofSeries, PendingRelease.class);
         mongo.remove(Query.query(Criteria.where("id").is(id)), Series.class);
         Map<String, Object> details = describe(series);
         details.put("deleteFiles", deleteFiles);

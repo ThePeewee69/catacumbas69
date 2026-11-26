@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Imports what touches quality from Sonarr's database into Catasonarr (orch.md decision 112): quality definitions,
-# custom formats, quality profiles with their scores, and the folder naming. Sonarr's ids are kept.
+# Imports Sonarr's settings from its database into Catasonarr (orch.md decisions 112 and 122): quality definitions,
+# custom formats, quality profiles with their scores, the naming (folders and episode files), the general settings
+# (not the recycle bin), the qBittorrent and Transmission clients with their passwords (their category becomes
+# catasonarr; a host inside K3s becomes its name in catacumbas69.com, over http), release and delay profiles, remote
+# path mappings and their tags. Sonarr's ids are kept.
 #
 #   bash microshift/apps/catacumbas69-apps/catasonarr/catasonarr-import-sonarr.sh ~/Downloads/sonarr_backup_v4.0.14.2939_2026.11.25_21.00.00.zip
 #
@@ -9,7 +12,7 @@
 # /config while it runs may not be. The zip is never changed: its sonarr.db is unzipped into a temporary folder,
 # read there and deleted at the end.
 # Asks for Catasonarr's API key (the one of the Sonarr it replaces) without showing it, and sends the rows to
-# Catasonarr's own import, which replaces its quality settings. CATASONARR_URL changes the address (default
+# Catasonarr's own import, which replaces those settings. CATASONARR_URL changes the address (default
 # https://catasonarr.catacumbas69.com; http://localhost:8086 for a Catasonarr in IntelliJ with the profile no-auth,
 # which asks for no key).
 set -euo pipefail
@@ -29,7 +32,7 @@ rows() {  # a query → its rows as a JSON array; [] when there are none
   printf '%s' "${out:-[]}"
 }
 
-[[ $# -eq 1 ]] || { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+[[ $# -eq 1 ]] || { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 ZIP="$1"
 [[ -f "$ZIP" ]] || fail "No file $ZIP."
 [[ "$ZIP" == *.zip ]] || fail "$ZIP is not a zip: give the zip of a Sonarr backup (System → Backup)."
@@ -58,12 +61,29 @@ unzip -q -o "$ZIP" sonarr.db -d "$WORK" \
   rows 'SELECT SeriesFolderFormat AS seriesFolderFormat, SeasonFolderFormat AS seasonFolderFormat,
         SpecialsFolderFormat AS specialsFolderFormat, ReplaceIllegalCharacters AS replaceIllegalCharacters,
         ColonReplacementFormat AS colonReplacementFormat,
-        CustomColonReplacementFormat AS customColonReplacementFormat FROM NamingConfig LIMIT 1'
+        CustomColonReplacementFormat AS customColonReplacementFormat, RenameEpisodes AS renameEpisodes,
+        StandardEpisodeFormat AS standardEpisodeFormat, DailyEpisodeFormat AS dailyEpisodeFormat,
+        AnimeEpisodeFormat AS animeEpisodeFormat, MultiEpisodeStyle AS multiEpisodeStyle FROM NamingConfig LIMIT 1'
+  printf ',"config":'
+  rows 'SELECT Key AS key, Value AS value FROM Config'
+  printf ',"tags":'
+  rows 'SELECT Id AS id, Label AS label FROM Tags ORDER BY Id'
+  # SELECT * on the next ones: their columns changed between Sonarr 4 releases; Catasonarr reads them by name
+  printf ',"downloadClients":'
+  rows 'SELECT * FROM DownloadClients ORDER BY Id'
+  printf ',"releaseProfiles":'
+  rows 'SELECT * FROM ReleaseProfiles ORDER BY Id'
+  printf ',"delayProfiles":'
+  rows 'SELECT * FROM DelayProfiles ORDER BY Id'
+  printf ',"remotePathMappings":'
+  rows 'SELECT * FROM RemotePathMappings ORDER BY Id'
   printf '}'
 } >"$body"
 
-echo "Read from $ZIP: $(sqlite3 "$WORK/sonarr.db" 'SELECT COUNT(*) FROM QualityProfiles') quality profiles," \
-  "$(sqlite3 "$WORK/sonarr.db" 'SELECT COUNT(*) FROM CustomFormats') custom formats."
+count() { sqlite3 "$WORK/sonarr.db" "SELECT COUNT(*) FROM $1"; }
+echo "Read from $ZIP: $(count QualityProfiles) quality profiles, $(count CustomFormats) custom formats," \
+  "$(count DownloadClients) download clients, $(count ReleaseProfiles) release and $(count DelayProfiles) delay" \
+  "profiles, $(count RemotePathMappings) remote path mappings."
 
 key=''
 if [[ "$URL" == https://* ]]; then
@@ -75,5 +95,5 @@ fi
 headers=''
 [[ -n "$key" ]] && headers="$(printf 'X-Api-Key: %s' "$key")"
 answer="$(printf '%s\n' "$headers" | curl -sS --fail-with-body -H @- -H 'Content-Type: application/json' \
-  --data-binary @"$body" "$URL/api/v3/catasonarr/import/sonarr-quality")" || fail "Catasonarr refused the import: $answer"
+  --data-binary @"$body" "$URL/api/v3/catasonarr/import/sonarr")" || fail "Catasonarr refused the import: $answer"
 echo "Imported into $URL: $answer"

@@ -25,6 +25,11 @@ brackets is the one seen running on the date given.
 | TVmaze API | public REST, no key | `catasonarr.metadata.tvmaze-url` in `apps/catasonarr/src/main/resources/application.properties` | Catasonarr's series, episodes and other titles (decision 112); CC BY-SA, credited in its page |
 | TMDB API | v3, API Read Access Token | `catasonarr.metadata.tmdb-url` (same file); Secret `catasonarr-tmdb` | Catasonarr's pictures and pt-PT summaries, optional (decision 112) |
 | JDK `HttpClient` (Spring `RestClient`) | Java 21 | `CoreConfig` in `apps/catasonarr` | Catasonarr's calls to TVmaze and TMDB, following TVmaze's redirects |
+| FFmpeg's `ffprobe` | Alpine's `ffmpeg` package (the image's Alpine) | `RUN apk add --no-cache ffmpeg` in `apps/catasonarr/Dockerfile` | Catasonarr reads each episode file's MediaInfo, as Sonarr (decision 122) |
+| Sonarr's parser and file naming | Sonarr 4.0.20 (GPL-3.0), translated | `apps/catasonarr/.../parser/`, `EpisodeFileNames`; Sonarr's test cases in `src/test/resources/sonarr/parser-cases.json` | Release and file names, qualities, languages; episode file names (decision 122) |
+| Torznab | Newznab-style XML API | Catasonarr's `TorznabClient` | Indexers (Prowlarr on K3s), searches and RSS (decision 122) |
+| qBittorrent Web API v2, Transmission RPC | the clients' own | Catasonarr's `QBittorrentClient`, `TransmissionClient` | Download clients, in the category `catasonarr` (decision 122) |
+| Plex Media Server API | `/library/sections` (token in the Secret `catasonarr-plex`) | Catasonarr's `PlexNotifier` | A series' folder scanned after each import (decision 122) |
 | Spring Boot structured logging | ECS | `LOGGING_STRUCTURED_FORMAT_CONSOLE` in each app's ConfigMap | JSON logs on stdout (OBS-3) |
 
 ## Frontend (Catapulsar)
